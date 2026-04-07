@@ -25,7 +25,7 @@ else:
         MINIMAX_API_KEY = open(os.path.expanduser("~/.minimax_key")).read().strip()
     except Exception:
         MINIMAX_API_KEY = ""
-MINIMAX_BASE_URL = "https://api.minimaxi.com/anthropic/v1"
+MINIMAX_BASE_URL = "https://api.minimaxi.com/v1"
 
 DEFAULT_MODEL = "MiniMax-M2.7"
 
@@ -41,13 +41,12 @@ class MiniMaxClient:
 
     def chat(self, prompt: str, model: str = DEFAULT_MODEL, temperature: float = 0.7, max_tokens: int = 4096) -> str:
         """
-        调用 MiniMax chat completion
-        返回纯文本内容（不含 thinking）
+        调用 MiniMax chat completion (OpenAI兼容格式)
+        返回纯文本内容
         """
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "anthropic-version": "2023-06-01"
         }
         payload = {
             "model": model,
@@ -57,17 +56,11 @@ class MiniMaxClient:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        resp = requests.post(f"{MINIMAX_BASE_URL}/messages", headers=headers, json=payload, timeout=120)
+        resp = requests.post(f"{MINIMAX_BASE_URL}/chat/completions", headers=headers, json=payload, timeout=120)
         resp.raise_for_status()
         data = resp.json()
-
-        # 提取 text 类型内容，过滤 thinking
-        content = data.get("content", [])
-        for block in content:
-            if block.get("type") == "text":
-                return block.get("text", "")
-        # 如果没有 text 块，返回空
-        return ""
+        # OpenAI兼容格式: choices[0].message.content
+        return data.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
 
     def decompose_task(self, task_desc: str) -> dict:
         """任务拆解"""
