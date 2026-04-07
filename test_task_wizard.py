@@ -7,7 +7,7 @@ Well-Harness M1-3 TaskWizard pytest 单元测试
 import pytest
 import json
 from unittest.mock import patch, MagicMock
-from task_wizard import TaskWizard, NOTION_API_KEY, SSOT_DB_ID
+from task_wizard import TaskWizard, NOTION_API_KEY, TASKS_DB_ID
 
 
 class TestParseNaturalLanguage:
@@ -145,86 +145,103 @@ class TestCreateNotionTask:
             assert "pages" in args[0]
 
     def test_payload_has_database_parent(self):
-        """parent 设为 SSOT_DB_ID"""
+        """parent 设为 TASKS_DB_ID"""
         mock_resp = MagicMock(status_code=200, json=lambda: {"id": "fake-page-id-123"})
         with patch('task_wizard.requests.post', return_value=mock_resp) as mock_post:
             tw = TaskWizard()
             task_data = tw.parse_natural_language("仿真")
             tw.create_notion_task(task_data)
             call_json = mock_post.call_args[1]["json"]
-            assert call_json["parent"] == {"database_id": SSOT_DB_ID}
+            assert call_json["parent"] == {"database_id": TASKS_DB_ID}
 
-    def test_properties_has_project_id(self):
-        """项目ID字段有内容"""
+    def test_properties_has_task_id(self):
+        """Task ID 字段有内容"""
         mock_resp = MagicMock(status_code=200, json=lambda: {"id": "fake-page-id-123"})
         with patch('task_wizard.requests.post', return_value=mock_resp) as mock_post:
             tw = TaskWizard()
             task_data = tw.parse_natural_language("高优先级翼型仿真")
             tw.create_notion_task(task_data)
             props = mock_post.call_args[1]["json"]["properties"]
-            assert "项目ID" in props
-            title = props["项目ID"]["title"]
+            assert "Task ID" in props
+            title = props["Task ID"]["title"]
             assert len(title) > 0
             assert "P0" in title[0]["text"]["content"]
 
-    def test_properties_has_demand_doc(self):
-        """需求文档字段有内容"""
+    def test_parent_page_maps_to_linked_project(self):
+        """parent_page_id 写入 Linked Project"""
         mock_resp = MagicMock(status_code=200, json=lambda: {"id": "fake-page-id-123"})
         with patch('task_wizard.requests.post', return_value=mock_resp) as mock_post:
             tw = TaskWizard()
             task_data = tw.parse_natural_language("稳态圆柱绕流仿真")
-            tw.create_notion_task(task_data)
+            tw.create_notion_task(task_data, parent_page_id="project-page-123")
             props = mock_post.call_args[1]["json"]["properties"]
-            assert "需求文档" in props
-            rt = props["需求文档"]["rich_text"]
+            assert "Linked Project" in props
+            rt = props["Linked Project"]["rich_text"]
             assert len(rt) > 0
+            assert rt[0]["text"]["content"] == "project-page-123"
 
-    def test_properties_has_acceptance_criteria(self):
-        """验收标准字段有内容"""
+    def test_properties_has_task_type(self):
+        """Task Type 字段有内容"""
         mock_resp = MagicMock(status_code=200, json=lambda: {"id": "fake-page-id-123"})
         with patch('task_wizard.requests.post', return_value=mock_resp) as mock_post:
             tw = TaskWizard()
             task_data = tw.parse_natural_language("稳态仿真")
             tw.create_notion_task(task_data)
             props = mock_post.call_args[1]["json"]["properties"]
-            assert "验收标准" in props
-            rt = props["验收标准"]["rich_text"]
-            assert len(rt) > 0
+            assert props["Task Type"]["select"]["name"] == "任务"
 
-    def test_properties_has_harness_spec(self):
-        """Harness规范字段有内容"""
+    def test_properties_has_priority(self):
+        """Priority 映射到 v1 选项"""
         mock_resp = MagicMock(status_code=200, json=lambda: {"id": "fake-page-id-123"})
         with patch('task_wizard.requests.post', return_value=mock_resp) as mock_post:
             tw = TaskWizard()
-            task_data = tw.parse_natural_language("圆柱绕流仿真，几何特征：圆柱绕流")
+            task_data = tw.parse_natural_language("高优先级圆柱绕流仿真")
             tw.create_notion_task(task_data)
             props = mock_post.call_args[1]["json"]["properties"]
-            assert "Harness规范" in props
-            rt = props["Harness规范"]["rich_text"]
-            assert len(rt) > 0
-            # 应包含几何信息
-            content = rt[0]["text"]["content"]
+            assert props["Priority"]["select"]["name"] == "P1"
+
+    def test_properties_has_executor_and_fallback_models(self):
+        """Executor/Fallback Model 写入默认值"""
+        mock_resp = MagicMock(status_code=200, json=lambda: {"id": "fake-page-id-123"})
+        with patch('task_wizard.requests.post', return_value=mock_resp) as mock_post:
+            tw = TaskWizard()
+            task_data = tw.parse_natural_language("仿真")
+            tw.create_notion_task(task_data)
+            props = mock_post.call_args[1]["json"]["properties"]
+            assert props["Executor Model"]["rich_text"][0]["text"]["content"] == "codex"
+            assert props["Fallback Model"]["rich_text"][0]["text"]["content"] == "glm_51"
+
+    def test_task_status_defaults_to_pending(self):
+        """Task Status 默认 = 待领取"""
+        mock_resp = MagicMock(status_code=200, json=lambda: {"id": "fake-page-id-123"})
+        with patch('task_wizard.requests.post', return_value=mock_resp) as mock_post:
+            tw = TaskWizard()
+            task_data = tw.parse_natural_language("仿真")
+            tw.create_notion_task(task_data)
+            props = mock_post.call_args[1]["json"]["properties"]
+            assert props["Task Status"]["select"]["name"] == "待领取"
+
+    def test_retry_count_defaults_to_zero(self):
+        """Retry Count 默认 = 0"""
+        mock_resp = MagicMock(status_code=200, json=lambda: {"id": "fake-page-id-123"})
+        with patch('task_wizard.requests.post', return_value=mock_resp) as mock_post:
+            tw = TaskWizard()
+            task_data = tw.parse_natural_language("仿真")
+            tw.create_notion_task(task_data)
+            props = mock_post.call_args[1]["json"]["properties"]
+            assert props["Retry Count"]["number"] == 0
+
+    def test_last_run_summary_has_content(self):
+        """Last Run Summary 字段包含任务摘要"""
+        mock_resp = MagicMock(status_code=200, json=lambda: {"id": "fake-page-id-123"})
+        with patch('task_wizard.requests.post', return_value=mock_resp) as mock_post:
+            tw = TaskWizard()
+            task_data = tw.parse_natural_language("圆柱绕流仿真，入口速度5m/s")
+            tw.create_notion_task(task_data)
+            props = mock_post.call_args[1]["json"]["properties"]
+            content = props["Last Run Summary"]["rich_text"][0]["text"]["content"]
+            assert "原始描述" in content
             assert "几何" in content
-
-    def test_phase_is_phase1_copilot(self):
-        """Phase 字段 = Phase1-Copilot"""
-        mock_resp = MagicMock(status_code=200, json=lambda: {"id": "fake-page-id-123"})
-        with patch('task_wizard.requests.post', return_value=mock_resp) as mock_post:
-            tw = TaskWizard()
-            task_data = tw.parse_natural_language("仿真")
-            tw.create_notion_task(task_data)
-            props = mock_post.call_args[1]["json"]["properties"]
-            assert props["Phase"]["select"]["name"] == "Phase1-Copilot"
-
-    def test_gate_is_g0_task_gate(self):
-        """Gate节点 = G0-任务门"""
-        mock_resp = MagicMock(status_code=200, json=lambda: {"id": "fake-page-id-123"})
-        with patch('task_wizard.requests.post', return_value=mock_resp) as mock_post:
-            tw = TaskWizard()
-            task_data = tw.parse_natural_language("仿真")
-            tw.create_notion_task(task_data)
-            props = mock_post.call_args[1]["json"]["properties"]
-            assert props["Gate节点"]["select"]["name"] == "G0-任务门"
 
     def test_children_blocks_created(self):
         """页面 children blocks 被创建"""
@@ -255,10 +272,12 @@ class TestValidateG0:
         """返回 dict"""
         mock_page = {
             "properties": {
-                "项目ID": {"title": [{"plain_text": "TEST-001"}]},
-                "需求文档": {"rich_text": [{"plain_text": "需求内容"}]},
-                "验收标准": {"rich_text": [{"plain_text": "验收标准内容"}]},
-                "Harness规范": {"rich_text": [{"plain_text": "Harness规范内容"}]},
+                "Task ID": {"title": [{"plain_text": "TEST-001"}]},
+                "Linked Project": {"rich_text": [{"plain_text": "PRJ-001"}]},
+                "Linked Phase": {"rich_text": []},
+                "Task Type": {"select": {"name": "任务"}},
+                "Priority": {"select": {"name": "P1"}},
+                "Last Run Summary": {"rich_text": [{"plain_text": "原始描述: 需求内容\nHarness摘要: 几何=圆柱绕流"}]},
             }
         }
         with patch('task_wizard.requests.get', return_value=MagicMock(status_code=200, json=lambda: mock_page)):
@@ -270,10 +289,12 @@ class TestValidateG0:
         """evidence 包含必需字段"""
         mock_page = {
             "properties": {
-                "项目ID": {"title": [{"plain_text": "TEST-001"}]},
-                "需求文档": {"rich_text": [{"plain_text": "需求内容"}]},
-                "验收标准": {"rich_text": [{"plain_text": "验收标准内容"}]},
-                "Harness规范": {"rich_text": [{"plain_text": "规范内容"}]},
+                "Task ID": {"title": [{"plain_text": "TEST-001"}]},
+                "Linked Project": {"rich_text": [{"plain_text": "PRJ-001"}]},
+                "Linked Phase": {"rich_text": []},
+                "Task Type": {"select": {"name": "任务"}},
+                "Priority": {"select": {"name": "P1"}},
+                "Last Run Summary": {"rich_text": [{"plain_text": "原始描述: 需求内容\nHarness摘要: 几何=圆柱绕流"}]},
             }
         }
         with patch('task_wizard.requests.get', return_value=MagicMock(status_code=200, json=lambda: mock_page)):
@@ -289,10 +310,12 @@ class TestValidateG0:
         """所有字段非空且包含几何特征 → result=PASS"""
         mock_page = {
             "properties": {
-                "项目ID": {"title": [{"plain_text": "TEST-001"}]},
-                "需求文档": {"rich_text": [{"plain_text": "需求内容"}]},
-                "验收标准": {"rich_text": [{"plain_text": "验收标准内容"}]},
-                "Harness规范": {"rich_text": [{"plain_text": "任务类型:稳态仿真|几何特征:圆柱绕流|边界条件:速度入口"}]},
+                "Task ID": {"title": [{"plain_text": "TEST-001"}]},
+                "Linked Project": {"rich_text": [{"plain_text": "PRJ-001"}]},
+                "Linked Phase": {"rich_text": []},
+                "Task Type": {"select": {"name": "任务"}},
+                "Priority": {"select": {"name": "P1"}},
+                "Last Run Summary": {"rich_text": [{"plain_text": "原始描述: 需求内容\nHarness摘要: 几何=圆柱绕流"}]},
             }
         }
         with patch('task_wizard.requests.get', return_value=MagicMock(status_code=200, json=lambda: mock_page)):
@@ -300,14 +323,16 @@ class TestValidateG0:
             result = tw.validate_g0("fake-page-id")
             assert result["result"] == "PASS"
 
-    def test_g0_fail_on_empty_demand_doc(self):
-        """需求文档为空 → result=FAIL"""
+    def test_g0_fail_on_missing_linked_context(self):
+        """Linked Project/Phase 都为空 → result=FAIL"""
         mock_page = {
             "properties": {
-                "项目ID": {"title": [{"plain_text": "TEST-001"}]},
-                "需求文档": {"rich_text": []},
-                "验收标准": {"rich_text": [{"plain_text": "验收标准"}]},
-                "Harness规范": {"rich_text": [{"plain_text": "规范"}]},
+                "Task ID": {"title": [{"plain_text": "TEST-001"}]},
+                "Linked Project": {"rich_text": []},
+                "Linked Phase": {"rich_text": []},
+                "Task Type": {"select": {"name": "任务"}},
+                "Priority": {"select": {"name": "P1"}},
+                "Last Run Summary": {"rich_text": [{"plain_text": "原始描述: 需求内容\nHarness摘要: 几何=圆柱绕流"}]},
             }
         }
         with patch('task_wizard.requests.get', return_value=MagicMock(status_code=200, json=lambda: mock_page)):
@@ -319,10 +344,12 @@ class TestValidateG0:
         """G0 校验包含 5 项检查"""
         mock_page = {
             "properties": {
-                "项目ID": {"title": [{"plain_text": "TEST-001"}]},
-                "需求文档": {"rich_text": [{"plain_text": "x"}]},
-                "验收标准": {"rich_text": [{"plain_text": "x"}]},
-                "Harness规范": {"rich_text": [{"plain_text": "几何特征：圆柱"}]},
+                "Task ID": {"title": [{"plain_text": "TEST-001"}]},
+                "Linked Project": {"rich_text": [{"plain_text": "PRJ-001"}]},
+                "Linked Phase": {"rich_text": []},
+                "Task Type": {"select": {"name": "任务"}},
+                "Priority": {"select": {"name": "P1"}},
+                "Last Run Summary": {"rich_text": [{"plain_text": "Harness摘要: 几何=圆柱"}]},
             }
         }
         with patch('task_wizard.requests.get', return_value=MagicMock(status_code=200, json=lambda: mock_page)):
@@ -341,10 +368,12 @@ class TestValidateG0:
         """gate_name = 任务门"""
         mock_page = {
             "properties": {
-                "项目ID": {"title": [{"plain_text": "TEST-001"}]},
-                "需求文档": {"rich_text": [{"plain_text": "x"}]},
-                "验收标准": {"rich_text": [{"plain_text": "x"}]},
-                "Harness规范": {"rich_text": [{"plain_text": "x"}]},
+                "Task ID": {"title": [{"plain_text": "TEST-001"}]},
+                "Linked Project": {"rich_text": [{"plain_text": "PRJ-001"}]},
+                "Linked Phase": {"rich_text": []},
+                "Task Type": {"select": {"name": "任务"}},
+                "Priority": {"select": {"name": "P1"}},
+                "Last Run Summary": {"rich_text": [{"plain_text": "原始描述: x\nHarness摘要: 几何=圆柱"}]},
             }
         }
         with patch('task_wizard.requests.get', return_value=MagicMock(status_code=200, json=lambda: mock_page)):

@@ -38,59 +38,32 @@ class TaskWizard:
             将中文CFD任务描述解析为结构化字典
 
         create_notion_task(task_data: dict, parent_page_id: str = None) -> str
-            在 Notion SSOT DB 中创建任务页面，返回 page_id
+            在 v1 Tasks DB 中创建任务页面，返回 page_id
 
         validate_g0(page_id: str) -> dict
             执行 G0 门校验，返回 evidence 字典
     """
 
-    # SSOT DB 字段名映射（基于实际 schema）
+    # v1 Tasks DB 字段名映射
     FIELD_MAP = {
-        "title": "项目ID",
-        "name": "项目名称",
-        "description": "需求文档",
-        "acceptance": "验收标准",
-        "harness_spec": "Harness规范",
-        "phase": "Phase",
-        "gate": "Gate节点",
-        "data_object": "数据对象",
-        "execution_plane": "执行Plane",
-        "execution_log": "执行日志",
+        "title": "Task ID",
+        "linked_phase": "Linked Phase",
+        "linked_project": "Linked Project",
+        "task_type": "Task Type",
+        "priority": "Priority",
+        "executor_model": "Executor Model",
+        "fallback_model": "Fallback Model",
+        "status": "Task Status",
+        "git_branch": "Git Branch",
+        "pr_link": "PR Link",
+        "artifact_link": "Artifact Link",
+        "failure_reason": "Failure Reason",
+        "retry_count": "Retry Count",
+        "last_run_summary": "Last Run Summary",
     }
 
-    # Phase 选项映射
-    PHASE_OPTIONS = {
-        "Phase1": "Phase1-Copilot",
-        "Phase2": "Phase2-Agent",
-        "Phase3": "Phase3-Autonomous",
-    }
-
-    # Gate 节点选项映射
-    GATE_OPTIONS = {
-        "G0": "G0-任务门",
-        "G1": "G1-认知门",
-        "G2": "G2-配置门",
-        "G3": "G3-执行门",
-        "G4": "G4-运行门",
-        "G5": "G5-验证门",
-        "G6": "G6-写回门",
-    }
-
-    # 数据对象选项
-    DATA_OBJECT_OPTIONS = {
-        "simulation": "Simulation Task",
-        "component": "Component",
-        "case": "Case",
-        "baseline": "Baseline",
-        "rule": "Rule",
-    }
-
-    # 执行Plane选项
-    PLANE_OPTIONS = {
-        "control": "控制平面",
-        "knowledge": "知识平面",
-        "execution": "执行平面",
-    }
+    TASK_TYPE_OPTIONS = {"指令", "分析", "审查", "学习", "任务"}
+    PRIORITY_MAP = {"P0": "P1", "P1": "P2", "P2": "P3", "P3": "P3"}
 
     def __init__(self, notion_api_key: Optional[str] = None):
         self.api_key = notion_api_key or NOTION_API_KEY
@@ -99,6 +72,58 @@ class TaskWizard:
             "Content-Type": "application/json",
             "Notion-Version": NOTION_VERSION,
         }
+
+    @staticmethod
+    def _build_rich_text(content: str) -> dict:
+        return {"rich_text": [{"text": {"content": str(content)[:1900]}}]}
+
+    @staticmethod
+    def _rich_text_plain(prop: dict) -> str:
+        texts = []
+        for item in prop.get("rich_text", []):
+            plain_text = item.get("plain_text")
+            if plain_text is not None:
+                texts.append(plain_text)
+            else:
+                texts.append(item.get("text", {}).get("content", ""))
+        return "".join(texts)
+
+    @staticmethod
+    def _title_plain(prop: dict) -> str:
+        texts = []
+        for item in prop.get("title", []):
+            plain_text = item.get("plain_text")
+            if plain_text is not None:
+                texts.append(plain_text)
+            else:
+                texts.append(item.get("text", {}).get("content", ""))
+        return "".join(texts)
+
+    def _normalize_priority(self, priority: str) -> str:
+        return self.PRIORITY_MAP.get(priority or "P1", "P2")
+
+    def _normalize_task_type(self, task_type: str) -> str:
+        if task_type in self.TASK_TYPE_OPTIONS:
+            return task_type
+        return "任务"
+
+    def _build_last_run_summary(self, task_data: dict, linked_project: str, linked_phase: str) -> str:
+        summary_lines = [
+            f"原始描述: {task_data.get('raw_description', '')}",
+            f"验收标准: {self._build_acceptance_criteria(task_data)}",
+            (
+                "Harness摘要: "
+                f"任务类型={task_data.get('task_type')} | "
+                f"几何={','.join(task_data.get('geometry_features', []))} | "
+                f"边界条件={json.dumps(task_data.get('boundary_conditions', {}), ensure_ascii=False)} | "
+                f"收敛标准={task_data.get('convergence_criteria')}"
+            ),
+        ]
+        if linked_project:
+            summary_lines.append(f"Linked Project: {linked_project}")
+        if linked_phase:
+            summary_lines.append(f"Linked Phase: {linked_phase}")
+        return "\n".join(summary_lines)
 
     # ---- 自然语言解析 ----
 
@@ -223,11 +248,11 @@ class TaskWizard:
 
     def create_notion_task(self, task_data: dict, parent_page_id: str = None) -> str:
         """
-        在 Notion SSOT DB 中创建任务页面。
+        在 v1 Tasks DB 中创建任务页面。
 
         Args:
             task_data: parse_natural_language() 返回的结构化数据
-            parent_page_id: 可选，父页面 ID（设置页面 parent）
+            parent_page_id: 可选，默认写入 Linked Project
 
         Returns:
             创建成功的 page_id 字符串
@@ -238,48 +263,57 @@ class TaskWizard:
         # 构建页面标题
         geo = task_data.get("geometry_features", ["通用几何"])[0]
         title = f"[{task_data.get('priority','P1')}] {task_data.get('task_type','CFD仿真')} - {geo}"
+        linked_project = task_data.get("linked_project") or parent_page_id or ""
+        linked_phase = task_data.get("linked_phase", "")
+        task_type_name = self._normalize_task_type(task_data.get("task_type"))
+        priority_name = self._normalize_priority(task_data.get("priority"))
+        executor_model = task_data.get("executor_model", "codex")
+        fallback_model = task_data.get("fallback_model", "glm_51")
+        last_run_summary = self._build_last_run_summary(task_data, linked_project, linked_phase)
 
         # 构建 properties
         properties = {
-            "项目ID": {
+            "Task ID": {
                 "title": [{"text": {"content": title}}]
             },
-            "项目名称": {
-                "rich_text": [{"text": {"content": title}}]
+            "Linked Phase": {
+                "rich_text": [{"text": {"content": linked_phase}}] if linked_phase else []
             },
-            "需求文档": {
-                "rich_text": [{"text": {"content": task_data.get("raw_description", "")[:1900]}}]
+            "Linked Project": {
+                "rich_text": [{"text": {"content": linked_project}}] if linked_project else []
             },
-            "验收标准": {
-                "rich_text": [{"text": {
-                    "content": self._build_acceptance_criteria(task_data)
-                }}]
+            "Task Type": {
+                "select": {"name": task_type_name}
             },
-            "Harness规范": {
-                "rich_text": [{"text": {
-                    "content": f"任务类型:{task_data.get('task_type')}|几何:{','.join(task_data.get('geometry_features',[]))}|边界条件:{task_data.get('boundary_conditions',{})}|收敛标准:{task_data.get('convergence_criteria')}"
-                }}]
+            "Priority": {
+                "select": {"name": priority_name}
             },
-            "Phase": {
-                "select": {"name": "Phase1-Copilot"}
+            "Executor Model": {
+                "rich_text": [{"text": {"content": executor_model}}]
             },
-            "Gate节点": {
-                "select": {"name": "G0-任务门"}
+            "Fallback Model": {
+                "rich_text": [{"text": {"content": fallback_model}}]
             },
-            "数据对象": {
-                "select": {"name": "Simulation Task"}
+            "Task Status": {
+                "select": {"name": "待领取"}
             },
-            "执行Plane": {
-                "select": {"name": "控制平面"}
+            "Git Branch": {
+                "rich_text": []
             },
+            "PR Link": {
+                "url": None
+            },
+            "Artifact Link": {
+                "url": None
+            },
+            "Failure Reason": {
+                "rich_text": []
+            },
+            "Retry Count": {
+                "number": 0
+            },
+            "Last Run Summary": self._build_rich_text(last_run_summary),
         }
-
-        # 父页面关系
-        if parent_page_id:
-            properties["父项目"] = {"relation": [{"id": parent_page_id}]}
-
-        # Optional: 仓库链接（暂无，填空字符串）
-        properties["仓库链接"] = {"url": None}
 
         # 组装 payload
         payload = {
@@ -299,6 +333,15 @@ class TaskWizard:
                     "paragraph": {
                         "rich_text": [{
                             "text": {"content": f"CFD 仿真任务 — 由 Well-Harness TaskWizard 自动生成 | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"}
+                        }]
+                    }
+                },
+                {
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{
+                            "text": {"content": f"执行模型: {executor_model} | 兜底模型: {fallback_model}"}
                         }]
                     }
                 },
@@ -421,10 +464,11 @@ class TaskWizard:
         对指定 Notion 页面执行 G0 门校验。
 
         检查项：
-          1. 需求文档字段存在且非空
-          2. 验收标准字段存在且非空
-          3. Harness规范字段存在且非空
-          4. 项目ID字段存在
+          1. Task ID 字段存在且非空
+          2. Linked Project / Linked Phase 至少一个存在
+          3. Task Type 字段存在且非空
+          4. Priority 字段存在且非空
+          5. Last Run Summary 存在且包含任务摘要
 
         Returns:
             evidence 字典，包含 pass/checks/result/message
@@ -440,10 +484,10 @@ class TaskWizard:
         }
 
         check_items = [
-            ("has_demand_doc", "需求文档存在"),
-            ("has_acceptance_criteria", "验收标准存在"),
-            ("has_harness_spec", "Harness规范存在"),
-            ("has_project_id", "项目ID存在"),
+            ("has_task_id", "Task ID存在"),
+            ("has_linked_context", "Linked Project/Phase存在"),
+            ("has_task_type", "Task Type存在"),
+            ("has_priority", "Priority存在"),
             ("has_valid_geometry", "几何特征已提取"),
         ]
 
@@ -462,39 +506,34 @@ class TaskWizard:
             for check_id, check_label in check_items:
                 check_result = {"check": check_id, "pass": False, "detail": ""}
 
-                if check_id == "has_demand_doc":
-                    rt = props.get("需求文档", {}).get("rich_text", [])
-                    has_content = len(rt) > 0 and rt[0].get("plain_text", "").strip() != ""
-                    check_result["pass"] = has_content
-                    check_result["detail"] = "Notion task content verified" if has_content else "需求文档为空"
+                if check_id == "has_task_id":
+                    task_id_text = self._title_plain(props.get("Task ID", {})).strip()
+                    check_result["pass"] = bool(task_id_text)
+                    check_result["detail"] = "Task ID已填写" if task_id_text else "Task ID为空"
 
-                elif check_id == "has_acceptance_criteria":
-                    rt = props.get("验收标准", {}).get("rich_text", [])
-                    has_content = len(rt) > 0 and rt[0].get("plain_text", "").strip() != ""
-                    check_result["pass"] = has_content
-                    check_result["detail"] = "验收标准已填写" if has_content else "验收标准为空"
+                elif check_id == "has_linked_context":
+                    linked_project = self._rich_text_plain(props.get("Linked Project", {})).strip()
+                    linked_phase = self._rich_text_plain(props.get("Linked Phase", {})).strip()
+                    has_link = bool(linked_project or linked_phase)
+                    check_result["pass"] = has_link
+                    check_result["detail"] = "Linked Project/Phase已绑定" if has_link else "未绑定Linked Project/Phase"
 
-                elif check_id == "has_harness_spec":
-                    rt = props.get("Harness规范", {}).get("rich_text", [])
-                    has_content = len(rt) > 0 and rt[0].get("plain_text", "").strip() != ""
-                    check_result["pass"] = has_content
-                    check_result["detail"] = "Harness规范已填写" if has_content else "Harness规范为空"
+                elif check_id == "has_task_type":
+                    task_type = (props.get("Task Type", {}).get("select") or {}).get("name", "").strip()
+                    check_result["pass"] = bool(task_type)
+                    check_result["detail"] = "Task Type已填写" if task_type else "Task Type为空"
 
-                elif check_id == "has_project_id":
-                    title = props.get("项目ID", {}).get("title", [])
-                    has_content = len(title) > 0 and title[0].get("plain_text", "").strip() != ""
-                    check_result["pass"] = has_content
-                    check_result["detail"] = "项目ID已填写" if has_content else "项目ID为空"
+                elif check_id == "has_priority":
+                    priority = (props.get("Priority", {}).get("select") or {}).get("name", "").strip()
+                    check_result["pass"] = bool(priority)
+                    check_result["detail"] = "Priority已填写" if priority else "Priority为空"
 
                 elif check_id == "has_valid_geometry":
-                    # 检查 Harness规范 中是否包含几何信息
-                    rt = props.get("Harness规范", {}).get("rich_text", [])
-                    spec_text = ""
-                    if rt:
-                        spec_text = " ".join([t.get("plain_text", "") for t in rt])
+                    summary_text = self._rich_text_plain(props.get("Last Run Summary", {}))
+                    spec_text = summary_text.strip()
                     has_geo = "几何" in spec_text or "几何特征" in spec_text
                     check_result["pass"] = has_geo
-                    check_result["detail"] = "几何特征已提取" if has_geo else "未提取几何特征"
+                    check_result["detail"] = "Last Run Summary包含几何摘要" if has_geo else "Last Run Summary缺少几何摘要"
 
                 evidence["checks"].append(check_result)
 
