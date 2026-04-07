@@ -87,6 +87,67 @@ def notion_get(endpoint: str) -> dict:
     resp.raise_for_status()
     return resp.json()
 
+
+def _claim_task_atomic(page_id: str, worker_id: str) -> bool:
+    """
+    原子性任务领取（乐观锁）。
+    领取成功条件：Task Status 为 待领取 且 Executor Model 为空。
+    使用 ETag compare-and-swap 确保只有一个 worker 能领取。
+    返回: True=领取成功, False=已被其他 worker 领取（跳过）
+    """
+    import time
+    for attempt in range(3):
+        # Step1: 读取当前状态和 ETag
+        resp = requests.get(
+            f"{NOTION_BASE_URL}/pages/{page_id}",
+            headers=HEADERS
+        )
+        if not resp.ok:
+            return False
+        page = resp.json()
+        etag = resp.headers.get("ETag", "")
+
+        props = page.get("properties", {})
+        current_status = (props.get("Task Status", {}).get("select") or {}).get("name", "")
+        executor_raw = props.get("Executor Model", {}).get("rich_text", [])
+        executor = "".join(t.get("plain_text", "") for t in executor_raw).strip()
+
+        # 检查是否已被领取
+        if current_status not in ("待领取", "Pending"):
+            return False  # 状态已变，跳过
+
+        if executor and executor != "待领取":
+            return False  # 已被其他 worker 领取
+
+        # Step2: 尝试原子更新（ETag compare-and-swap）
+        claim_props = {
+            "Task Status": {"select": {"name": "执行中"}},
+            "Executor Model": {"rich_text": [{"text": {"content": worker_id}}]},
+        }
+        patch_headers = dict(HEADERS)
+        if etag:
+            patch_headers["If-Match"] = etag
+
+        patch_resp = requests.patch(
+            f"{NOTION_BASE_URL}/pages/{page_id}",
+            headers=patch_headers,
+            json={"properties": claim_props}
+        )
+
+        if patch_resp.ok:
+            return True  # 领取成功
+
+        if patch_resp.status_code == 409:
+            # ETag 冲突，说明其他 worker 先一步领取了
+            time.sleep(0.5 * (attempt + 1))
+            continue  # 重试（重新读取最新状态）
+
+        # 其他错误
+        return False
+
+    return False  # 重试耗尽
+
+
 def notion_post(endpoint: str, data: dict) -> dict:
     """Notion POST 请求"""
     resp = requests.post(f"{NOTION_BASE_URL}/{endpoint}", headers=HEADERS, json=data)
@@ -443,6 +504,9 @@ def run_exec_loop(interval: int = 120, max_iterations: int = None):
 ╚══════════════════════════════════════════════════════════════╝
     """)
 
+    import socket
+    worker_id = f"exec-loop-{socket.gethostname()}-{os.getpid()}"
+
     while True:
         iteration += 1
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 第 {iteration} 次轮询")
@@ -466,9 +530,13 @@ def run_exec_loop(interval: int = 120, max_iterations: int = None):
                 if not instruction:
                     instruction = f"执行任务 {task_key}（详细内容请查看 Notion 页面）"
 
-                # 状态 → 执行中
+                # 原子性领取：确保任务仍为待领取状态，防止并发重复分发
+                if not _claim_task_atomic(page_id, worker_id):
+                    print(f"     ⏭️  任务已被其他worker领取，跳过")
+                    continue
+                # 领取成功后写入执行信息
                 _update_task_status(page_id, "执行中",
-                    f"[{datetime.now().strftime('%H:%M:%S')}] 开始执行 | 模型: {primary}\n{instruction[:200]}")
+                    f"[{datetime.now().strftime('%H:%M:%S')}] {worker_id} | 模型: {primary}\n{instruction[:200]}")
 
                 # 根据模型分派
                 success = False
