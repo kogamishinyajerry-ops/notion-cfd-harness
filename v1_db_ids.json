@@ -12,10 +12,30 @@
   "case_library_db": "33bc6894-2bed-8101-9b8d-e11220c8cfaa",
   "baseline_library_db": "33bc6894-2bed-81aa-8355-e01028f12e1a",
   "rule_library_db": "33bc6894-2bed-81f5-a389-dcea7c9b4f73",
+  "report_spec_db": "33bc6894-2bed-813a-ab5f-ffc75adc9a84",
   "p0_fixes": {
+    "execution_rule_page": "33bc6894-2bed-8104-a6fd-c40683fbc38e",
+    "report_spec_db": "✅ created",
     "artifacts_linked_task": "✅ added",
     "artifacts_linked_phase": "✅ added",
     "artifacts_linked_review": "✅ added",
     "ai_cfd_001_project": "✅ created"
+  },
+  "phase_planning": {
+    "phase1_spec": "33bc6894-2bed-814b-ba10-e24b4a7b8a1a",
+    "phase2_spec": "33bc6894-2bed-81c3-baad-c359435d0e20",
+    "phase3_spec": "33bc6894-2bed-8149-a0f6-e076c6dabb95",
+    "phase4_spec": "33bc6894-2bed-8170-9d2e-c430ee828a37"
+  },
+  "constraints": {
+    "EXECUTION-RULE-001": "33bc6894-2bed-81f8-9b96-c6a32ac6f06e",
+    "PHASE-SEQUENCE-001": "33bc6894-2bed-8195-88dd-c4c28776e716",
+    "KNOWLEDGE-GATE-001": "33bc6894-2bed-81df-a498-e3f996b52945",
+    "EVIDENCE-REQUIRED-001": "33bc6894-2bed-818c-a211-ca0160077b27"
+  },
+  "reviews": {
+    "REV-P1-001": "33bc6894-2bed-81c1-b932-ef30b616fe27",
+    "REV-P1-002": "33bc6894-2bed-812a-9d15-d55a7174d2a1",
+    "REV-P2-001": "33bc6894-2bed-8112-951f-ebd021c33e69"
   }
 }
