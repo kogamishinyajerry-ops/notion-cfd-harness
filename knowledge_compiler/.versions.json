@@ -1,0 +1,525 @@
+{
+  "version": "v1.0",
+  "last_updated": "2026-04-07T21:50:27.959657",
+  "current_versions": {
+    "CH-001": {
+      "version": "v1.1",
+      "content_hash": "f18fb0f57c2fb54d6d486ff230829c045d6dbf5e00c513b5c00043f07f2b7780",
+      "parent_hash": "f18fb0f57c2fb54d6d486ff230829c045d6dbf5e00c513b5c00043f07f2b7780",
+      "created_at": "2026-04-07T21:50:27.878986",
+      "created_by": "test",
+      "status": "active",
+      "change_summary": "Test update",
+      "metadata": {
+        "source_file": "units/chapters.yaml",
+        "unit_type": "chapter"
+      }
+    },
+    "CH-002": {
+      "version": "v1.0",
+      "content_hash": "411ea575067ff990c98298aaa385df58215fa9cdc199ee684bf91df971d80856",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388265",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/chapters.yaml",
+        "unit_type": "chapter"
+      }
+    },
+    "CH-003": {
+      "version": "v1.0",
+      "content_hash": "5780433b54337c26c2d5666308c7d8bff8ae74f3f5e90ef7445fb4081c61f355",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388302",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/chapters.yaml",
+        "unit_type": "chapter"
+      }
+    },
+    "CH-003-1": {
+      "version": "v1.0",
+      "content_hash": "90a948052c10cf0a6d71c49786020490dbcb24abe28c029ee32afbc6e6a3d900",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388333",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/chapters.yaml",
+        "unit_type": "chapter"
+      }
+    },
+    "CH-004": {
+      "version": "v1.0",
+      "content_hash": "e0ac4a54d882a77894bda659f9ac32b2fe51ebce2e6ff784fd308b946dcec38e",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388366",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/chapters.yaml",
+        "unit_type": "chapter"
+      }
+    },
+    "CH-005": {
+      "version": "v1.0",
+      "content_hash": "c7e6ba77a53df674c28f7aba67c47a25ca53ad1e1f6b6fdb55f9511dd2203d4a",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388395",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/chapters.yaml",
+        "unit_type": "chapter"
+      }
+    },
+    "FORM-001": {
+      "version": "v1.0",
+      "content_hash": "5ab8d55ee87b0b673f608417b4b6b39850049e6996f67b39ba02392058c54dd8",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388426",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/formulas.yaml",
+        "unit_type": "formula"
+      }
+    },
+    "FORM-002": {
+      "version": "v1.0",
+      "content_hash": "16c574730da1e281111ddc99b3a128c2498f047853ed69f0f673c3a7569ab77a",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388461",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/formulas.yaml",
+        "unit_type": "formula"
+      }
+    },
+    "FORM-003": {
+      "version": "v1.0",
+      "content_hash": "0564c7e2b3736e76debc042c7ab528419e26d5920a2ced8e121b46fc7eb32364",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388496",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/formulas.yaml",
+        "unit_type": "formula"
+      }
+    },
+    "FORM-004": {
+      "version": "v1.0",
+      "content_hash": "b07a9877e563b3f159d08acda58b1e62104d45521d419ee9f7c273491d720714",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388528",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/formulas.yaml",
+        "unit_type": "formula"
+      }
+    },
+    "FORM-005": {
+      "version": "v1.0",
+      "content_hash": "da009d2d1792765767047f45e55615c4fb44c51948d7fdaf752343fe8692f8c9",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388556",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/formulas.yaml",
+        "unit_type": "formula"
+      }
+    },
+    "FORM-006": {
+      "version": "v1.0",
+      "content_hash": "1a78814bdd6d332cb8864c60b167426f563a0084c1f494712233a72d29cf1fe3",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388584",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/formulas.yaml",
+        "unit_type": "formula"
+      }
+    },
+    "FORM-007": {
+      "version": "v1.0",
+      "content_hash": "7c8b68b7ff932e48c46d630da728939c1353092c577dc4692ef2eb46e95de213",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388613",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/formulas.yaml",
+        "unit_type": "formula"
+      }
+    },
+    "FORM-008": {
+      "version": "v1.0",
+      "content_hash": "d778f48f60b7cf73ddb165c7612f797b1274fc03a5e063b7485193383238f34c",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388641",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/formulas.yaml",
+        "unit_type": "formula"
+      }
+    },
+    "FORM-009": {
+      "version": "v1.0",
+      "content_hash": "a0309148514644390db6c41a076162c6bf653786cd703215f880f924e426cfff",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388669",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/formulas.yaml",
+        "unit_type": "formula"
+      }
+    },
+    "FORM-010": {
+      "version": "v1.0",
+      "content_hash": "f9707c35201199b5a172cbf6f1364562c4ac62e80cbec9af96c1dc7e2ba7b890",
+      "parent_hash": null,
+      "created_at": "2026-04-07T21:14:26.388696",
+      "created_by": "system",
+      "status": "active",
+      "change_summary": "Initial version from Phase3 baseline",
+      "metadata": {
+        "source_file": "units/formulas.yaml",
+        "unit_type": "formula"
+      }
+    }
+  },
+  "history": {
+    "CH-001": [
+      {
+        "version": "v1.0",
+        "content_hash": "f18fb0f57c2fb54d6d486ff230829c045d6dbf5e00c513b5c00043f07f2b7780",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388223",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/chapters.yaml",
+          "unit_type": "chapter"
+        }
+      },
+      {
+        "version": "v1.1",
+        "content_hash": "f18fb0f57c2fb54d6d486ff230829c045d6dbf5e00c513b5c00043f07f2b7780",
+        "parent_hash": "f18fb0f57c2fb54d6d486ff230829c045d6dbf5e00c513b5c00043f07f2b7780",
+        "created_at": "2026-04-07T21:16:21.461413",
+        "created_by": "test",
+        "status": "active",
+        "change_summary": "Test update",
+        "metadata": {
+          "source_file": "units/chapters.yaml",
+          "unit_type": "chapter"
+        }
+      },
+      {
+        "version": "v1.1",
+        "content_hash": "f18fb0f57c2fb54d6d486ff230829c045d6dbf5e00c513b5c00043f07f2b7780",
+        "parent_hash": "f18fb0f57c2fb54d6d486ff230829c045d6dbf5e00c513b5c00043f07f2b7780",
+        "created_at": "2026-04-07T21:50:27.878986",
+        "created_by": "test",
+        "status": "active",
+        "change_summary": "Test update",
+        "metadata": {
+          "source_file": "units/chapters.yaml",
+          "unit_type": "chapter"
+        }
+      }
+    ],
+    "CH-002": [
+      {
+        "version": "v1.0",
+        "content_hash": "411ea575067ff990c98298aaa385df58215fa9cdc199ee684bf91df971d80856",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388265",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/chapters.yaml",
+          "unit_type": "chapter"
+        }
+      }
+    ],
+    "CH-003": [
+      {
+        "version": "v1.0",
+        "content_hash": "5780433b54337c26c2d5666308c7d8bff8ae74f3f5e90ef7445fb4081c61f355",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388302",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/chapters.yaml",
+          "unit_type": "chapter"
+        }
+      }
+    ],
+    "CH-003-1": [
+      {
+        "version": "v1.0",
+        "content_hash": "90a948052c10cf0a6d71c49786020490dbcb24abe28c029ee32afbc6e6a3d900",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388333",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/chapters.yaml",
+          "unit_type": "chapter"
+        }
+      }
+    ],
+    "CH-004": [
+      {
+        "version": "v1.0",
+        "content_hash": "e0ac4a54d882a77894bda659f9ac32b2fe51ebce2e6ff784fd308b946dcec38e",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388366",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/chapters.yaml",
+          "unit_type": "chapter"
+        }
+      }
+    ],
+    "CH-005": [
+      {
+        "version": "v1.0",
+        "content_hash": "c7e6ba77a53df674c28f7aba67c47a25ca53ad1e1f6b6fdb55f9511dd2203d4a",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388395",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/chapters.yaml",
+          "unit_type": "chapter"
+        }
+      }
+    ],
+    "FORM-001": [
+      {
+        "version": "v1.0",
+        "content_hash": "5ab8d55ee87b0b673f608417b4b6b39850049e6996f67b39ba02392058c54dd8",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388426",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/formulas.yaml",
+          "unit_type": "formula"
+        }
+      }
+    ],
+    "FORM-002": [
+      {
+        "version": "v1.0",
+        "content_hash": "16c574730da1e281111ddc99b3a128c2498f047853ed69f0f673c3a7569ab77a",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388461",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/formulas.yaml",
+          "unit_type": "formula"
+        }
+      }
+    ],
+    "FORM-003": [
+      {
+        "version": "v1.0",
+        "content_hash": "0564c7e2b3736e76debc042c7ab528419e26d5920a2ced8e121b46fc7eb32364",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388496",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/formulas.yaml",
+          "unit_type": "formula"
+        }
+      }
+    ],
+    "FORM-004": [
+      {
+        "version": "v1.0",
+        "content_hash": "b07a9877e563b3f159d08acda58b1e62104d45521d419ee9f7c273491d720714",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388528",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/formulas.yaml",
+          "unit_type": "formula"
+        }
+      }
+    ],
+    "FORM-005": [
+      {
+        "version": "v1.0",
+        "content_hash": "da009d2d1792765767047f45e55615c4fb44c51948d7fdaf752343fe8692f8c9",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388556",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/formulas.yaml",
+          "unit_type": "formula"
+        }
+      }
+    ],
+    "FORM-006": [
+      {
+        "version": "v1.0",
+        "content_hash": "1a78814bdd6d332cb8864c60b167426f563a0084c1f494712233a72d29cf1fe3",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388584",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/formulas.yaml",
+          "unit_type": "formula"
+        }
+      }
+    ],
+    "FORM-007": [
+      {
+        "version": "v1.0",
+        "content_hash": "7c8b68b7ff932e48c46d630da728939c1353092c577dc4692ef2eb46e95de213",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388613",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/formulas.yaml",
+          "unit_type": "formula"
+        }
+      }
+    ],
+    "FORM-008": [
+      {
+        "version": "v1.0",
+        "content_hash": "d778f48f60b7cf73ddb165c7612f797b1274fc03a5e063b7485193383238f34c",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388641",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/formulas.yaml",
+          "unit_type": "formula"
+        }
+      }
+    ],
+    "FORM-009": [
+      {
+        "version": "v1.0",
+        "content_hash": "a0309148514644390db6c41a076162c6bf653786cd703215f880f924e426cfff",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388669",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/formulas.yaml",
+          "unit_type": "formula"
+        }
+      }
+    ],
+    "FORM-010": [
+      {
+        "version": "v1.0",
+        "content_hash": "f9707c35201199b5a172cbf6f1364562c4ac62e80cbec9af96c1dc7e2ba7b890",
+        "parent_hash": null,
+        "created_at": "2026-04-07T21:14:26.388696",
+        "created_by": "system",
+        "status": "active",
+        "change_summary": "Initial version from Phase3 baseline",
+        "metadata": {
+          "source_file": "units/formulas.yaml",
+          "unit_type": "formula"
+        }
+      }
+    ]
+  },
+  "code_mappings": {
+    "CH-001": [
+      {
+        "file_path": "knowledge_compiler/units/chapters.yaml",
+        "mapping_type": "implements",
+        "confidence": 1.0,
+        "verified_at": "2026-04-07T21:16:21.497624"
+      },
+      {
+        "file_path": "knowledge_compiler/units/chapters.yaml",
+        "mapping_type": "implements",
+        "confidence": 1.0,
+        "verified_at": "2026-04-07T21:16:21.533934"
+      },
+      {
+        "file_path": "knowledge_compiler/units/chapters.yaml",
+        "mapping_type": "implements",
+        "confidence": 1.0,
+        "verified_at": "2026-04-07T21:50:27.922707"
+      },
+      {
+        "file_path": "knowledge_compiler/units/chapters.yaml",
+        "mapping_type": "implements",
+        "confidence": 1.0,
+        "verified_at": "2026-04-07T21:50:27.958512"
+      }
+    ],
+    "FORM-001": [
+      {
+        "file_path": "knowledge_compiler/units/chapters.yaml",
+        "mapping_type": "references",
+        "confidence": 1.0,
+        "verified_at": "2026-04-07T21:16:21.534547"
+      },
+      {
+        "file_path": "knowledge_compiler/units/chapters.yaml",
+        "mapping_type": "references",
+        "confidence": 1.0,
+        "verified_at": "2026-04-07T21:50:27.959507"
+      }
+    ]
+  },
+  "changes": []
+}

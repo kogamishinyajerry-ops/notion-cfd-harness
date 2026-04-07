@@ -47,7 +47,7 @@ class KnowledgeRegistry:
     """
 
     def __init__(self, base_path: Path = None):
-        self.base_path = base_path or Path(__file__).parent.parent
+        self.base_path = base_path or Path(__file__).parent
         self.units: Dict[str, KnowledgeUnitRef] = {}
         self._load_all_units()
 

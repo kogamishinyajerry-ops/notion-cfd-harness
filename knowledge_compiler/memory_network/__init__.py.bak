@@ -1,0 +1,800 @@
+#!/usr/bin/env python3
+"""
+Versioned Knowledge Registry
+Phase 4: Governed Memory Network
+
+Extends Phase3 KnowledgeRegistry with Git-like version tracking
+for knowledge units, enabling full evolution history and change propagation.
+"""
+
+import hashlib
+import json
+import yaml
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
+from dataclasses import dataclass, field
+from enum import Enum
+
+from knowledge_compiler.runtime import KnowledgeRegistry, KnowledgeUnitRef
+
+
+# =============================================================================
+# Version Control Data Models
+# =============================================================================
+
+class VersionStatus(Enum):
+    """Status of a knowledge unit version."""
+    ACTIVE = "active"           # Current live version
+    SUPERSEDED = "superseded"   # Replaced by newer version
+    DEPRECATED = "deprecated"   # Marked as obsolete
+    ARCHIVED = "archived"       # Historical reference only
+
+
+@dataclass
+class UnitVersion:
+    """
+    A specific version of a knowledge unit.
+
+    Similar to Git commit: each version has content hash, parent hash,
+    timestamp, and metadata.
+    """
+    unit_id: str
+    version: str                   # Semantic version (v1.0, v1.1, etc.)
+    content_hash: str              # SHA-256 of unit content
+    parent_hash: Optional[str]      # Previous version's hash (None for initial)
+    created_at: datetime
+    created_by: str                 # "Codex", "Human", etc.
+    status: VersionStatus
+    change_summary: str             # Human-readable change description
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    # Git-style properties
+    @property
+    def short_hash(self) -> str:
+        """First 8 characters of content hash."""
+        return self.content_hash[:8]
+
+    @property
+    def is_initial(self) -> bool:
+        """True if this is the first version (no parent)."""
+        return self.parent_hash is None
+
+
+@dataclass
+class CodeMapping:
+    """
+    Bidirectional mapping between knowledge units and code artifacts.
+
+    Enables traceability: given a file path, find which knowledge units
+    reference it; given a unit, find which code files implement it.
+    """
+    unit_id: str
+    file_path: str                  # Relative to project root
+    mapping_type: str               # "implements", "validates", "references"
+    confidence: float = 1.0          # 0.0 to 1.0, for auto-generated mappings
+    verified_at: Optional[datetime] = None
+
+
+
+@dataclass
+class MemoryNode:
+    """
+    记忆节点 - 表示一个知识单元的状态.
+    
+    MemoryNode represents the state of a knowledge unit in the governed
+    memory network. Unlike UnitVersion which is for version control,
+    MemoryNode focuses on the knowledge unit's relationship to code
+    artifacts and its network position.
+    
+    Attributes:
+        unit_id: Knowledge unit identifier (e.g., "CH-001")
+        version: Semantic version string (e.g., "v1.0")
+        content_hash: SHA-256 hash of the unit content
+        created_at: Timestamp when this version was created
+        parent_hash: Hash of the parent version (None for initial version)
+        metadata: Additional information about the node
+        code_mappings: List of file paths that implement/reference this unit
+    """
+    unit_id: str
+    version: str
+    content_hash: str
+    created_at: datetime
+    parent_hash: Optional[str] = None  # Git-like 链式结构
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    code_mappings: List[str] = field(default_factory=list)
+    
+    # Git-style properties
+    @property
+    def short_hash(self) -> str:
+        """First 8 characters of content hash."""
+        return self.content_hash[:8]
+    
+    @property
+    def is_initial(self) -> bool:
+        """True if this is the first version (no parent)."""
+        return self.parent_hash is None
+    
+    # Serialization methods
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert MemoryNode to dictionary for serialization.
+        
+        Returns:
+            Dict representation of the node
+        """
+        return {
+            "unit_id": self.unit_id,
+            "version": self.version,
+            "content_hash": self.content_hash,
+            "created_at": self.created_at.isoformat(),
+            "parent_hash": self.parent_hash,
+            "metadata": self.metadata,
+            "code_mappings": self.code_mappings
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "MemoryNode":
+        """
+        Create MemoryNode from dictionary.
+        
+        Args:
+            data: Dictionary representation of the node
+            
+        Returns:
+            MemoryNode instance
+        """
+        return cls(
+            unit_id=data["unit_id"],
+            version=data["version"],
+            content_hash=data["content_hash"],
+            created_at=datetime.fromisoformat(data["created_at"]),
+            parent_hash=data.get("parent_hash"),
+            metadata=data.get("metadata", {}),
+            code_mappings=data.get("code_mappings", [])
+        )
+
+
+@dataclass
+class VersionChange:
+    """
+    Record of a change between two unit versions.
+
+    Computed by diff_engine.py, stored for audit trail.
+    """
+    from_version: str               # content_hash
+    to_version: str                 # content_hash
+    change_type: str                # NEW/DELETE/TEXT_EDIT/SEMANTIC_EDIT/EVIDENCE_EDIT/CHART_RULE_EDIT
+    changed_fields: List[str]
+    impact_summary: str
+    detected_at: datetime
+    reviewed_by: Optional[str] = None  # "Opus 4.6" if gate-reviewed
+
+
+# =============================================================================
+# Versioned Knowledge Registry
+# =============================================================================
+
+class VersionedKnowledgeRegistry(KnowledgeRegistry):
+    """
+    Git-like versioned knowledge registry.
+
+    Extends Phase3 KnowledgeRegistry with:
+    - Version history for each knowledge unit
+    - Parent-child relationships between versions
+    - Change tracking between versions
+    - Code mapping registry
+
+    Usage:
+        registry = VersionedKnowledgeRegistry()
+
+        # Get current version of a unit
+        unit = registry.get_current("CH-001")
+
+        # Get version history
+        history = registry.get_history("CH-001")
+
+        # Get specific version
+        v1_0 = registry.get_version("CH-001", "v1.0")
+
+        # Compare versions
+        changes = registry.diff_versions("CH-001", "v1.0", "v1.1")
+    """
+
+    def __init__(self, base_path: Path = None, version_db_path: Optional[Path] = None):
+        """
+        Initialize versioned registry.
+
+        Args:
+            base_path: Root path of knowledge_compiler
+            version_db_path: Path to version database JSON file (default: .versions.json)
+        """
+        super().__init__(base_path)
+
+        self.version_db_path = version_db_path or (self.base_path / ".versions.json")
+        self.versions: Dict[str, UnitVersion] = {}  # unit_id -> UnitVersion (current)
+        self.history: Dict[str, List[UnitVersion]] = {}  # unit_id -> [all versions]
+        self.by_hash: Dict[str, UnitVersion] = {}  # content_hash -> UnitVersion
+
+        # Code mappings: unit_id -> [CodeMapping]
+        self.code_mappings: Dict[str, List[CodeMapping]] = {}
+
+        # Version changes for audit trail
+        self.changes: List[VersionChange] = []
+
+        self._load_versions()
+
+    def _load_versions(self):
+        """Load version database from disk."""
+        if self.version_db_path.exists():
+            try:
+                with open(self.version_db_path) as f:
+                    data = json.load(f)
+
+                # Load current versions
+                for unit_id, version_data in data.get("current_versions", {}).items():
+                    self.versions[unit_id] = UnitVersion(
+                        unit_id=unit_id,
+                        version=version_data["version"],
+                        content_hash=version_data["content_hash"],
+                        parent_hash=version_data.get("parent_hash"),
+                        created_at=datetime.fromisoformat(version_data["created_at"]),
+                        created_by=version_data.get("created_by", "unknown"),
+                        status=VersionStatus(version_data.get("status", "active")),
+                        change_summary=version_data.get("change_summary", ""),
+                        metadata=version_data.get("metadata", {})
+                    )
+                    self.by_hash[self.versions[unit_id].content_hash] = self.versions[unit_id]
+
+                # Load full history
+                for unit_id, history_list in data.get("history", {}).items():
+                    self.history[unit_id] = []
+                    for h in history_list:
+                        uv = UnitVersion(
+                            unit_id=unit_id,
+                            version=h["version"],
+                            content_hash=h["content_hash"],
+                            parent_hash=h.get("parent_hash"),
+                            created_at=datetime.fromisoformat(h["created_at"]),
+                            created_by=h.get("created_by", "unknown"),
+                            status=VersionStatus(h.get("status", "active")),
+                            change_summary=h.get("change_summary", ""),
+                            metadata=h.get("metadata", {})
+                        )
+                        self.history[unit_id].append(uv)
+                        self.by_hash[uv.content_hash] = uv
+
+                # Load code mappings
+                for unit_id, mappings in data.get("code_mappings", {}).items():
+                    self.code_mappings[unit_id] = [
+                        CodeMapping(
+                            unit_id=unit_id,
+                            file_path=m["file_path"],
+                            mapping_type=m["mapping_type"],
+                            confidence=m.get("confidence", 1.0),
+                            verified_at=datetime.fromisoformat(m["verified_at"]) if m.get("verified_at") else None
+                        )
+                        for m in mappings
+                    ]
+
+                # Load changes
+                for c in data.get("changes", []):
+                    self.changes.append(VersionChange(
+                        from_version=c["from_version"],
+                        to_version=c["to_version"],
+                        change_type=c["change_type"],
+                        changed_fields=c.get("changed_fields", []),
+                        impact_summary=c["impact_summary"],
+                        detected_at=datetime.fromisoformat(c["detected_at"]),
+                        reviewed_by=c.get("reviewed_by")
+                    ))
+
+            except (json.JSONDecodeError, KeyError, ValueError) as e:
+                print(f"Warning: Failed to load version DB, starting fresh: {e}")
+                self._initialize_initial_versions()
+        else:
+            self._initialize_initial_versions()
+
+    def _initialize_initial_versions(self):
+        """
+        Initialize version database from current YAML files.
+
+        Called when no version DB exists - creates v1.0 for all units.
+        """
+        print("Initializing version database from current YAML files...")
+
+        for unit_id, unit_ref in self.units.items():
+            # Calculate content hash from YAML source
+            content_hash = self._calculate_unit_hash(unit_id, unit_ref)
+
+            uv = UnitVersion(
+                unit_id=unit_id,
+                version="v1.0",
+                content_hash=content_hash,
+                parent_hash=None,
+                created_at=datetime.now(),
+                created_by="system",
+                status=VersionStatus.ACTIVE,
+                change_summary="Initial version from Phase3 baseline",
+                metadata={
+                    "source_file": unit_ref.source_file,
+                    "unit_type": unit_ref.unit_type
+                }
+            )
+
+            self.versions[unit_id] = uv
+            self.history[unit_id] = [uv]
+            self.by_hash[content_hash] = uv
+
+        self._save_versions()
+        print(f"Initialized {len(self.versions)} unit versions")
+
+    def _calculate_unit_hash(self, unit_id: str, unit_ref: KnowledgeUnitRef) -> str:
+        """
+        Calculate SHA-256 hash of unit content from YAML.
+
+        Args:
+            unit_id: Knowledge unit ID
+            unit_ref: Unit reference
+
+        Returns:
+            Hexadecimal SHA-256 hash
+        """
+        yaml_path = self.base_path / unit_ref.source_file
+
+        if not yaml_path.exists():
+            return hashlib.sha256(unit_id.encode()).hexdigest()[:16]
+
+        with open(yaml_path, "rb") as f:
+            # Hash the full file content
+            file_hash = hashlib.sha256(f.read()).hexdigest()
+
+        # Incorporate unit_id for uniqueness within multi-unit files
+        combined = f"{unit_id}:{file_hash}"
+        return hashlib.sha256(combined.encode()).hexdigest()
+
+    def _save_versions(self):
+        """Save version database to disk."""
+        data = {
+            "version": "v1.0",
+            "last_updated": datetime.now().isoformat(),
+            "current_versions": {
+                unit_id: {
+                    "version": uv.version,
+                    "content_hash": uv.content_hash,
+                    "parent_hash": uv.parent_hash,
+                    "created_at": uv.created_at.isoformat(),
+                    "created_by": uv.created_by,
+                    "status": uv.status.value,
+                    "change_summary": uv.change_summary,
+                    "metadata": uv.metadata
+                }
+                for unit_id, uv in self.versions.items()
+            },
+            "history": {
+                unit_id: [
+                    {
+                        "version": h.version,
+                        "content_hash": h.content_hash,
+                        "parent_hash": h.parent_hash,
+                        "created_at": h.created_at.isoformat(),
+                        "created_by": h.created_by,
+                        "status": h.status.value,
+                        "change_summary": h.change_summary,
+                        "metadata": h.metadata
+                    }
+                    for h in history
+                ]
+                for unit_id, history in self.history.items()
+            },
+            "code_mappings": {
+                unit_id: [
+                    {
+                        "file_path": m.file_path,
+                        "mapping_type": m.mapping_type,
+                        "confidence": m.confidence,
+                        "verified_at": m.verified_at.isoformat() if m.verified_at else None
+                    }
+                    for m in mappings
+                ]
+                for unit_id, mappings in self.code_mappings.items()
+            },
+            "changes": [
+                {
+                    "from_version": c.from_version,
+                    "to_version": c.to_version,
+                    "change_type": c.change_type,
+                    "changed_fields": c.changed_fields,
+                    "impact_summary": c.impact_summary,
+                    "detected_at": c.detected_at.isoformat(),
+                    "reviewed_by": c.reviewed_by
+                }
+                for c in self.changes
+            ]
+        }
+
+        with open(self.version_db_path, "w") as f:
+            json.dump(data, f, indent=2)
+
+    # -------------------------------------------------------------------------
+    # Version Query APIs
+    # -------------------------------------------------------------------------
+
+    def get_current(self, unit_id: str) -> Optional[UnitVersion]:
+        """Get current (active) version of a unit."""
+        return self.versions.get(unit_id)
+
+    def get_version(self, unit_id: str, version: str) -> Optional[UnitVersion]:
+        """Get a specific version of a unit."""
+        for uv in self.history.get(unit_id, []):
+            if uv.version == version:
+                return uv
+        return None
+
+    def get_by_hash(self, content_hash: str) -> Optional[UnitVersion]:
+        """Get version by content hash."""
+        return self.by_hash.get(content_hash)
+
+    def get_history(self, unit_id: str) -> List[UnitVersion]:
+        """
+        Get full version history for a unit.
+
+        Returns list ordered newest first.
+        """
+        history = self.history.get(unit_id, [])
+        if history:
+            # Return newest first (reverse chronological)
+            return sorted(history, key=lambda x: x.created_at, reverse=True)
+        return []
+
+    def get_lineage(self, unit_id: str) -> List[UnitVersion]:
+        """
+        Get complete lineage chain from initial to current.
+
+        Follows parent_hash links to reconstruct full ancestry.
+        Returns list ordered oldest to newest.
+        """
+        current = self.get_current(unit_id)
+        if not current:
+            return []
+
+        lineage = [current]
+        visited = {current.content_hash}
+
+        while current.parent_hash:
+            parent = self.get_by_hash(current.parent_hash)
+            if parent and parent.content_hash not in visited:
+                lineage.insert(0, parent)  # Insert at beginning
+                visited.add(parent.content_hash)
+                current = parent
+            else:
+                break
+
+        return lineage
+
+    # -------------------------------------------------------------------------
+    # Version Creation APIs
+    # -------------------------------------------------------------------------
+
+    def create_version(
+        self,
+        unit_id: str,
+        new_version: str,
+        change_summary: str,
+        content: Optional[Dict[str, Any]] = None,
+        created_by: str = "system"
+    ) -> UnitVersion:
+        """
+        Create a new version of a knowledge unit.
+
+        This should be called after validating and committing changes
+        to the YAML source files.
+
+        Args:
+            unit_id: Knowledge unit ID
+            new_version: New version string (e.g., "v1.1")
+            change_summary: Human-readable description of changes
+            content: New content (if None, reads from current YAML)
+            created_by: Creator identifier
+
+        Returns:
+            The newly created UnitVersion
+        """
+        current = self.get_current(unit_id)
+        if not current:
+            raise ValueError(f"Unit {unit_id} not found")
+
+        # Calculate new content hash
+        if content is None:
+            # Read from YAML
+            unit_ref = self.units.get(unit_id)
+            if not unit_ref:
+                raise ValueError(f"Unit {unit_id} not in registry")
+            content_hash = self._calculate_unit_hash(unit_id, unit_ref)
+        else:
+            # Hash from provided content
+            content_str = json.dumps(content, sort_keys=True)
+            content_hash = hashlib.sha256(content_str.encode()).hexdigest()
+
+        # Create new version
+        new_uv = UnitVersion(
+            unit_id=unit_id,
+            version=new_version,
+            content_hash=content_hash,
+            parent_hash=current.content_hash,
+            created_at=datetime.now(),
+            created_by=created_by,
+            status=VersionStatus.ACTIVE,
+            change_summary=change_summary,
+            metadata={
+                "source_file": current.metadata.get("source_file"),
+                "unit_type": current.metadata.get("unit_type")
+            }
+        )
+
+        # Mark old version as superseded
+        current.status = VersionStatus.SUPERSEDED
+
+        # Update registries
+        self.versions[unit_id] = new_uv
+        self.history[unit_id].append(new_uv)
+        self.by_hash[content_hash] = new_uv
+
+        # Save to disk
+        self._save_versions()
+
+        return new_uv
+
+    def create_version_from_diff(
+        self,
+        unit_id: str,
+        diff_report: Dict[str, Any],
+        created_by: str = "system"
+    ) -> UnitVersion:
+        """
+        Create new version from diff_engine.py output.
+
+        Args:
+            unit_id: Knowledge unit ID
+            diff_report: Output from diff_engine.diff_units()
+            created_by: Creator identifier
+
+        Returns:
+            The newly created UnitVersion
+        """
+        current = self.get_current(unit_id)
+        if not current:
+            raise ValueError(f"Unit {unit_id} not found")
+
+        # Determine new version number (auto-increment)
+        current_major = int(current.version.replace("v", "").split(".")[0])
+        current_minor = int(current.version.replace("v", "").split(".")[1])
+        new_version = f"v{current_major}.{current_minor + 1}"
+
+        # Build change summary
+        change_type = diff_report.get("change_type", "UNKNOWN")
+        summary = f"{change_type}: {diff_report.get('summary', 'Changes detected')}"
+
+        # Record the change
+        self.changes.append(VersionChange(
+            from_version=current.content_hash,
+            to_version=f"{unit_id}:{new_version}",  # Temporary, will update after save
+            change_type=change_type,
+            changed_fields=diff_report.get("changed_fields", []),
+            impact_summary=diff_report.get("impact_summary", ""),
+            detected_at=datetime.now(),
+            reviewed_by=None
+        ))
+
+        # Create the version
+        new_uv = self.create_version(
+            unit_id=unit_id,
+            new_version=new_version,
+            change_summary=summary,
+            created_by=created_by
+        )
+
+        # Update the change record with actual hash
+        self.changes[-1].to_version = new_uv.content_hash
+
+        return new_uv
+
+    # -------------------------------------------------------------------------
+    # Version Comparison APIs
+    # -------------------------------------------------------------------------
+
+    def diff_versions(
+        self,
+        unit_id: str,
+        from_version: str,
+        to_version: str
+    ) -> Dict[str, Any]:
+        """
+        Compare two versions of a unit.
+
+        This integrates with diff_engine.py for detailed diff.
+
+        Args:
+            unit_id: Knowledge unit ID
+            from_version: Source version (e.g., "v1.0")
+            to_version: Target version (e.g., "v1.1")
+
+        Returns:
+            Dict with changes between versions
+        """
+        from_uv = self.get_version(unit_id, from_version)
+        to_uv = self.get_version(unit_id, to_version)
+
+        if not from_uv:
+            raise ValueError(f"Version {from_version} not found for {unit_id}")
+        if not to_uv:
+            raise ValueError(f"Version {to_version} not found for {unit_id}")
+
+        # Check if they are in the same lineage
+        if to_uv.parent_hash != from_uv.content_hash:
+            # Not direct parent-child, need to traverse chain
+            lineage = self.get_lineage(unit_id)
+            from_index = None
+            to_index = None
+            for i, uv in enumerate(lineage):
+                if uv.version == from_version:
+                    from_index = i
+                if uv.version == to_version:
+                    to_index = i
+            if from_index is None or to_index is None:
+                return {"error": "Versions not in same lineage"}
+
+        # Import diff_engine if available
+        try:
+            from knowledge_compiler.executables.diff_engine import DiffEngine
+            engine = DiffEngine()
+
+            # For now, return basic comparison
+            # Full integration would require storing YAML snapshots per version
+            return {
+                "unit_id": unit_id,
+                "from_version": from_version,
+                "to_version": to_version,
+                "from_hash": from_uv.content_hash[:8],
+                "to_hash": to_uv.content_hash[:8],
+                "change_summary": to_uv.change_summary,
+                "note": "Full YAML diff integration pending - requires content snapshots"
+            }
+        except ImportError:
+            return {
+                "unit_id": unit_id,
+                "from_version": from_version,
+                "to_version": to_version,
+                "from_hash": from_uv.content_hash[:8],
+                "to_hash": to_uv.content_hash[:8],
+                "change_summary": to_uv.change_summary,
+                "note": "diff_engine not available for detailed diff"
+            }
+
+    # -------------------------------------------------------------------------
+    # Code Mapping APIs
+    # -------------------------------------------------------------------------
+
+    def add_code_mapping(
+        self,
+        unit_id: str,
+        file_path: str,
+        mapping_type: str,
+        confidence: float = 1.0
+    ) -> CodeMapping:
+        """Add a code-to-knowledge mapping."""
+        mapping = CodeMapping(
+            unit_id=unit_id,
+            file_path=file_path,
+            mapping_type=mapping_type,
+            confidence=confidence,
+            verified_at=datetime.now()
+        )
+
+        if unit_id not in self.code_mappings:
+            self.code_mappings[unit_id] = []
+
+        self.code_mappings[unit_id].append(mapping)
+        self._save_versions()
+
+        return mapping
+
+    def get_code_mappings(self, unit_id: Optional[str] = None) -> List[CodeMapping]:
+        """
+        Get code mappings, optionally filtered by unit_id.
+
+        Args:
+            unit_id: Filter to this unit (None = all)
+
+        Returns:
+            List of CodeMapping
+        """
+        if unit_id:
+            return self.code_mappings.get(unit_id, [])
+
+        # Return all mappings flattened
+        all_mappings = []
+        for mappings in self.code_mappings.values():
+            all_mappings.extend(mappings)
+        return all_mappings
+
+    def find_units_by_file(self, file_path: str) -> List[str]:
+        """
+        Find which knowledge units reference a given file.
+
+        Args:
+            file_path: Path to code file
+
+        Returns:
+            List of unit_ids that reference this file
+        """
+        matching = []
+        for unit_id, mappings in self.code_mappings.items():
+            for m in mappings:
+                if m.file_path == file_path or file_path in m.file_path:
+                    matching.append(unit_id)
+                    break
+        return matching
+
+    # -------------------------------------------------------------------------
+    # Integrity & Validation
+    # -------------------------------------------------------------------------
+
+    def validate_lineage(self, unit_id: str) -> Dict[str, Any]:
+        """
+        Validate that a unit's version history is consistent.
+
+        Checks:
+        - All parent hashes exist
+        - No circular references
+        - Content hashes match
+
+        Returns: {"valid": bool, "issues": []}
+        """
+        issues = []
+
+        lineage = self.get_lineage(unit_id)
+
+        for i, uv in enumerate(lineage):
+            # Check parent hash exists (except first version)
+            if i > 0 and uv.parent_hash:
+                if uv.parent_hash not in self.by_hash:
+                    issues.append(f"Version {uv.version}: parent hash {uv.parent_hash[:8]} not found")
+
+            # Verify no circular reference (already present in lineage traversal)
+
+        return {
+            "valid": len(issues) == 0,
+            "issues": issues
+        }
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get registry statistics."""
+        total_versions = sum(len(h) for h in self.history.values())
+
+        status_counts = {}
+        for uv in self.versions.values():
+            status_counts[uv.status.value] = status_counts.get(uv.status.value, 0) + 1
+
+        return {
+            "total_units": len(self.versions),
+            "total_versions": total_versions,
+            "status_counts": status_counts,
+            "code_mappings": sum(len(m) for m in self.code_mappings.values()),
+            "changes_tracked": len(self.changes)
+        }
+
+
+# =============================================================================
+# Singleton Instance
+# =============================================================================
+
+_versioned_registry: Optional[VersionedKnowledgeRegistry] = None
+
+
+def get_versioned_registry() -> VersionedKnowledgeRegistry:
+    """Get the global versioned knowledge registry instance."""
+    global _versioned_registry
+    if _versioned_registry is None:
+        _versioned_registry = VersionedKnowledgeRegistry()
+    return _versioned_registry

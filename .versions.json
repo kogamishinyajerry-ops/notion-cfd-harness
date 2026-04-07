@@ -1,0 +1,17 @@
+{
+  "version": "v1.0",
+  "last_updated": "2026-04-07T21:07:54.359137",
+  "current_versions": {},
+  "history": {},
+  "code_mappings": {
+    "CH-001": [
+      {
+        "file_path": "knowledge_compiler/units/chapters.yaml",
+        "mapping_type": "implements",
+        "confidence": 1.0,
+        "verified_at": "2026-04-07T21:07:54.359125"
+      }
+    ]
+  },
+  "changes": []
+}
