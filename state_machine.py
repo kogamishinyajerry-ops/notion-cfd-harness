@@ -3,8 +3,8 @@
 Well-Harness 状态机引擎
 管理项目全生命周期状态流转 + Gate 校验
 
-状态链: Draft → IntakeValidated(G0) → KnowledgeBound(G1) → Planned(G2)
-      → Running(G3) → Verifying(G4) → ReviewPending(G5)
+状态链: Draft → IntakeValidated(G0) → Planned(G1)
+      → Running(G2) → Verifying(G3) → ReviewPending(G4)
       → Approved → Closed(G6)
 
 注: 设计文档中 G5 标注为"自动验证通过"(Verifying→ReviewPending)，
@@ -36,11 +36,10 @@ NOTION_HEADERS = {
 STATES = [
     "Draft",              # 初始状态
     "IntakeValidated",    # G0 任务门
-    "KnowledgeBound",     # G1 认知门
-    "Planned",           # G2 配置门
-    "Running",            # G3 执行门
-    "Verifying",          # G4 运行门
-    "ReviewPending",      # G5 验证门
+    "Planned",            # G1 认知门通过后进入规划态
+    "Running",            # G2 执行门
+    "Verifying",          # G3 运行门
+    "ReviewPending",      # G4/G5 验证门
     "Approved",           # 审批通过
     "Closed",             # G6 写回门（终点）
 ]
@@ -48,11 +47,10 @@ STATES = [
 # Gate 耦合关系: (from_state, to_state) → gate_name
 GATE_TRANSITIONS = {
     ("Draft", "IntakeValidated"): "G0",
-    ("IntakeValidated", "KnowledgeBound"): "G1",
-    ("KnowledgeBound", "Planned"): "G2",
-    ("Planned", "Running"): "G3",
-    ("Running", "Verifying"): "G4",
-    ("Verifying", "ReviewPending"): "G5",
+    ("IntakeValidated", "Planned"): "G1",
+    ("Planned", "Running"): "G2",
+    ("Running", "Verifying"): "G3",
+    ("Verifying", "ReviewPending"): "G4",
     ("ReviewPending", "Approved"): "G5",
     ("Approved", "Closed"): "G6",
 }
@@ -69,7 +67,7 @@ class GateValidator:
     # Gate 元数据
     GATE_META = {
         "G0": {"name": "任务门", "description": "需求完整性 + Harness 规范预检"},
-        "G1": {"name": "认知门", "description": "知识库绑定 + 组件/案例/规则检索"},
+        "G1": {"name": "认知门", "description": "知识绑定 + 构件覆盖 + 基线可用性"},
         "G2": {"name": "配置门", "description": "参数配置 + 基线选择"},
         "G3": {"name": "执行门", "description": "CFD 算例执行 + 中间结果校验"},
         "G4": {"name": "运行门", "description": "结果验证 + 对比基准"},
@@ -139,16 +137,40 @@ class GateValidator:
 
     def _validate_g1(self, task_id: str, evidence: dict) -> tuple[bool, dict]:
         """G1 认知门: 知识库绑定"""
-        checks = []
+        try:
+            from g1_cognitive_gate import CognitiveGateValidator
 
-        checks.append({"check": "components_bound", "pass": True, "detail": "Component library searched"})
-
-        evidence["checks"] = checks
-        all_pass = all(c["pass"] for c in checks)
-        evidence["result"] = "PASS" if all_pass else "FAIL"
-        evidence["message"] = "G1 认知门校验通过" if all_pass else "G1 认知门校验未通过"
-
-        return all_pass, evidence
+            review = CognitiveGateValidator().run_full_g1_review(task_id)
+            checks = [
+                {
+                    "check": "knowledge_binding",
+                    "pass": review.knowledge_binding_pass,
+                    "detail": "Linked Phase / Task Type 已绑定" if review.knowledge_binding_pass else "知识绑定未满足",
+                },
+                {
+                    "check": "component_coverage",
+                    "pass": review.component_coverage_pass,
+                    "detail": "构件库覆盖充足" if review.component_coverage_pass else "未找到匹配构件",
+                },
+                {
+                    "check": "baseline_availability",
+                    "pass": review.baseline_availability_pass,
+                    "detail": "基线可用" if review.baseline_availability_pass else "未找到匹配基线",
+                },
+            ]
+            evidence["checks"] = checks
+            evidence["blockers"] = review.blockers
+            evidence["sub_evidence_ids"] = review.evidence_ids
+            evidence["result"] = "PASS" if review.overall_pass else "FAIL"
+            evidence["message"] = "G1 认知门校验通过" if review.overall_pass else "G1 认知门校验未通过"
+            return review.overall_pass, evidence
+        except Exception as exc:
+            evidence["checks"] = [
+                {"check": "g1_review_runtime", "pass": False, "detail": str(exc)}
+            ]
+            evidence["result"] = "FAIL"
+            evidence["message"] = f"G1 认知门校验异常: {exc}"
+            return False, evidence
 
     def _validate_g2(self, task_id: str, evidence: dict) -> tuple[bool, dict]:
         """G2 配置门: 参数配置 + 基线选择"""
@@ -425,11 +447,10 @@ if __name__ == "__main__":
     # 模拟完整流转（对齐设计文档状态转换图）
     path = [
         "IntakeValidated",  # G0
-        "KnowledgeBound",    # G1
-        "Planned",           # G2
-        "Running",           # G3: Planned→Running
-        "Verifying",         # G4: Running→Verifying
-        "ReviewPending",     # G5: Verifying→ReviewPending
+        "Planned",           # G1
+        "Running",           # G2: Planned→Running
+        "Verifying",         # G3: Running→Verifying
+        "ReviewPending",     # G4: Verifying→ReviewPending
         "Approved",          # G5: ReviewPending→Approved
         "Closed",            # G6: Approved→Closed
     ]

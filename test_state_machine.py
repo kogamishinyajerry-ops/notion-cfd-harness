@@ -21,7 +21,7 @@ class TestStateMachineBasic:
         assert sm.get_state() == "Draft"
 
     def test_all_states_defined(self):
-        expected = ["Draft", "IntakeValidated", "KnowledgeBound", "Planned",
+        expected = ["Draft", "IntakeValidated", "Planned",
                     "Running", "Verifying", "ReviewPending", "Approved", "Closed"]
         assert STATES == expected
 
@@ -40,57 +40,47 @@ class TestLegalTransitions:
         assert evid is not None
         assert sm.get_state() == "IntakeValidated"
 
-    def test_g1_intakevalidated_to_knowledgebound(self):
+    def test_g1_intakevalidated_to_planned(self):
         sm = StateMachine(task_id="TEST")
         sm.transition("IntakeValidated")  # G0
-        ok, evid = sm.transition("KnowledgeBound")  # G1
-        assert ok is True
-        assert evid is not None
-        assert sm.get_state() == "KnowledgeBound"
-
-    def test_g2_knowledgebound_to_planned(self):
-        sm = StateMachine(task_id="TEST")
-        sm.transition("IntakeValidated")
-        sm.transition("KnowledgeBound")
-        ok, evid = sm.transition("Planned")  # G2
+        ok, evid = sm.transition("Planned")  # G1
         assert ok is True
         assert evid is not None
         assert sm.get_state() == "Planned"
 
-    def test_g3_planned_to_running(self):
+    def test_g2_planned_to_running(self):
         sm = StateMachine(task_id="TEST")
         sm.transition("IntakeValidated")
-        sm.transition("KnowledgeBound")
         sm.transition("Planned")
-        ok, evid = sm.transition("Running")  # G3
+        ok, evid = sm.transition("Running")  # G2
         assert ok is True
         assert evid is not None
         assert sm.get_state() == "Running"
 
-    def test_g4_running_to_verifying(self):
+    def test_g3_running_to_verifying(self):
         sm = StateMachine(task_id="TEST")
         sm.transition("IntakeValidated")
-        sm.transition("KnowledgeBound")
         sm.transition("Planned")
         sm.transition("Running")
-        ok, evid = sm.transition("Verifying")  # G4
+        ok, evid = sm.transition("Verifying")  # G3
         assert ok is True
         assert evid is not None
         assert sm.get_state() == "Verifying"
 
-    def test_g5a_verifying_to_reviewpending(self):
+    def test_g4_verifying_to_reviewpending(self):
         sm = StateMachine(task_id="TEST")
-        for s in ["IntakeValidated", "KnowledgeBound", "Planned", "Running", "Verifying"]:
-            sm.transition(s)
-        ok, evid = sm.transition("ReviewPending")  # G5
+        sm.transition("IntakeValidated")
+        sm.transition("Planned")
+        sm.transition("Running")
+        sm.transition("Verifying")
+        ok, evid = sm.transition("ReviewPending")  # G4
         assert ok is True
         assert evid is not None
         assert sm.get_state() == "ReviewPending"
 
-    def test_g5b_reviewpending_to_approved(self):
+    def test_g5_reviewpending_to_approved(self):
         sm = StateMachine(task_id="TEST")
-        for s in ["IntakeValidated", "KnowledgeBound", "Planned", "Running",
-                   "Verifying", "ReviewPending"]:
+        for s in ["IntakeValidated", "Planned", "Running", "Verifying", "ReviewPending"]:
             sm.transition(s)
         ok, evid = sm.transition("Approved")  # G5
         assert ok is True
@@ -99,7 +89,7 @@ class TestLegalTransitions:
 
     def test_g6_approved_to_closed(self):
         sm = StateMachine(task_id="TEST")
-        for s in ["IntakeValidated", "KnowledgeBound", "Planned", "Running",
+        for s in ["IntakeValidated", "Planned", "Running",
                    "Verifying", "ReviewPending", "Approved"]:
             sm.transition(s)
         ok, evid = sm.transition("Closed")  # G6
@@ -120,17 +110,17 @@ class TestIllegalTransitions:
     def test_cannot_skip_g1(self):
         sm = StateMachine(task_id="TEST")
         sm.transition("IntakeValidated")
-        ok, _ = sm.transition("Running")  # 跳过 G2
+        ok, _ = sm.transition("Running")  # 跳过 G1
         assert ok is False
         assert sm.get_state() == "IntakeValidated"
 
     def test_cannot_skip_g2(self):
         sm = StateMachine(task_id="TEST")
         sm.transition("IntakeValidated")
-        sm.transition("KnowledgeBound")
-        ok, _ = sm.transition("Verifying")  # 跳过 G3
+        sm.transition("Planned")
+        ok, _ = sm.transition("Verifying")  # 跳过 G2
         assert ok is False
-        assert sm.get_state() == "KnowledgeBound"
+        assert sm.get_state() == "Planned"
 
     def test_cannot_go_backward(self):
         sm = StateMachine(task_id="TEST")
@@ -141,7 +131,7 @@ class TestIllegalTransitions:
 
     def test_cannot_transition_from_closed(self):
         sm = StateMachine(task_id="TEST")
-        for s in ["IntakeValidated", "KnowledgeBound", "Planned", "Running",
+        for s in ["IntakeValidated", "Planned", "Running",
                    "Verifying", "ReviewPending", "Approved", "Closed"]:
             sm.transition(s)
         ok, _ = sm.transition("Draft")
@@ -165,8 +155,8 @@ class TestCanTransition:
     def test_can_transition_legal(self):
         sm = StateMachine(task_id="TEST")
         assert sm.can_transition("Draft", "IntakeValidated") is True
-        assert sm.can_transition("IntakeValidated", "KnowledgeBound") is True
-        assert sm.can_transition("KnowledgeBound", "Planned") is True
+        assert sm.can_transition("IntakeValidated", "Planned") is True
+        assert sm.can_transition("Planned", "Running") is True
 
     def test_can_transition_illegal(self):
         sm = StateMachine(task_id="TEST")
@@ -188,11 +178,11 @@ class TestGetAvailableTransitions:
     def test_from_intakevalidated(self):
         sm = StateMachine(task_id="TEST")
         sm.transition("IntakeValidated")
-        assert sm.get_available_transitions() == ["KnowledgeBound"]
+        assert sm.get_available_transitions() == ["Planned"]
 
     def test_from_planned(self):
         sm = StateMachine(task_id="TEST")
-        for s in ["IntakeValidated", "KnowledgeBound", "Planned"]:
+        for s in ["IntakeValidated", "Planned"]:
             sm.transition(s)
         assert sm.get_available_transitions() == ["Running"]
 
@@ -207,13 +197,13 @@ class TestGetGateForTransition:
     def test_g1_gate(self):
         sm = StateMachine(task_id="TEST")
         sm.transition("IntakeValidated")
-        assert sm.get_gate_for_transition("KnowledgeBound") == "G1"
+        assert sm.get_gate_for_transition("Planned") == "G1"
 
     def test_g3_gate(self):
         sm = StateMachine(task_id="TEST")
-        for s in ["IntakeValidated", "KnowledgeBound", "Planned"]:
+        for s in ["IntakeValidated", "Planned"]:
             sm.transition(s)
-        assert sm.get_gate_for_transition("Running") == "G3"
+        assert sm.get_gate_for_transition("Running") == "G2"
 
     def test_no_gate_for_invalid(self):
         sm = StateMachine(task_id="TEST")
@@ -226,7 +216,7 @@ class TestEvidenceHistory:
     def test_evidence_history_accumulates(self):
         sm = StateMachine(task_id="TEST")
         sm.transition("IntakeValidated")
-        sm.transition("KnowledgeBound")
+        sm.transition("Planned")
         assert len(sm.evidence_history) == 2
 
     def test_evidence_contains_required_fields(self):
