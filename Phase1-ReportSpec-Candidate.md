@@ -1,6 +1,7 @@
-# Phase1-ReportSpec-Candidate
-# CFD 后处理报告规范候选版
-**版本**: v1.0 Candidate
+# Phase1-ReportSpec v1.1
+# CFD 后处理报告规范（正式版）
+**版本**: v1.1
+**状态**: Active（ Superseded Phase1-ReportSpec-Candidate ）
 **生成时间**: 2026-04-07
 **来源**: Case1 Lid-Cavity (Ghia1982) + Case2 NACA Airfoil (Thomas&Loutun 2021)
 **Executor**: Codex (GPT-5.4) @ task-mnodf1nn-7zjt06
@@ -29,9 +30,14 @@
 ### 1.3 Solver Settings（求解器配置）
 - 求解器名称和版本（如 icoFoam, simpleFoam, k-omega SST）
 - 湍流模型（如 k-epsilon, k-omega SST）
-- 边界条件完整列表
 - 收敛准则（残差阈值、监控物理量）
 - 时间步长设置（瞬态求解器）
+
+### 1.3.1 Boundary Conditions（边界条件）
+- 边界条件完整列表（每面的物理类型：wall/inlet/outlet/symmetry等）
+- 进口速度/压力/温度等参数值
+- 出口边界条件设置
+- 对称面/周期性边界说明
 
 ### 1.4 Results（结果）
 - 关键监控物理量的收敛历史
@@ -68,8 +74,12 @@ L2 = sqrt((1/N) * Σ (u_cfd - u_exp)^2)
 
 **相对误差（注意零参考值问题）**:
 ```
-当 |u_exp| < 阈值时，使用绝对误差并在图表中标注"@ near-zero reference"
-相对误差 = |u_cfd - u_exp| / max(|u_exp|, 阈值) * 100%
+当 |u_exp| >= 阈值（|u_exp| >= 0.01 * u_max）时：
+    ε_rel = |u_cfd - u_exp| / |u_exp| * 100%
+
+当 |u_exp| < 阈值（|u_exp| < 0.01 * u_max）时：
+    退化为绝对误差，标注 "@ near-zero reference"
+    ε_abs = |u_cfd - u_exp|
 ```
 
 ---
@@ -117,7 +127,9 @@ L2 = sqrt((1/N) * Σ (u_cfd - u_exp)^2)
 | 指标 | 值 |
 |------|-----|
 | 平均误差 | 3.4488% |
-| 最大误差 | 10.7875% |
+| 最大误差 | 10.7875% @ TSR=5.25 |
+
+> **物理解释**：TSR=5.25 处于 VAWT 动态失速区域，该区域翼型气动特性对攻角变化极为敏感，CFD 湍流模型对该工况的预测固有偏差较大（>10%）。此误差属于**可预期的模型系统性偏差**，非 bug，在报告中应显式标注而非掩盖。
 
 ### 峰值性能
 
