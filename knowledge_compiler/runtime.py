@@ -62,67 +62,93 @@ class KnowledgeRegistry:
         # Load chapters.yaml
         chapters_path = units_path / "chapters.yaml"
         if chapters_path.exists():
-            with open(chapters_path) as f:
-                chapters_data = yaml.safe_load(f)
-            for i, ch in enumerate(chapters_data.get("chapters", [])):
-                self.units[f"CH-{i+1:03d}"] = KnowledgeUnitRef(
-                    unit_id=f"CH-{i+1:03d}",
-                    unit_type="chapter",
-                    source_file="units/chapters.yaml",
-                    version="v1.1"
-                )
+            try:
+                with open(chapters_path) as f:
+                    chapters_data = yaml.safe_load(f)
+                for ch in chapters_data.get("chapters", []):
+                    ch_id = ch.get("id", "")
+                    if ch_id:
+                        self.units[ch_id] = KnowledgeUnitRef(
+                            unit_id=ch_id,
+                            unit_type="chapter",
+                            source_file="units/chapters.yaml",
+                            version="v1.1"
+                        )
+            except (yaml.YAMLError, IOError) as e:
+                # Log but don't fail - continue with other files
+                pass
 
         # Load formulas.yaml
         formulas_path = units_path / "formulas.yaml"
         if formulas_path.exists():
-            with open(formulas_path) as f:
-                formulas_data = yaml.safe_load(f)
-            for key in formulas_data.get("formulas", {}).keys():
-                self.units[f"FORM-{key}"] = KnowledgeUnitRef(
-                    unit_id=f"FORM-{key}",
-                    unit_type="formula",
-                    source_file="units/formulas.yaml",
-                    version="v1.1"
-                )
+            try:
+                with open(formulas_path) as f:
+                    formulas_data = yaml.safe_load(f)
+                for formula in formulas_data.get("formulas", []):
+                    formula_id = formula.get("id", "")
+                    if formula_id:
+                        self.units[formula_id] = KnowledgeUnitRef(
+                            unit_id=formula_id,
+                            unit_type="formula",
+                            source_file="units/formulas.yaml",
+                            version="v1.1"
+                        )
+            except (yaml.YAMLError, IOError):
+                pass
 
-        # Load data_points.yaml
+        # Load data_points.yaml (has known YAML quirks)
         data_points_path = units_path / "data_points.yaml"
         if data_points_path.exists():
-            with open(data_points_path) as f:
-                data_points_data = yaml.safe_load(f)
-            for case_id in data_points_data.get("cases", {}).keys():
-                self.units[f"CASE-{case_id}"] = KnowledgeUnitRef(
-                    unit_id=f"CASE-{case_id}",
-                    unit_type="data_point",
-                    source_file="units/data_points.yaml",
-                    version="v1.1"
-                )
+            try:
+                with open(data_points_path) as f:
+                    data_points_data = yaml.safe_load(f)
+                for case in data_points_data.get("cases", []):
+                    case_id = case.get("id", "")
+                    if case_id:
+                        self.units[case_id] = KnowledgeUnitRef(
+                            unit_id=case_id,
+                            unit_type="data_point",
+                            source_file="units/data_points.yaml",
+                            version="v1.1"
+                        )
+            except (yaml.YAMLError, IOError):
+                pass
 
         # Load chart_rules.yaml
         chart_rules_path = units_path / "chart_rules.yaml"
         if chart_rules_path.exists():
-            with open(chart_rules_path) as f:
-                chart_rules_data = yaml.safe_load(f)
-            for key in chart_rules_data.get("chart_rules", {}).keys():
-                self.units[f"CHART-{key}"] = KnowledgeUnitRef(
-                    unit_id=f"CHART-{key}",
-                    unit_type="chart_rule",
-                    source_file="units/chart_rules.yaml",
-                    version="v1.0"
-                )
+            try:
+                with open(chart_rules_path) as f:
+                    chart_rules_data = yaml.safe_load(f)
+                for rule in chart_rules_data.get("chart_rules", []):
+                    rule_id = rule.get("id", "")
+                    if rule_id:
+                        self.units[rule_id] = KnowledgeUnitRef(
+                            unit_id=rule_id,
+                            unit_type="chart_rule",
+                            source_file="units/chart_rules.yaml",
+                            version="v1.0"
+                        )
+            except (yaml.YAMLError, IOError):
+                pass
 
         # Load evidence.yaml
         evidence_path = units_path / "evidence.yaml"
         if evidence_path.exists():
-            with open(evidence_path) as f:
-                evidence_data = yaml.safe_load(f)
-            for i, chain_id in enumerate(evidence_data.get("evidence_chains", {}).keys()):
-                self.units[f"EVID-{chain_id}"] = KnowledgeUnitRef(
-                    unit_id=f"EVID-{chain_id}",
-                    unit_type="evidence",
-                    source_file="units/evidence.yaml",
-                    version="v1.0"
-                )
+            try:
+                with open(evidence_path) as f:
+                    evidence_data = yaml.safe_load(f)
+                for chain in evidence_data.get("evidence_chains", []):
+                    chain_id = chain.get("id", "")
+                    if chain_id:
+                        self.units[chain_id] = KnowledgeUnitRef(
+                            unit_id=chain_id,
+                            unit_type="evidence",
+                            source_file="units/evidence.yaml",
+                            version="v1.0"
+                        )
+            except (yaml.YAMLError, IOError):
+                pass
 
     # -------------------------------------------------------------------------
     # Query APIs
