@@ -17,7 +17,14 @@ import requests
 from datetime import datetime
 
 # ============ 配置 ============
-MINIMAX_API_KEY = os.environ.get("MINIMAX_API_KEY", "")
+_key_env = os.environ.get("MINIMAX_API_KEY")
+if _key_env:
+    MINIMAX_API_KEY = _key_env
+else:
+    try:
+        MINIMAX_API_KEY = open(os.path.expanduser("~/.minimax_key")).read().strip()
+    except Exception:
+        MINIMAX_API_KEY = ""
 MINIMAX_BASE_URL = "https://api.minimaxi.com/anthropic/v1"
 
 DEFAULT_MODEL = "MiniMax-M2.7"
@@ -30,7 +37,7 @@ class MiniMaxClient:
     def __init__(self, api_key: str = None):
         self.api_key = api_key or MINIMAX_API_KEY
         if not self.api_key:
-            raise ValueError("API key 未设置，请设置 MINIMAX_API_KEY 环境变量")
+            raise ValueError("API key 未设置，请设置 MINIMAX_API_KEY 环境变量，或写入 ~/.minimax_key 文件")
 
     def chat(self, prompt: str, model: str = DEFAULT_MODEL, temperature: float = 0.7, max_tokens: int = 4096) -> str:
         """

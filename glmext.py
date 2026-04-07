@@ -17,7 +17,14 @@ import requests
 from datetime import datetime
 
 # ============ 配置 ============
-GLM_API_KEY = os.environ.get("ZHIPU_API_KEY", os.environ.get("GLM_API_KEY", ""))
+_key_env = os.environ.get("ZHIPU_API_KEY") or os.environ.get("GLM_API_KEY")
+if _key_env:
+    GLM_API_KEY = _key_env
+else:
+    try:
+        GLM_API_KEY = open(os.path.expanduser("~/.glm_key")).read().strip()
+    except Exception:
+        GLM_API_KEY = ""
 # Coding 专用端点（GLM-5.1 必须用此端点）
 GLM_BASE_URL = "https://open.bigmodel.cn/api/coding/paas/v4"
 
@@ -31,7 +38,7 @@ class GLMClient:
     def __init__(self, api_key: str = None):
         self.api_key = api_key or GLM_API_KEY
         if not self.api_key:
-            raise ValueError("API key 未设置，请设置 ZHIPU_API_KEY 或 GLM_API_KEY 环境变量")
+            raise ValueError("API key 未设置，请设置 ZHIPU_API_KEY 或 GLM_API_KEY 环境变量，或写入 ~/.glm_key 文件")
 
     def chat(self, prompt: str, model: str = DEFAULT_MODEL, temperature: float = 0.7, max_tokens: int = 4096) -> str:
         """同步调用 GLM chat completion"""

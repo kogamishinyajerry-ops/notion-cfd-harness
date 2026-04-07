@@ -346,6 +346,14 @@ def _dispatch_to_codex(task_page_id: str, instruction: str, task_key: str) -> tu
 def _dispatch_to_glm(task_page_id: str, instruction: str, task_key: str) -> tuple[bool, str]:
     """通过 glmext.py 发起 GLM-5.1 任务"""
     import subprocess
+    # 预检：验证 GLM API key 可用性（v1.1: 未验证不执行）
+    try:
+        import glmext as _glm
+        if not _glm.GLM_API_KEY:
+            return False, "[GLM FAIL-STOP] API key 未配置（无 ZHIPU_API_KEY/.glm_key），任务中止，不降级"
+    except ImportError:
+        return False, "[GLM FAIL-STOP] glmext.py 未找到，任务中止"
+
     try:
         result = subprocess.run(
             ["python3", "/Users/Zhuanz/Desktop/notion-cfd-harness/glmext.py",
@@ -357,14 +365,22 @@ def _dispatch_to_glm(task_page_id: str, instruction: str, task_key: str) -> tupl
         else:
             return False, f"[GLM ERR] {result.stderr[:300]}"
     except subprocess.TimeoutExpired:
-        return False, "[GLM TIMEOUT] 任务超时（5分钟）"
+        return False, "[GLM FAIL-STOP] 任务超时（5分钟），任务中止"
     except Exception as e:
-        return False, f"[GLM EXC] {str(e)[:200]}"
+        return False, f"[GLM FAIL-STOP] {str(e)[:200]}"
 
 
 def _dispatch_to_minimax(task_page_id: str, instruction: str, task_key: str) -> tuple[bool, str]:
     """通过 minimix.py 发起 Minimax-2.7 任务"""
     import subprocess
+    # 预检：验证 Minimax API key 可用性（v1.1: 未验证不执行）
+    try:
+        import minimix as _minimax
+        if not _minimax.MINIMAX_API_KEY:
+            return False, "[Minimax FAIL-STOP] API key 未配置（无 MINIMAX_API_KEY/.minimax_key），任务中止，不降级"
+    except ImportError:
+        return False, "[Minimax FAIL-STOP] minimix.py 未找到，任务中止"
+
     try:
         result = subprocess.run(
             ["python3", "/Users/Zhuanz/Desktop/notion-cfd-harness/minimix.py",
@@ -376,9 +392,9 @@ def _dispatch_to_minimax(task_page_id: str, instruction: str, task_key: str) -> 
         else:
             return False, f"[Minimax ERR] {result.stderr[:300]}"
     except subprocess.TimeoutExpired:
-        return False, "[Minimax TIMEOUT] 任务超时（5分钟）"
+        return False, "[Minimax FAIL-STOP] 任务超时（5分钟），任务中止"
     except Exception as e:
-        return False, f"[Minimax EXC] {str(e)[:200]}"
+        return False, f"[Minimax FAIL-STOP] {str(e)[:200]}"
 
 
 def _update_task_status(page_id: str, status: str, summary: str) -> bool:
@@ -452,7 +468,11 @@ def run_exec_loop(interval: int = 120, max_iterations: int = None):
 
                 if primary == "codex":
                     codex_status = _check_codex_status()
-                    if not codex_status.get("available", False):
+                    avail = codex_status.get("available")
+                    # available=true → 确认可用
+                    # available=false → 确认不可用，fail-stop
+                    # available=None（shared session模式，状态未知）→ 尝试 dispatch，让实际结果决定
+                    if avail is False:
                         err = codex_status.get("error", "unknown")
                         result_msg = f"[FAIL-STOP] Codex 不可用: {err} | 任务中止，不降级"
                         _update_task_status(page_id, "失败", result_msg)
