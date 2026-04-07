@@ -27,6 +27,15 @@ NOTION_BASE_URL = "https://api.notion.com/v1"
 
 # 核心数据库 ID
 SSOT_DB_ID = "33ac6894-2bed-8125-97af-e9b90b245e58"
+# v1架构数据库 (2026-04-07)
+PROJECTS_DB_ID = "33bc6894-2bed-8153-a775-d5c821fa34a1"
+SPECS_DB_ID = "33bc6894-2bed-8196-a5e0-d6d7d9fbc7ec"
+CONSTRAINTS_DB_ID = "33bc6894-2bed-8147-aafd-c1cf6960c18f"
+PHASES_DB_ID = "33bc6894-2bed-8163-96ed-e2df5b302545"
+TASKS_DB_ID = "33bc6894-2bed-8196-8e2c-d1d66e631c31"
+REVIEWS_DB_ID = "33bc6894-2bed-81fb-a911-c4f0798ce1cf"
+ARTIFACTS_DB_ID = "33bc6894-2bed-81c0-983f-d5eb1f5b6f4c"
+# 旧库保留用于迁移
 COMPONENT_DB_ID = "33ac6894-2bed-818c-8c22-d7ed35e2acd0"
 CASE_DB_ID = "33ac6894-2bed-81e5-9690-d37ca6ca796b"
 BASELINE_DB_ID = "33ac6894-2bed-8129-b739-c3d4aea8435b"

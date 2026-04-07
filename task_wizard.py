@@ -16,7 +16,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # ============ API 常量 ============
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
-SSOT_DB_ID = "33ac6894-2bed-8125-97af-e9b90b245e58"
+# v1架构: Tasks数据库
+TASKS_DB_ID = "33bc6894-2bed-8196-8e2c-d1d66e631c31"
 NOTION_BASE_URL = "https://api.notion.com/v1"
 NOTION_VERSION = "2022-06-28"
 
@@ -282,7 +283,7 @@ class TaskWizard:
 
         # 组装 payload
         payload = {
-            "parent": {"database_id": SSOT_DB_ID},
+            "parent": {"database_id": TASKS_DB_ID},
             "properties": properties,
             "children": [
                 {
