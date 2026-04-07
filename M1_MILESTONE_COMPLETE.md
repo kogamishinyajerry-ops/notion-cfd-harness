@@ -98,7 +98,25 @@
 
 ---
 
-## 8. Notion 数据库清单
+## 8. GitHub 真相管控
+
+| 项目 | 值 |
+|------|-----|
+| 仓库 | https://github.com/kogamishinyajerry-ops/notion-cfd-harness |
+| 分支 | main |
+| 最新 Commit | ece698c |
+| 密钥管理 | `.env` 本地管理，`.env.example` 模板已提交 |
+| API 密钥规范 | `os.environ.get("KEY", "")` — 无硬编码默认值 |
+
+**Well-Harnessed Workflow 规范**：
+1. GitHub = 源代码真相源
+2. Notion = 状态 / Evidence / Gate 记录真相源
+3. API 密钥不提交 GitHub（.env 本地管理）
+4. 所有模型协作通过 Notion Relay Protocol 记录
+
+---
+
+## 9. Notion 数据库清单
 
 | 数据库 | ID |
 |--------|-----|
