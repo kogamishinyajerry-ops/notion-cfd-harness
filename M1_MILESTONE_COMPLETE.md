@@ -118,15 +118,33 @@
 
 ## 9. Notion 数据库清单
 
-| 数据库 | ID |
-|--------|-----|
-| SSOT (主项目) | `33ac6894-2bed-8125-97af-e9b90b245e58` |
-| Evidence Library | `33ac6894-2bed-8188-ba53-e80fb7920398` |
-| Component Library | `33ac6894-2bed-8133-aa91-cdb6f3d25a4f` |
-| Case Library | `33ac6894-2bed-8161-9f8f-97e2ae3d4efb` |
-| Baseline Library | `33ac6894-2bed-811e-97e0-f59fc6ff2f5d` |
-| Rule Database | `33ac6894-2bed-81a2-9dc0-77e8b9a4c62e` |
+### v1架构 (2026-04-07 新建)
+
+| 数据库 | ID | 用途 |
+|--------|-----|------|
+| Projects | `33bc6894-2bed-8153-a775-d5c821fa34a1` | 项目主记录 |
+| Specs | `33bc6894-2bed-8196-a5e0-d6d7d9fbc7ec` | 规范/规格说明 |
+| Constraints | `33bc6894-2bed-8147-aafd-c1cf6960c18f` | Harness规则表 |
+| Phases | `33bc6894-2bed-8163-96ed-e2df5b302545` | 阶段执行记录 |
+| Tasks | `33bc6894-2bed-8196-8e2c-d1d66e631c31` | 任务执行表 |
+| Reviews | `33bc6894-2bed-81fb-a911-c4f0798ce1cf` | 审查记录表 |
+| Artifacts | `33bc6894-2bed-81c0-983f-d5eb1f5b6f4c` | 构件/案例/基线 |
+
+### 旧库 (保留用于迁移)
+
+| 数据库 | ID | 用途 |
+|--------|-----|------|
+| SSOT (主项目) | `33ac6894-2bed-8125-97af-e9b90b245e58` | 旧架构主DB |
+| Evidence Library | `33ac6894-2bed-8188-ba53-e80fb7920398` | Evidence记录 |
+| Component Library | `33ac6894-2bed-8133-aa91-cdb6f3d25a4f` | 构件库(待迁移) |
+| Case Library | `33ac6894-2bed-8161-9f8f-97e2ae3d4efb` | 案例库(待迁移) |
+| Baseline Library | `33ac6894-2bed-811e-97e0-f59fc6ff2f5d` | 基线库(待迁移) |
+| Rule Database | `33ac6894-2bed-81a2-9dc0-77e8b9a4c62e` | 规则库(待迁移) |
 
 ---
 
-**结论**: M1里程碑 ✅ 完成，97 tests通过，Evidence链完整，可进入M2阶段。
+**结论**: M1里程碑 ✅ 完成，97 tests通过，Evidence链完整。v1架构7个数据库已创建，可进入M2阶段。
+
+---
+
+**v1架构迁移**: 架构v1文档已实施，7个专业数据库已创建。代码已更新(`notion_cfd_loop.py`, `task_wizard.py`)，所有DB ID已同步到GitHub。
