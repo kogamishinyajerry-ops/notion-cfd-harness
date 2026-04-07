@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
-P5-01: Performance Manager - Performance optimization layer
+P5-01~P5-03: Performance Manager - Performance optimization layer
 
 Integrates CacheLayer, IndexManager, and ConnectionPool to provide
 performance optimizations for MemoryNetwork operations.
+
+P5-03: Added async support and connection pooling for 100+ QPS.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, Coroutine
 from pathlib import Path
 
 # Import from cache_layer
@@ -30,6 +33,17 @@ from knowledge_compiler.performance.index_manager import (
     UnitIndex,
 )
 
+# Import from connection_pool
+try:
+    from knowledge_compiler.performance.connection_pool import (
+        NotionConnectionPool,
+        create_notion_pool,
+        DEFAULT_MAX_CONNECTIONS,
+    )
+    HAS_CONNECTION_POOL = True
+except ImportError:
+    HAS_CONNECTION_POOL = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,8 +54,9 @@ class PerformanceManager:
     Provides:
     - Caching layer (L1 in-memory, L2 optional Redis)
     - Version history indexing (fast lineage queries)
-    - Cached node retrieval
-    - Cache and index statistics
+    - Connection pooling for Notion API (P5-03)
+    - Async methods for concurrent operations (P5-03)
+    - Cache, index, and connection statistics
     """
 
     def __init__(
@@ -49,6 +64,8 @@ class PerformanceManager:
         cache_ttl: int = DEFAULT_TTL,
         cache_maxsize: int = DEFAULT_MAX_SIZE,
         redis_url: str | None = None,
+        notion_api_key: str | None = None,
+        enable_connection_pool: bool = True,
     ):
         """
         Initialize PerformanceManager
@@ -57,6 +74,8 @@ class PerformanceManager:
             cache_ttl: Cache time-to-live in seconds
             cache_maxsize: Maximum L1 cache size
             redis_url: Optional Redis URL (defaults to NOTION_REDIS_URL env var)
+            notion_api_key: Optional Notion API key (defaults to NOTION_API_KEY env var)
+            enable_connection_pool: Enable Notion connection pooling
         """
         self.cache = create_cache_layer(
             maxsize=cache_maxsize,
@@ -64,11 +83,29 @@ class PerformanceManager:
             l2_url=redis_url,
         )
         self.index = create_index_manager()
+
+        # Connection pool (P5-03)
+        self._connection_pool: NotionConnectionPool | None = None
+        if enable_connection_pool and HAS_CONNECTION_POOL:
+            try:
+                self._connection_pool = NotionConnectionPool(
+                    api_key=notion_api_key,
+                    max_connections=DEFAULT_MAX_CONNECTIONS,
+                )
+                logger.info("Notion connection pool enabled")
+            except ValueError as e:
+                logger.warning(f"Connection pool not available: {e}")
+
         logger.info(
             f"PerformanceManager initialized: "
             f"L1 cache (maxsize={cache_maxsize}, ttl={cache_ttl}s), "
             f"version index enabled"
         )
+
+    @property
+    def connection_pool(self) -> NotionConnectionPool | None:
+        """Get connection pool (may be None if not configured)"""
+        return self._connection_pool
 
     def get_cached_node(
         self, unit_id: str, version: str
@@ -276,16 +313,137 @@ class PerformanceManager:
         cache_stats = self.get_cache_stats()
         index_stats = self.get_index_stats()
 
-        return {
+        result = {
             "cache": cache_stats,
             "index": index_stats,
         }
+
+        # Add connection pool stats if available
+        if self._connection_pool:
+            result["connection_pool"] = self._connection_pool.get_statistics()
+
+        return result
+
+    # Async methods (P5-03)
+
+    async def get_cached_node_async(
+        self, unit_id: str, version: str
+    ) -> Optional[dict]:
+        """
+        Get cached node (async wrapper)
+
+        Args:
+            unit_id: Knowledge unit ID
+            version: Version string
+
+        Returns:
+            Cached MemoryNode dict or None
+        """
+        # Cache lookup is synchronous, but we provide async interface
+        return self.cache.get(unit_id, version)
+
+    async def set_cached_node_async(
+        self, unit_id: str, version: str, node: dict
+    ) -> bool:
+        """
+        Cache a node (async wrapper)
+
+        Args:
+            unit_id: Knowledge unit ID
+            version: Version string
+            node: MemoryNode dict
+
+        Returns:
+            True if cached successfully
+        """
+        return self.cache.set(unit_id, version, node)
+
+    async def get_version_chain_async(
+        self, unit_id: str, from_version: str | None = None
+    ) -> list[dict]:
+        """
+        Get version chain (async wrapper)
+
+        Args:
+            unit_id: Unit ID
+            from_version: Starting version
+
+        Returns:
+            List of version dicts
+        """
+        # Index lookup is synchronous, but we provide async interface
+        return self.get_version_chain(unit_id, from_version)
+
+    async def get_latest_version_async(self, unit_id: str) -> dict | None:
+        """
+        Get latest version (async wrapper)
+
+        Args:
+            unit_id: Unit ID
+
+        Returns:
+            Latest version dict or None
+        """
+        return self.get_latest_version(unit_id)
+
+    async def warm_up_cache_async(
+        self, entries: list[tuple[str, str, dict]]
+    ) -> int:
+        """
+        Warm up cache with multiple entries (async)
+
+        Args:
+            entries: List of (unit_id, version, value) tuples
+
+        Returns:
+            Number of entries successfully cached
+        """
+        count = 0
+        for unit_id, version, value in entries:
+            if await self.set_cached_node_async(unit_id, version, value):
+                count += 1
+        return count
+
+    async def fetch_multiple_concurrent(
+        self, queries: list[tuple[str, str]]
+    ) -> list[dict | None]:
+        """
+        Fetch multiple cached nodes concurrently
+
+        Args:
+            queries: List of (unit_id, version) tuples
+
+        Returns:
+            List of cached node dicts or None for misses
+        """
+        tasks = [
+            self.get_cached_node_async(unit_id, version)
+            for unit_id, version in queries
+        ]
+        return await asyncio.gather(*tasks)
+
+    async def close(self) -> None:
+        """Close connection pool and cleanup resources"""
+        if self._connection_pool:
+            await self._connection_pool.close()
+            self._connection_pool = None
+            logger.info("Connection pool closed")
+
+    async def __aenter__(self):
+        """Async context manager entry"""
+        return self
+
+    async def __aexit__(self, *args):
+        """Async context manager exit"""
+        await self.close()
 
 
 def create_performance_manager(
     cache_ttl: int = DEFAULT_TTL,
     cache_maxsize: int = DEFAULT_MAX_SIZE,
     redis_url: str | None = None,
+    notion_api_key: str | None = None,
+    enable_connection_pool: bool = True,
 ) -> PerformanceManager:
     """
     Factory function to create PerformanceManager
@@ -294,6 +452,8 @@ def create_performance_manager(
         cache_ttl: Cache time-to-live in seconds
         cache_maxsize: Maximum L1 cache size
         redis_url: Optional Redis URL
+        notion_api_key: Optional Notion API key
+        enable_connection_pool: Enable Notion connection pooling
 
     Returns:
         Configured PerformanceManager instance
@@ -302,6 +462,8 @@ def create_performance_manager(
         cache_ttl=cache_ttl,
         cache_maxsize=cache_maxsize,
         redis_url=redis_url,
+        notion_api_key=notion_api_key,
+        enable_connection_pool=enable_connection_pool,
     )
 
 
@@ -311,4 +473,8 @@ __all__ = [
     "create_performance_manager",
     "CacheLayer",
     "create_cache_layer",
+    "IndexManager",
+    "create_index_manager",
+    "NotionConnectionPool",
+    "create_notion_pool",
 ]
