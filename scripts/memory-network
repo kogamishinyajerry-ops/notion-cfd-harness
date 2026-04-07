@@ -1,0 +1,546 @@
+#!/usr/bin/env python3
+"""
+Unified CLI for Phase 4 Memory Network workflows.
+"""
+
+from __future__ import annotations
+
+import argparse
+import atexit
+import io
+import json
+import shutil
+import sys
+import tempfile
+from contextlib import redirect_stdout
+from dataclasses import asdict, is_dataclass
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any, Iterable, Optional
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from knowledge_compiler.gates import g3_gate, g4_gate, g5_gate, g6_gate
+from knowledge_compiler.memory_network import CodeMapping, MemoryNetwork, UnitVersion, VersionedKnowledgeRegistry
+from knowledge_compiler.memory_network.notion_memory_events import MemoryNetworkWithEvents
+
+
+DEFAULT_BASE_PATH = REPO_ROOT / "knowledge_compiler"
+DEFAULT_GATE_RESULTS_DIR = DEFAULT_BASE_PATH / "gates" / "results"
+DEFAULT_VERSION_DB_CANDIDATES = (
+    DEFAULT_BASE_PATH / ".versions.json",
+    REPO_ROOT / ".versions.json",
+)
+GATE_MODULES = {
+    "G3": g3_gate,
+    "G4": g4_gate,
+    "G5": g5_gate,
+    "G6": g6_gate,
+}
+TEMP_PATHS: list[Path] = []
+
+
+def _cleanup_temp_paths() -> None:
+    for path in reversed(TEMP_PATHS):
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+
+
+atexit.register(_cleanup_temp_paths)
+
+
+def _json_default(value: Any) -> Any:
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, CodeMapping):
+        return {
+            "unit_id": value.unit_id,
+            "file_path": value.file_path,
+            "mapping_type": value.mapping_type,
+            "confidence": value.confidence,
+            "verified_at": value.verified_at.isoformat() if value.verified_at else None,
+        }
+    if isinstance(value, UnitVersion):
+        return serialize_unit_version(value)
+    if is_dataclass(value):
+        return asdict(value)
+    return value
+
+
+def emit_json(payload: dict[str, Any], *, stream: Any = None) -> None:
+    target = sys.stdout if stream is None else stream
+    print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), file=target)
+
+
+def serialize_unit_version(version: UnitVersion) -> dict[str, Any]:
+    return {
+        "unit_id": version.unit_id,
+        "version": version.version,
+        "content_hash": version.content_hash,
+        "short_hash": version.short_hash,
+        "parent_hash": version.parent_hash,
+        "created_at": version.created_at.isoformat(),
+        "created_by": version.created_by,
+        "status": version.status.value,
+        "change_summary": version.change_summary,
+        "metadata": dict(version.metadata),
+    }
+
+
+def serialize_code_mappings(mappings: dict[str, list[Any]]) -> dict[str, list[dict[str, Any]]]:
+    serialized: dict[str, list[dict[str, Any]]] = {}
+    for unit_id, entries in sorted(mappings.items()):
+        serialized[unit_id] = []
+        for entry in entries:
+            if isinstance(entry, CodeMapping):
+                serialized[unit_id].append(_json_default(entry))
+            elif isinstance(entry, dict):
+                serialized[unit_id].append(dict(entry))
+            else:
+                raise TypeError("Mappings must be CodeMapping instances or dictionaries")
+    return serialized
+
+
+def mock_memory_events_db_schema() -> dict[str, dict[str, dict]]:
+    return {
+        "Name": {"title": {}},
+        "Event Type": {"select": {}},
+        "Unit ID": {"rich_text": {}},
+        "Timestamp": {"date": {}},
+        "Details": {"rich_text": {}},
+    }
+
+
+def resolve_repo_root(args: argparse.Namespace) -> Path:
+    return Path(getattr(args, "repo_root", REPO_ROOT)).resolve()
+
+
+def resolve_base_path(args: argparse.Namespace) -> Path:
+    base_path = getattr(args, "base_path", None)
+    if base_path is not None:
+        return Path(base_path).resolve()
+
+    repo_root = resolve_repo_root(args)
+    candidate = repo_root / "knowledge_compiler"
+    if candidate.exists():
+        return candidate.resolve()
+    return repo_root
+
+
+def find_existing_version_db(base_path: Path, repo_root: Path) -> Optional[Path]:
+    candidates = (
+        base_path / ".versions.json",
+        repo_root / ".versions.json",
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return None
+
+
+def create_temp_version_db(existing_path: Optional[Path] = None) -> Path:
+    temp_dir = Path(tempfile.mkdtemp(prefix="memory-network-"))
+    TEMP_PATHS.append(temp_dir)
+    temp_db = temp_dir / ".versions.json"
+    if existing_path is not None and existing_path.exists():
+        shutil.copy2(existing_path, temp_db)
+    return temp_db
+
+
+def resolve_version_db_path(args: argparse.Namespace, *, mutable: bool) -> Optional[Path]:
+    explicit = getattr(args, "version_db_path", None)
+    if explicit is not None:
+        return Path(explicit).resolve()
+
+    base_path = resolve_base_path(args)
+    repo_root = resolve_repo_root(args)
+    existing = find_existing_version_db(base_path, repo_root)
+
+    if mutable:
+        return create_temp_version_db(existing)
+    return existing
+
+
+def _quiet_construct(factory: Any, *args: Any, **kwargs: Any) -> Any:
+    # VersionedKnowledgeRegistry prints when it bootstraps from YAML; keep CLI JSON clean.
+    with redirect_stdout(io.StringIO()):
+        return factory(*args, **kwargs)
+
+
+def create_memory_network(
+    args: argparse.Namespace,
+    *,
+    mutable: bool,
+    network_cls: Any = MemoryNetwork,
+) -> tuple[Any, Optional[Path]]:
+    base_path = resolve_base_path(args)
+    version_db_path = resolve_version_db_path(args, mutable=mutable)
+    network = _quiet_construct(
+        network_cls,
+        base_path=base_path,
+        version_db_path=version_db_path,
+    )
+    return network, version_db_path
+
+
+def create_memory_network_with_events(
+    args: argparse.Namespace,
+    *,
+    mutable: bool,
+) -> tuple[MemoryNetworkWithEvents, Optional[Path]]:
+    base_path = resolve_base_path(args)
+    version_db_path = resolve_version_db_path(args, mutable=mutable)
+    network = _quiet_construct(
+        MemoryNetworkWithEvents,
+        base_path=base_path,
+        version_db_path=version_db_path,
+        events_db_id=getattr(args, "events_db_id", None) or "",
+        auto_sync_notion=False,
+        notion_mock_mode=bool(getattr(args, "mock", False)),
+    )
+    return network, version_db_path
+
+
+def create_versioned_registry(
+    args: argparse.Namespace,
+    *,
+    mutable: bool,
+) -> tuple[VersionedKnowledgeRegistry, Optional[Path]]:
+    base_path = resolve_base_path(args)
+    version_db_path = resolve_version_db_path(args, mutable=mutable)
+    registry = _quiet_construct(
+        VersionedKnowledgeRegistry,
+        base_path=base_path,
+        version_db_path=version_db_path,
+    )
+    return registry, version_db_path
+
+
+def load_json_file(path: Path) -> Any:
+    with path.open(encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def load_mapping_payload(args: argparse.Namespace) -> dict[str, list[dict[str, Any]]]:
+    mappings_file = getattr(args, "mappings_file", None)
+    if mappings_file is None:
+        return {}
+
+    payload = load_json_file(Path(mappings_file))
+    if not isinstance(payload, dict):
+        raise TypeError("mappings file must contain a unit-indexed JSON object")
+    return payload
+
+
+def iter_gate_result_paths(args: argparse.Namespace) -> list[Path]:
+    collected: list[Path] = []
+    for path in getattr(args, "gate_results", []) or []:
+        candidate = Path(path).resolve()
+        if candidate.exists():
+            collected.append(candidate)
+
+    results_dir = Path(getattr(args, "results_dir", DEFAULT_GATE_RESULTS_DIR)).resolve()
+    if results_dir.exists():
+        collected.extend(sorted(results_dir.glob("*.json")))
+
+    seen: set[Path] = set()
+    unique_paths: list[Path] = []
+    for path in collected:
+        if path not in seen:
+            seen.add(path)
+            unique_paths.append(path)
+    return unique_paths
+
+
+def handle_gate_trigger(args: argparse.Namespace) -> dict[str, Any]:
+    gate_name = args.gate.upper()
+    gate_module = GATE_MODULES[gate_name]
+    pytest_args = tuple(args.pytest_arg) if args.pytest_arg else None
+    gate_result = gate_module.trigger_gate(
+        repo_root=resolve_repo_root(args),
+        record_path=Path(args.record_path).resolve() if args.record_path else None,
+        pytest_args=pytest_args,
+    )
+    return {
+        "ok": True,
+        "command": "gate trigger",
+        "gate": gate_name,
+        "passed": bool(gate_result.get("passed", False)),
+        "status": gate_result.get("status"),
+        "record_path": gate_result.get("record_path"),
+        "next_action": gate_result.get("next_action"),
+        "report": gate_result.get("report"),
+        "result": gate_result,
+        "exit_code": 0 if gate_result.get("passed") else 1,
+    }
+
+
+def handle_status(args: argparse.Namespace) -> dict[str, Any]:
+    network, version_db_path = create_memory_network(args, mutable=False)
+    state = network.get_network_state()
+    payload = {
+        "ok": True,
+        "command": "status",
+        "base_path": resolve_base_path(args),
+        "version_db_path": version_db_path,
+        "statistics": network.get_statistics(),
+        "summary": {
+            "memory_node_count": len(state["memory_nodes"]),
+            "event_count": len(state["events"]),
+            "propagation_history_count": len(state["propagation_history"]),
+        },
+    }
+    if args.verbose:
+        payload["network_state"] = state
+    return payload
+
+
+def handle_events(args: argparse.Namespace) -> dict[str, Any]:
+    network, version_db_path = create_memory_network_with_events(args, mutable=False)
+    gate_result_paths = iter_gate_result_paths(args)
+
+    synced_source_files: list[str] = []
+    for path in gate_result_paths:
+        gate_result = load_json_file(path)
+        network.record_gate_trigger_event(gate_result, unit_id=args.unit_id)
+        synced_source_files.append(str(path))
+
+    resolved_events_db_id = args.events_db_id or getattr(network.event_tracker, "events_db_id", "") or "mock-memory-events-db"
+    if args.mock:
+        sync_results = []
+        for event in network.memory_events:
+            prepared = network.event_tracker.prepare_event_sync_payload(
+                event,
+                events_db_id=resolved_events_db_id,
+                database_properties=mock_memory_events_db_schema(),
+            )
+            sync_results.append(
+                {
+                    "success": True,
+                    "mock_mode": True,
+                    "page_id": None,
+                    "event_id": event.event_id,
+                    "property_map": prepared["property_map"],
+                    "payload": prepared["payload"],
+                }
+            )
+    else:
+        sync_results = network.sync_recorded_events_to_notion(mock_mode=False)
+    return {
+        "ok": True,
+        "command": "events",
+        "base_path": resolve_base_path(args),
+        "version_db_path": version_db_path,
+        "mock_mode": bool(args.mock),
+        "events_db_id": resolved_events_db_id,
+        "event_count": len(network.memory_events),
+        "source_files": synced_source_files,
+        "events": [event.to_dict() for event in network.memory_events],
+        "sync_results": sync_results,
+    }
+
+
+def handle_sync_code_mappings(args: argparse.Namespace) -> dict[str, Any]:
+    network, version_db_path = create_memory_network(args, mutable=True)
+    mappings = load_mapping_payload(args)
+    synced = network.sync_code_mappings(mappings or None)
+    stats = network.code_mapping_registry.get_statistics()
+    return {
+        "ok": True,
+        "command": "sync-code-mappings",
+        "base_path": resolve_base_path(args),
+        "version_db_path": version_db_path,
+        "requested_units": sorted(mappings),
+        "synced_units": sorted(synced),
+        "total_mappings": stats["total_mappings"],
+        "mapping_statistics": stats,
+        "code_mappings": serialize_code_mappings(synced),
+    }
+
+
+def handle_version_list(args: argparse.Namespace) -> dict[str, Any]:
+    registry, version_db_path = create_versioned_registry(args, mutable=False)
+    if args.unit_id:
+        unit_ids: Iterable[str] = [args.unit_id]
+    else:
+        unit_ids = sorted(registry.history)
+
+    versions = []
+    for unit_id in unit_ids:
+        history = registry.get_history(unit_id)
+        current = registry.get_current(unit_id)
+        versions.append(
+            {
+                "unit_id": unit_id,
+                "current_version": current.version if current else None,
+                "history": [serialize_unit_version(version) for version in history],
+            }
+        )
+
+    return {
+        "ok": True,
+        "command": "version list",
+        "base_path": resolve_base_path(args),
+        "version_db_path": version_db_path,
+        "unit_count": len(versions),
+        "versions": versions,
+    }
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="memory-network",
+        description="Phase 4 Memory Network CLI",
+    )
+
+    shared = argparse.ArgumentParser(add_help=False)
+    shared.add_argument(
+        "--repo-root",
+        type=Path,
+        default=REPO_ROOT,
+        help="Repository root. Defaults to the current project root.",
+    )
+    shared.add_argument(
+        "--base-path",
+        type=Path,
+        default=None,
+        help="knowledge_compiler base path. Defaults to <repo-root>/knowledge_compiler.",
+    )
+    shared.add_argument(
+        "--version-db-path",
+        type=Path,
+        default=None,
+        help="Explicit version database path. Mutating commands otherwise use an isolated temp copy.",
+    )
+
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    gate_parser = subparsers.add_parser("gate", help="Gate operations")
+    gate_subparsers = gate_parser.add_subparsers(dest="gate_command", required=True)
+    gate_trigger_parser = gate_subparsers.add_parser(
+        "trigger",
+        parents=[shared],
+        help="Trigger a Phase 4 gate",
+    )
+    gate_trigger_parser.add_argument("gate", choices=sorted(GATE_MODULES))
+    gate_trigger_parser.add_argument(
+        "--record-path",
+        type=Path,
+        default=None,
+        help="Optional output path for the gate JSON report.",
+    )
+    gate_trigger_parser.add_argument(
+        "--pytest-arg",
+        action="append",
+        default=[],
+        help="Optional pytest arg override passed through to the gate runner.",
+    )
+    gate_trigger_parser.set_defaults(handler=handle_gate_trigger)
+
+    status_parser = subparsers.add_parser(
+        "status",
+        parents=[shared],
+        help="Query MemoryNetwork status",
+    )
+    status_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Include the full serialized network state.",
+    )
+    status_parser.set_defaults(handler=handle_status)
+
+    events_parser = subparsers.add_parser(
+        "events",
+        parents=[shared],
+        help="Sync recorded Memory Events to Notion",
+    )
+    events_parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=DEFAULT_GATE_RESULTS_DIR,
+        help="Directory containing recorded gate JSON results.",
+    )
+    events_parser.add_argument(
+        "--gate-result",
+        dest="gate_results",
+        action="append",
+        default=[],
+        type=Path,
+        help="Individual gate result JSON file to ingest before syncing.",
+    )
+    events_parser.add_argument(
+        "--events-db-id",
+        default=None,
+        help="Override MEMORY_EVENTS_DB_ID for Notion sync.",
+    )
+    events_parser.add_argument(
+        "--unit-id",
+        default=None,
+        help="Optional unit id override when recording gate-trigger events.",
+    )
+    events_parser.add_argument(
+        "--mock",
+        action="store_true",
+        help="Use Notion mock mode and skip network calls.",
+    )
+    events_parser.set_defaults(handler=handle_events)
+
+    sync_parser = subparsers.add_parser(
+        "sync-code-mappings",
+        parents=[shared],
+        help="Sync code mappings through MemoryNetwork",
+    )
+    sync_parser.add_argument(
+        "--mappings-file",
+        type=Path,
+        default=None,
+        help="Optional JSON file containing a unit-indexed mapping payload.",
+    )
+    sync_parser.set_defaults(handler=handle_sync_code_mappings)
+
+    version_parser = subparsers.add_parser("version", help="Version history operations")
+    version_subparsers = version_parser.add_subparsers(dest="version_command", required=True)
+    version_list_parser = version_subparsers.add_parser(
+        "list",
+        parents=[shared],
+        help="List version history",
+    )
+    version_list_parser.add_argument(
+        "--unit-id",
+        default=None,
+        help="Optional unit id filter.",
+    )
+    version_list_parser.set_defaults(handler=handle_version_list)
+
+    return parser
+
+
+def run_cli(argv: Optional[list[str]] = None) -> dict[str, Any]:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return args.handler(args)
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    try:
+        result = run_cli(argv)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        emit_json({"ok": False, "error": str(exc)}, stream=sys.stderr)
+        return 1
+
+    emit_json(result)
+    return int(result.get("exit_code", 0))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
