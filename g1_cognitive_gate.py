@@ -22,7 +22,14 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
+_key_env = os.environ.get("NOTION_API_KEY")
+if _key_env:
+    NOTION_API_KEY = _key_env
+else:
+    try:
+        NOTION_API_KEY = open(os.path.expanduser("~/.notion_key")).read().strip()
+    except Exception:
+        NOTION_API_KEY = ""
 NOTION_VERSION = "2022-06-28"
 NOTION_BASE_URL = "https://api.notion.com/v1"
 

@@ -2,7 +2,14 @@
 """创建模型调用规范页面到Notion"""
 import os, requests
 
-NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
+_key_env = os.environ.get("NOTION_API_KEY")
+if _key_env:
+    NOTION_API_KEY = _key_env
+else:
+    try:
+        NOTION_API_KEY = open(os.path.expanduser("~/.notion_key")).read().strip()
+    except Exception:
+        NOTION_API_KEY = ""
 HEADERS = {
     "Authorization": f"Bearer {NOTION_API_KEY}",
     "Notion-Version": "2022-06-28",

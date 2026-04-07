@@ -20,7 +20,14 @@ from typing import Optional
 
 # Evidence DB 写入口（Notion API）
 import os
-NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
+_key_env = os.environ.get("NOTION_API_KEY")
+if _key_env:
+    NOTION_API_KEY = _key_env
+else:
+    try:
+        NOTION_API_KEY = open(os.path.expanduser("~/.notion_key")).read().strip()
+    except Exception:
+        NOTION_API_KEY = ""
 NOTION_VERSION = "2022-06-28"
 NOTION_BASE_URL = "https://api.notion.com/v1"
 EVIDENCE_DB_ID = "33ac6894-2bed-8188-ba53-e80fb7920398"

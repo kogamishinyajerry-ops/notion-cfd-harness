@@ -15,7 +15,14 @@ from typing import Optional
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # ============ API 常量 ============
-NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
+_key_env = os.environ.get("NOTION_API_KEY")
+if _key_env:
+    NOTION_API_KEY = _key_env
+else:
+    try:
+        NOTION_API_KEY = open(os.path.expanduser("~/.notion_key")).read().strip()
+    except Exception:
+        NOTION_API_KEY = ""
 # v1架构: Tasks数据库
 TASKS_DB_ID = "33bc6894-2bed-8196-8e2c-d1d66e631c31"
 NOTION_BASE_URL = "https://api.notion.com/v1"
