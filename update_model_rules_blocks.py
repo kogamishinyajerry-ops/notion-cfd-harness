@@ -64,7 +64,7 @@ children = [
     h3("判断规则"),
     p("IF Codex running -> 等待完成（不降级）"),
     p("ELIF Codex available -> 直接调用"),
-    p("ELIF Codex available=false（明确不可用）-> 使用任务指定的降级模型"),
+    p("ELIF Codex available=false（明确不可用）-> 立即停止，fail-stop，不降级"),
     p("ELIF 未知（未验证状态）-> 先验证，不自行降级"),
     h3("验证状态命令（bash）"),
     code("node /Users/Zhuanz/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/codex-companion.mjs status --json"),

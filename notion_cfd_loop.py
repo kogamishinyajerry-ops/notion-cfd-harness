@@ -92,8 +92,13 @@ def _claim_task_atomic(page_id: str, worker_id: str) -> bool:
     """
     原子性任务领取（乐观锁）。
     领取成功条件：Task Status 为 待领取 且 Executor Model 为空。
-    使用 ETag compare-and-swap 确保只有一个 worker 能领取。
-    返回: True=领取成功, False=已被其他 worker 领取（跳过）
+    使用 ETag compare-and-swap + 3次重试尽力防止并发重复分发。
+
+    注意：Notion API v2022-06-28 不强制校验 If-Match ETag 头，
+    此实现是"尽力而为"的乐观锁，不是真正的 CAS。
+    在单 worker 场景下可完全避免重复分发；
+    多 worker 场景下有竞态窗口（read→write 之间），依赖重试机制缓解。
+    严格多 worker 原子性需引入外部锁（Redis / DynamoDB conditional write）。
     """
     import time
     for attempt in range(3):
