@@ -6,5 +6,12 @@
   "tasks_db": "33bc6894-2bed-8196-8e2c-d1d66e631c31",
   "reviews_db": "33bc6894-2bed-81fb-a911-c4f0798ce1cf",
   "artifacts_db": "33bc6894-2bed-81c0-983f-d5eb1f5b6f4c",
-  "evidence_db": "33ac6894-2bed-8188-ba53-e80fb7920398"
+  "evidence_db": "33ac6894-2bed-8188-ba53-e80fb7920398",
+  "ai_cfd_001_project_page": "33bc6894-2bed-819d-822a-c2144bb95e97",
+  "p0_fixes": {
+    "artifacts_linked_task": "✅ added",
+    "artifacts_linked_phase": "✅ added",
+    "artifacts_linked_review": "✅ added",
+    "ai_cfd_001_project": "✅ created"
+  }
 }
