@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 """
 Well-Harness 自动化循环核心引擎
 Claude Code → Notion → Notion AI 分析 → Claude Code 执行 → Notion 更新
@@ -18,7 +20,8 @@ import re
 import uuid
 import requests
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Tuple
+from pathlib import Path
+from typing import Any, Mapping, Optional, List, Dict, Tuple
 
 # ============ 配置 ============
 _key_env = os.environ.get("NOTION_API_KEY")
@@ -56,6 +59,35 @@ HEADERS = {
 }
 
 TASK_LOG_PROPERTY_CANDIDATES = ("Last Run Summary", "执行日志")
+SUPPORTED_REVIEW_GATES = {"G3", "G4", "G5", "G6"}
+REVIEW_DB_PROPERTY_ALIASES = {
+    "review_id": ("Review ID", "Name", "Title"),
+    "linked_phase": ("Linked Phase", "Gate Name", "Gate"),
+    "review_type": ("Review Type",),
+    "reviewer_model": ("Reviewer Model", "Reviewer"),
+    "review_status": ("Review Status", "Status"),
+    "decision": ("Decision", "Review Decision", "Result"),
+    "blocking_issues": ("Blocking Issues", "Blockers"),
+    "conditional_pass_items": ("Conditional Pass Items",),
+    "required_fixes": ("Required Fixes", "Check Result Details", "Check Details"),
+    "suggested_next_phase": ("Suggested Next Phase", "Next Action"),
+    "review_artifact_link": ("Review Artifact Link", "Artifact Link"),
+    "reviewed_at": ("Reviewed At", "Review Time"),
+}
+REVIEW_DB_PROPERTY_TYPES = {
+    "review_id": ("title",),
+    "linked_phase": ("rich_text", "title"),
+    "review_type": ("select", "status"),
+    "reviewer_model": ("rich_text", "title"),
+    "review_status": ("select", "status"),
+    "decision": ("select", "status"),
+    "blocking_issues": ("rich_text", "title"),
+    "conditional_pass_items": ("rich_text", "title"),
+    "required_fixes": ("rich_text", "title"),
+    "suggested_next_phase": ("rich_text", "title"),
+    "review_artifact_link": ("url",),
+    "reviewed_at": ("date",),
+}
 TASK_STATUS_ALIASES = {
     # 中文别名
     "待规划": "待领取",
@@ -297,6 +329,371 @@ def sync_task_to_notion(task_id: str, updates: dict) -> bool:
     except Exception as e:
         print(f"❌ 同步失败: {e}")
         return False
+
+
+def get_database_properties(database_id: str) -> dict:
+    """查询 Notion 数据库属性结构。"""
+    database = notion_get(f"databases/{database_id}")
+    return database.get("properties", {})
+
+
+def _get_notion_property_type(prop_config: Mapping[str, Any]) -> str:
+    prop_type = str(prop_config.get("type") or "").strip()
+    if prop_type:
+        return prop_type
+
+    for candidate in (
+        "title",
+        "rich_text",
+        "select",
+        "status",
+        "date",
+        "url",
+        "number",
+        "checkbox",
+        "relation",
+    ):
+        if candidate in prop_config:
+            return candidate
+    return ""
+
+
+def _resolve_database_property_name(
+    database_properties: Mapping[str, Any],
+    aliases: tuple[str, ...],
+    expected_types: tuple[str, ...] = (),
+    allow_type_fallback: bool = False,
+) -> str:
+    for alias in aliases:
+        config = database_properties.get(alias)
+        if not config:
+            continue
+        prop_type = _get_notion_property_type(config)
+        if not expected_types or prop_type in expected_types:
+            return alias
+
+    lowered_aliases = {alias.casefold() for alias in aliases}
+    for prop_name, config in database_properties.items():
+        if prop_name.casefold() not in lowered_aliases:
+            continue
+        prop_type = _get_notion_property_type(config)
+        if not expected_types or prop_type in expected_types:
+            return prop_name
+
+    if allow_type_fallback and expected_types:
+        for prop_name, config in database_properties.items():
+            if _get_notion_property_type(config) in expected_types:
+                return prop_name
+
+    return ""
+
+
+def _resolve_reviews_db_property_map(database_properties: Mapping[str, Any]) -> dict[str, str]:
+    property_map: dict[str, str] = {}
+    for key, aliases in REVIEW_DB_PROPERTY_ALIASES.items():
+        property_map[key] = _resolve_database_property_name(
+            database_properties,
+            aliases=aliases,
+            expected_types=REVIEW_DB_PROPERTY_TYPES.get(key, ()),
+            allow_type_fallback=(key == "review_id"),
+        )
+
+    if not property_map.get("review_id"):
+        raise ValueError("REVIEWS_DB_ID 缺少可写 title 属性，无法创建 Review 页面")
+
+    return {key: value for key, value in property_map.items() if value}
+
+
+def _load_gate_result(gate_result: Any) -> dict:
+    if isinstance(gate_result, Mapping):
+        return dict(gate_result)
+
+    if isinstance(gate_result, Path):
+        result_path = gate_result.expanduser().resolve()
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        payload.setdefault("record_path", str(result_path))
+        return payload
+
+    if isinstance(gate_result, str):
+        stripped = gate_result.strip()
+        if stripped.startswith("{"):
+            return json.loads(stripped)
+
+        result_path = Path(stripped).expanduser().resolve()
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        payload.setdefault("record_path", str(result_path))
+        return payload
+
+    raise TypeError("gate_result 必须是 dict、JSON 字符串或 JSON 文件路径")
+
+
+def _compact_timestamp(timestamp: str) -> str:
+    return re.sub(r"[^0-9A-Za-z]+", "", timestamp or _timestamp_now())
+
+
+def _normalize_review_decision(gate_result: Mapping[str, Any]) -> str:
+    raw_status = str(gate_result.get("status") or "").strip().upper()
+    if raw_status in {"PASS", "FAIL"}:
+        return raw_status
+    if raw_status in {"CONDITIONAL", "CONDITIONAL PASS", "CONDITIONAL_PASS"}:
+        return "Conditional"
+    return "PASS" if gate_result.get("passed") else "FAIL"
+
+
+def _default_gate_reviewer(gate_name: str, gate_result: Mapping[str, Any]) -> str:
+    explicit = (
+        gate_result.get("reviewer")
+        or gate_result.get("reviewer_model")
+        or gate_result.get("reviewed_by")
+    )
+    if explicit:
+        return str(explicit)
+    return "Opus" if gate_name in {"G5", "G6"} else "automatic"
+
+
+def _format_gate_check_details(gate_result: Mapping[str, Any]) -> str:
+    checks = gate_result.get("checks") or []
+    lines = []
+
+    for index, check in enumerate(checks, start=1):
+        check_name = check.get("check") or f"check_{index}"
+        status = "PASS" if check.get("passed") else "FAIL"
+        detail = str(check.get("detail") or "").strip()
+        line = f"{check_name}: {status}"
+        if detail:
+            line += f" - {detail}"
+        lines.append(line)
+
+    if lines:
+        return "\n".join(lines)
+
+    report = str(gate_result.get("report") or "").strip()
+    if report:
+        return report
+
+    return json.dumps(gate_result, ensure_ascii=False, indent=2, default=str)
+
+
+def _looks_like_url(value: str) -> bool:
+    return bool(value) and value.startswith(("http://", "https://"))
+
+
+def _build_notion_property_value(prop_type: str, value: Any) -> dict | None:
+    if value is None:
+        return None
+
+    if prop_type == "title":
+        content = str(value)[:1900]
+        return {"title": [{"text": {"content": content}}]} if content else {"title": []}
+
+    if prop_type == "rich_text":
+        content = str(value)[:1900]
+        return {"rich_text": [{"text": {"content": content}}]} if content else {"rich_text": []}
+
+    if prop_type == "select":
+        return {"select": {"name": str(value)}}
+
+    if prop_type == "status":
+        return {"status": {"name": str(value)}}
+
+    if prop_type == "date":
+        return {"date": {"start": str(value)}}
+
+    if prop_type == "url":
+        return {"url": str(value)}
+
+    if prop_type == "number":
+        return {"number": value}
+
+    return None
+
+
+def _chunk_text(content: str, limit: int = 1900) -> list[str]:
+    text = str(content or "").strip()
+    if not text:
+        return []
+
+    chunks: list[str] = []
+    current = ""
+    for line in text.splitlines():
+        candidate = f"{current}\n{line}".strip() if current else line
+        if len(candidate) <= limit:
+            current = candidate
+            continue
+
+        if current:
+            chunks.append(current)
+            current = ""
+
+        while len(line) > limit:
+            chunks.append(line[:limit])
+            line = line[limit:]
+        current = line
+
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _heading_block(title: str) -> dict:
+    return {
+        "object": "block",
+        "type": "heading_2",
+        "heading_2": {"rich_text": [{"text": {"content": title[:1900]}}]},
+    }
+
+
+def _paragraph_blocks(content: str) -> list[dict]:
+    return [
+        {
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {"rich_text": [{"text": {"content": chunk}}]},
+        }
+        for chunk in _chunk_text(content)
+    ]
+
+
+def _build_gate_review_children(
+    gate_result: Mapping[str, Any],
+    review_id: str,
+    reviewer: str,
+    decision: str,
+) -> list[dict]:
+    gate_name = str(gate_result.get("gate") or "").strip().upper()
+    reviewed_at = str(gate_result.get("timestamp") or _timestamp_now())
+    blockers = gate_result.get("blockers") or []
+    next_action = str(gate_result.get("next_action") or "").strip() or "N/A"
+    record_path = str(gate_result.get("record_path") or "").strip() or "N/A"
+    check_details = _format_gate_check_details(gate_result)
+
+    summary = "\n".join(
+        [
+            f"Review ID: {review_id}",
+            f"Gate: {gate_name}",
+            f"Decision: {decision}",
+            f"Reviewer: {reviewer}",
+            f"Reviewed At: {reviewed_at}",
+        ]
+    )
+    blocking_text = "\n".join(str(item) for item in blockers) if blockers else "None"
+    follow_up = "\n".join(
+        [
+            f"Next Action: {next_action}",
+            f"Record Path: {record_path}",
+        ]
+    )
+
+    children = [_heading_block("Gate Review Summary")]
+    children.extend(_paragraph_blocks(summary))
+    children.append(_heading_block("Check Result Details"))
+    children.extend(_paragraph_blocks(check_details))
+    children.append(_heading_block("Blocking Issues"))
+    children.extend(_paragraph_blocks(blocking_text))
+    children.append(_heading_block("Follow-up"))
+    children.extend(_paragraph_blocks(follow_up))
+    return children
+
+
+def sync_gate_result_to_notion(
+    gate_result: Any,
+    reviews_db_id: str = REVIEWS_DB_ID,
+    reviewer: str | None = None,
+    mock_mode: bool = False,
+) -> dict:
+    """
+    将 Gate JSON 结果同步到 Notion Reviews DB。
+
+    gate_result 支持:
+    - gate runner 返回的 dict
+    - JSON 字符串
+    - Gate 结果 JSON 文件路径
+    """
+    try:
+        result = _load_gate_result(gate_result)
+        gate_name = str(result.get("gate") or "").strip().upper()
+        if gate_name not in SUPPORTED_REVIEW_GATES:
+            raise ValueError(f"仅支持 {', '.join(sorted(SUPPORTED_REVIEW_GATES))}，收到: {gate_name or 'UNKNOWN'}")
+
+        database_properties = get_database_properties(reviews_db_id)
+        property_map = _resolve_reviews_db_property_map(database_properties)
+
+        reviewed_at = str(result.get("timestamp") or _timestamp_now())
+        decision = _normalize_review_decision(result)
+        resolved_reviewer = reviewer or _default_gate_reviewer(gate_name, result)
+        review_id = f"GATE-REV-{gate_name}-{_compact_timestamp(reviewed_at)}"
+        check_details = _format_gate_check_details(result)
+        blocking_issues = "\n".join(str(item) for item in (result.get("blockers") or [])) or "None"
+        next_action = str(result.get("next_action") or "").strip()
+        artifact_link = (
+            str(result.get("review_artifact_link") or "").strip()
+            or str(result.get("artifact_link") or "").strip()
+        )
+
+        properties = {}
+        property_values = {
+            "review_id": review_id,
+            "linked_phase": gate_name,
+            "review_type": "Gate Review",
+            "reviewer_model": resolved_reviewer,
+            "review_status": "Completed",
+            "decision": decision,
+            "blocking_issues": blocking_issues,
+            "required_fixes": check_details,
+            "suggested_next_phase": next_action,
+            "reviewed_at": reviewed_at,
+        }
+        if artifact_link and _looks_like_url(artifact_link):
+            property_values["review_artifact_link"] = artifact_link
+
+        for key, value in property_values.items():
+            prop_name = property_map.get(key)
+            if not prop_name:
+                continue
+            prop_type = _get_notion_property_type(database_properties.get(prop_name, {}))
+            prop_value = _build_notion_property_value(prop_type, value)
+            if prop_value is not None:
+                properties[prop_name] = prop_value
+
+        children = _build_gate_review_children(
+            result,
+            review_id=review_id,
+            reviewer=resolved_reviewer,
+            decision=decision,
+        )
+        payload = {
+            "parent": {"database_id": reviews_db_id},
+            "properties": properties,
+            "children": children,
+        }
+
+        if mock_mode:
+            return {
+                "success": True,
+                "mock_mode": True,
+                "page_id": None,
+                "review_id": review_id,
+                "property_map": property_map,
+                "payload": payload,
+            }
+
+        page = notion_post("pages", payload)
+        page_id = page.get("id")
+        print(f"✅ Gate {gate_name} 结果已同步到 Notion Reviews DB: {page_id}")
+        return {
+            "success": True,
+            "mock_mode": False,
+            "page_id": page_id,
+            "review_id": review_id,
+            "property_map": property_map,
+            "payload": payload,
+        }
+    except Exception as e:
+        print(f"❌ Gate 结果同步失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+        }
 
 def read_task_from_notion(task_id: str) -> dict:
     """从 Notion 读取任务完整信息"""
