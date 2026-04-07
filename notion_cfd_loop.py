@@ -57,6 +57,7 @@ HEADERS = {
 
 TASK_LOG_PROPERTY_CANDIDATES = ("Last Run Summary", "执行日志")
 TASK_STATUS_ALIASES = {
+    # 中文别名
     "待规划": "待领取",
     "规划中": "待领取",
     "待领取": "待领取",
@@ -68,6 +69,14 @@ TASK_STATUS_ALIASES = {
     "完成": "已完成",
     "失败": "失败",
     "阻塞": "失败",
+    # 英文别名（Notion DB 实际值）
+    "Pending": "待领取",
+    "In Progress": "执行中",
+    "Completed": "已完成",
+    "Failed": "失败",
+    "Cancelled": "失败",
+    "Cancelled": "失败",
+    "Blocked": "失败",
 }
 
 # ============ 核心 API ============
@@ -141,7 +150,7 @@ def _get_task_status(task_page: dict) -> str:
     if task_status and (task_status.get("type") == "select" or "select" in task_status):
         name = (task_status.get("select") or {}).get("name", "")
         if name:
-            return name
+            return _normalize_task_status(name)
 
     legacy_status = props.get("phase状态", {})
     if legacy_status and (legacy_status.get("type") == "status" or "status" in legacy_status):
@@ -233,11 +242,10 @@ def query_pending_tasks(status_filter: str = None) -> list:
     status_filter: "待领取" / "执行中" / "已完成" / "失败"
     """
     query = {
-        "database_id": TASKS_DB_ID,
         "page_size": 50
     }
 
-    result = notion_post("databases/query", query)
+    result = notion_post(f"databases/{TASKS_DB_ID}/query", query)
     all_results = result.get("results", [])
 
     if status_filter:
