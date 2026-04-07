@@ -70,7 +70,7 @@ class VerifyConsole:
                 return BenchmarkResult(
                     benchmark_id=case_id,
                     validator_used="bench_ghia1982.py",
-                    pass=False,
+                    is_passed=False,
                     notes="Phase2 executable not available"
                 )
 
@@ -78,7 +78,7 @@ class VerifyConsole:
             return BenchmarkResult(
                 benchmark_id=case_id,
                 validator_used="bench_ghia1982.py",
-                pass=result.get("overall_pass", False),
+                is_passed=result.get("overall_pass", False),
                 error_metrics={
                     "vortex_center_error_x": result.get("vortex_center", {}).get("error_x_pct", 0),
                     "vortex_center_error_y": result.get("vortex_center", {}).get("error_y_pct", 0),
@@ -92,7 +92,7 @@ class VerifyConsole:
                 return BenchmarkResult(
                     benchmark_id=case_id,
                     validator_used="bench_naca.py",
-                    pass=False,
+                    is_passed=False,
                     notes="Phase2 executable not available"
                 )
 
@@ -100,7 +100,7 @@ class VerifyConsole:
             return BenchmarkResult(
                 benchmark_id=case_id,
                 validator_used="bench_naca.py",
-                pass=result.get("overall_pass", False),
+                is_passed=result.get("overall_pass", False),
                 error_metrics={
                     "mean_error_pct": result.get("ct_tsr_validation", {}).get("mean_error_pct", 0),
                     "mean_error_excl_ds_pct": result.get("ct_tsr_validation", {}).get("mean_error_excl_dynamic_stall_pct", 0),
@@ -111,7 +111,7 @@ class VerifyConsole:
         return BenchmarkResult(
             benchmark_id=case_id,
             validator_used="unknown",
-            pass=False,
+            is_passed=False,
             notes=f"Unknown case_id: {case_id}"
         )
 
@@ -181,7 +181,7 @@ class VerifyConsole:
             # Dual threshold: <10% overall OR <5% excluding dynamic stall
             overall_pass = (mean_error < 10.0) or (mean_error_excl_ds < 5.0)
         else:
-            overall_pass = benchmark.pass
+            overall_pass = benchmark.is_passed
 
         # Build conclusion
         conclusion = self._build_conclusion(benchmark, overall_pass)

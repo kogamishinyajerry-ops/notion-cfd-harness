@@ -50,12 +50,20 @@ class ExecutableDAG:
         self.edges.append((from_id, to_id))
 
     def topological_sort(self) -> List[DAGNode]:
-        """Return nodes in topological order."""
-        # Simple Kahn's algorithm
+        """
+        Return nodes in topological order using Kahn's algorithm.
+
+        Fixed (F-P3-005): Build adjacency list to avoid variable scope bug.
+        """
+        # Build in-degree count and adjacency list
         in_degree = {node.id: 0 for node in self.nodes}
+        adj = {node.id: [] for node in self.nodes}
+
         for frm, to in self.edges:
             in_degree[to] += 1
+            adj[frm].append(to)
 
+        # Initialize queue with nodes having no dependencies
         queue = [node for node in self.nodes if in_degree[node.id] == 0]
         result = []
 
@@ -63,11 +71,11 @@ class ExecutableDAG:
             node = queue.pop(0)
             result.append(node)
 
-            for _, to in self.edges:
-                if frm == node.id:
-                    in_degree[to] -= 1
-                    if in_degree[to] == 0:
-                        queue.append(self._get_node(to))
+            # Decrease in-degree for all neighbors
+            for neighbor_id in adj[node.id]:
+                in_degree[neighbor_id] -= 1
+                if in_degree[neighbor_id] == 0:
+                    queue.append(self._get_node(neighbor_id))
 
         return result
 

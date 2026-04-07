@@ -8,12 +8,13 @@ Provides unified query and traceability API across all four knowledge layers.
 
 import hashlib
 import json
+import yaml
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 from dataclasses import dataclass
 
-from knowledge_compiler.units import chapters, formulas, data_points, chart_rules, evidence
-from knowledge_compiler.schema import raw_schema, parsed_schema, canonical_schema, executable_schema
+# Fixed (F-P3-004): Load YAML files directly instead of importing as Python modules
+# The units/ directory contains YAML files, not Python modules
 
 
 # =============================================================================
@@ -51,50 +52,77 @@ class KnowledgeRegistry:
         self._load_all_units()
 
     def _load_all_units(self):
-        """Load all knowledge units from YAML files."""
-        # Chapters
-        for i, ch in enumerate(chapters.CHAPTERS):
-            self.units[f"CH-{i+1:03d}"] = KnowledgeUnitRef(
-                unit_id=f"CH-{i+1:03d}",
-                unit_type="chapter",
-                source_file="units/chapters.yaml",
-                version="v1.1"
-            )
+        """
+        Load all knowledge units from YAML files.
 
-        # Formulas
-        for key in formulas.FORMULAS:
-            self.units[f"FORM-{key}"] = KnowledgeUnitRef(
-                unit_id=f"FORM-{key}",
-                unit_type="formula",
-                source_file="units/formulas.yaml",
-                version="v1.1"
-            )
+        Fixed (F-P3-004): Load YAML files directly using yaml.safe_load().
+        """
+        units_path = self.base_path / "units"
 
-        # Data points
-        for case_id in data_points.CASES:
-            self.units[f"CASE-{case_id}"] = KnowledgeUnitRef(
-                unit_id=f"CASE-{case_id}",
-                unit_type="data_point",
-                source_file="units/data_points.yaml",
-                version="v1.1"
-            )
+        # Load chapters.yaml
+        chapters_path = units_path / "chapters.yaml"
+        if chapters_path.exists():
+            with open(chapters_path) as f:
+                chapters_data = yaml.safe_load(f)
+            for i, ch in enumerate(chapters_data.get("chapters", [])):
+                self.units[f"CH-{i+1:03d}"] = KnowledgeUnitRef(
+                    unit_id=f"CH-{i+1:03d}",
+                    unit_type="chapter",
+                    source_file="units/chapters.yaml",
+                    version="v1.1"
+                )
 
-        # Chart rules
-        self.units["CHART-001"] = KnowledgeUnitRef(
-            unit_id="CHART-001",
-            unit_type="chart_rule",
-            source_file="units/chart_rules.yaml",
-            version="v1.0"
-        )
+        # Load formulas.yaml
+        formulas_path = units_path / "formulas.yaml"
+        if formulas_path.exists():
+            with open(formulas_path) as f:
+                formulas_data = yaml.safe_load(f)
+            for key in formulas_data.get("formulas", {}).keys():
+                self.units[f"FORM-{key}"] = KnowledgeUnitRef(
+                    unit_id=f"FORM-{key}",
+                    unit_type="formula",
+                    source_file="units/formulas.yaml",
+                    version="v1.1"
+                )
 
-        # Evidence chains
-        for i, chain in enumerate(evidence.EVIDENCE_CHAINS):
-            self.units[f"EVID-CHAIN-{i+1:03d}"] = KnowledgeUnitRef(
-                unit_id=f"EVID-CHAIN-{i+1:03d}",
-                unit_type="evidence",
-                source_file="units/evidence.yaml",
-                version="v1.0"
-            )
+        # Load data_points.yaml
+        data_points_path = units_path / "data_points.yaml"
+        if data_points_path.exists():
+            with open(data_points_path) as f:
+                data_points_data = yaml.safe_load(f)
+            for case_id in data_points_data.get("cases", {}).keys():
+                self.units[f"CASE-{case_id}"] = KnowledgeUnitRef(
+                    unit_id=f"CASE-{case_id}",
+                    unit_type="data_point",
+                    source_file="units/data_points.yaml",
+                    version="v1.1"
+                )
+
+        # Load chart_rules.yaml
+        chart_rules_path = units_path / "chart_rules.yaml"
+        if chart_rules_path.exists():
+            with open(chart_rules_path) as f:
+                chart_rules_data = yaml.safe_load(f)
+            for key in chart_rules_data.get("chart_rules", {}).keys():
+                self.units[f"CHART-{key}"] = KnowledgeUnitRef(
+                    unit_id=f"CHART-{key}",
+                    unit_type="chart_rule",
+                    source_file="units/chart_rules.yaml",
+                    version="v1.0"
+                )
+
+        # Load evidence.yaml
+        evidence_path = units_path / "evidence.yaml"
+        if evidence_path.exists():
+            with open(evidence_path) as f:
+                evidence_data = yaml.safe_load(f)
+            for i, chain_id in enumerate(evidence_data.get("evidence_chains", {}).keys()):
+                self.units[f"EVID-{chain_id}"] = KnowledgeUnitRef(
+                    unit_id=f"EVID-{chain_id}",
+                    unit_type="evidence",
+                    source_file="units/evidence.yaml",
+                    version="v1.0"
+                )
 
     # -------------------------------------------------------------------------
     # Query APIs
@@ -141,11 +169,9 @@ class KnowledgeRegistry:
 
         for entry in mapping.get("unit_to_source", []):
             if entry["unit_id"] == unit_id:
-                return [
-                    unit_id,
-                    entry["source_file"],
-                    f\"lines {entry['source_line_range'][0]}-{entry['source_line_range'][1]}\"
-                ]
+                line_range = entry.get('source_line_range', [0, 0])
+                line_str = f"lines {line_range[0]}-{line_range[1]}"
+                return [unit_id, entry["source_file"], line_str]
 
         return [unit_id, unit.source_file]
 
@@ -153,17 +179,63 @@ class KnowledgeRegistry:
         """
         Get dependent units for a given unit.
 
+        Fixed (F-P3-003): Now loads from dependency_graph.json or source_mapping.json.
+
         Example: CASE-001 depends on FORM-006, FORM-007, CHART-001
         """
-        deps = set()
         unit = self.get(unit_id)
+        if not unit:
+            return set()
 
-        if unit.unit_type == "data_point":
-            deps.update(["FORM-006", "FORM-007", "FORM-008", "CHART-001"])
-        elif unit.unit_type == "formula":
-            deps.add("CH-001")  # Formulas defined in Geometry chapter
+        # Try to load from dependency_graph.json first
+        dep_graph_path = self.base_path / "dependency_graph.json"
+        if dep_graph_path.exists():
+            try:
+                with open(dep_graph_path) as f:
+                    dep_graph = json.load(f)
+                return set(dep_graph.get("dependencies", {}).get(unit_id, []))
+            except (json.JSONDecodeError, IOError):
+                pass
 
-        return deps
+        # Fallback: try source_mapping.json for formula references
+        mapping_path = self.base_path / "source_mapping.json"
+        if mapping_path.exists():
+            try:
+                with open(mapping_path) as f:
+                    mapping = json.load(f)
+
+                # Look for formula references in data_points
+                if unit.unit_type == "data_point":
+                    for entry in mapping.get("unit_to_source", []):
+                        if entry["unit_id"] == unit_id:
+                            # Extract formula references from the entry
+                            refs = entry.get("formula_references", [])
+                            if not refs:
+                                # Fallback to hardcoded defaults for known cases
+                                refs = self._get_default_formula_deps(unit_id)
+                            return set(refs)
+            except (json.JSONDecodeError, IOError):
+                pass
+
+        # Final fallback to type-based defaults
+        return self._get_type_based_defaults(unit)
+
+    def _get_default_formula_deps(self, unit_id: str) -> List[str]:
+        """Get default formula dependencies for known data points."""
+        # Defaults from Phase2 evidence
+        known_deps = {
+            "CASE-001": ["FORM-006", "FORM-007", "FORM-008", "CHART-001"],
+            "CASE-002": ["FORM-006", "FORM-007", "FORM-008", "CHART-001"],
+        }
+        return known_deps.get(unit_id, [])
+
+    def _get_type_based_defaults(self, unit: KnowledgeUnitRef) -> Set[str]:
+        """Get type-based default dependencies."""
+        if unit.unit_type == "formula":
+            return {"CH-001"}  # Formulas defined in Geometry chapter
+        elif unit.unit_type == "data_point":
+            return set(self._get_default_formula_deps(unit.unit_id))
+        return set()
 
     # -------------------------------------------------------------------------
     # Integrity Verification

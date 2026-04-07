@@ -64,19 +64,32 @@ class Monitor:
         self.state = MonitorState.RUNNING
         self.events = []
 
-    def monitor_residuals(self, log_content: str = None) -> MonitorReport:
+    def monitor_residuals(
+        self,
+        log_path: Optional[str] = None,
+        log_content: Optional[str] = None
+    ) -> MonitorReport:
         """
-        Monitor solver residuals from log file.
+        Monitor solver residuals from log file or content string.
+
+        Fixed (F-P3-002): Unified interface signature.
+
+        Args:
+            log_path: Path to log file (optional)
+            log_content: Pre-loaded log content string (optional)
 
         Returns:
             MonitorReport with convergence status and events
         """
+        # Use provided log_path if given, otherwise use self.log_path
+        target_path = Path(log_path) if log_path else self.log_path
+
         if log_content is None:
             try:
-                with open(self.log_path) as f:
+                with open(target_path) as f:
                     log_content = f.read()
             except FileNotFoundError:
-                return self._create_empty_report("Log file not found")
+                return self._create_empty_report(f"Log file not found: {target_path}")
 
         # Parse residuals
         residuals = self._parse_residuals(log_content)
@@ -137,9 +150,11 @@ class Monitor:
         """
         Detect convergence state from residual history.
 
+        Fixed (F-P3-006): Improved STALLED detection using full window and linear regression.
+
         Rules:
         - CONVERGED: All residuals < target for last N iterations
-        - STALLED: Residuals not decreasing over time
+        - STALLED: Residuals not decreasing over time (detected via linear regression slope)
         - DIVERGED: Residuals increasing to infinity
         - RUNNING: Not enough data to determine
         """
@@ -155,15 +170,31 @@ class Monitor:
         # Check if all residuals below threshold
         all_below_threshold = max_residual < self.default_residual_target
 
-        # Check if stalled (not decreasing)
+        # Check if stalled (not decreasing) - use full window with linear regression
         if len(last_residuals) >= 20:
-            first_half = last_residuals[:10]
-            second_half = last_residuals[10:]
-            avg_first = sum(r.get("residual_final", 1.0) for r in first_half) / len(first_half)
-            avg_second = sum(r.get("residual_final", 1.0) for r in second_half) / len(second_half)
+            # Compute linear regression slope on log residuals
+            import math
+            log_residuals = []
+            for i, r in enumerate(last_residuals):
+                val = r.get("residual_final", 1.0)
+                if val > 0:
+                    log_residuals.append(math.log(val))
 
-            if abs(avg_first - avg_second) / max(avg_first, 1e-10) < 0.01:  # Less than 1% change
-                return ConvergenceStatus.STALLED
+            if len(log_residuals) >= 10:
+                # Simple linear regression: y = a + bx
+                n = len(log_residuals)
+                x_mean = (n - 1) / 2
+                y_mean = sum(log_residuals) / n
+
+                # Calculate slope
+                numerator = sum((i - x_mean) * (log_residuals[i] - y_mean) for i in range(n))
+                denominator = sum((i - x_mean) ** 2 for i in range(n))
+                slope = numerator / denominator if denominator != 0 else 0
+
+                # If slope is near zero (convergence plateau), consider STALLED
+                # Threshold: |slope| < 0.001 means less than 0.1% change per iteration
+                if abs(slope) < 0.001 and not all_below_threshold:
+                    return ConvergenceStatus.STALLED
 
         if all_below_threshold:
             return ConvergenceStatus.CONVERGED

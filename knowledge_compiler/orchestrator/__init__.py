@@ -49,7 +49,8 @@ from .interfaces import (
     IOrchestrator,
 )
 
-from .runtime import KnowledgeRegistry, get_registry
+# Fixed (F-P3-004): runtime.py is in parent package, not orchestrator subpackage
+from knowledge_compiler.runtime import KnowledgeRegistry, get_registry
 from .verify_console import VerifyConsole
 from .monitor import Monitor
 from .task_builder import TaskBuilder, DAGNode, ExecutableDAG

@@ -90,8 +90,16 @@ class ISolverRunner(IOrchestratorComponent, Protocol):
 class IMonitor(IOrchestratorComponent, Protocol):
     """Monitor: tracks solver convergence."""
 
-    def monitor_residuals(self, log_path: str) -> MonitorReport:
-        """Monitor solver residuals from log file."""
+    def monitor_residuals(
+        self,
+        log_path: Optional[str] = None,
+        log_content: Optional[str] = None
+    ) -> MonitorReport:
+        """
+        Monitor solver residuals from log file or content string.
+
+        Fixed (F-P3-002): Unified signature to support both file path and content.
+        """
         ...
 
     def detect_convergence(self, report: MonitorReport) -> bool:
