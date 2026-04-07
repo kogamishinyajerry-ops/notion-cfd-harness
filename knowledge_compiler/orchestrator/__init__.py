@@ -49,6 +49,15 @@ from .interfaces import (
     IOrchestrator,
 )
 
+from .runtime import KnowledgeRegistry, get_registry
+from .verify_console import VerifyConsole
+from .monitor import Monitor
+from .task_builder import TaskBuilder, DAGNode, ExecutableDAG
+from .cad_parser import CADParser
+from .physics_planner import PhysicsPlanner
+from .mesh_builder import MeshBuilder
+from .solver_runner import SolverRunner
+
 __all__ = [
     # Contract
     "RunContext",
@@ -83,4 +92,17 @@ __all__ = [
     "IMonitor",
     "IVerifyConsole",
     "IOrchestrator",
+    # Runtime
+    "KnowledgeRegistry",
+    "get_registry",
+    # Components
+    "VerifyConsole",
+    "Monitor",
+    "TaskBuilder",
+    "DAGNode",
+    "ExecutableDAG",
+    "CADParser",
+    "PhysicsPlanner",
+    "MeshBuilder",
+    "SolverRunner",
 ]
