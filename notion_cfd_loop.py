@@ -301,11 +301,207 @@ def create_notion_page_task(parent_id: str, title: str, content: str, task_type:
     })
     return page.get("id", "")
 
-# ============ 状态轮询循环 ============
+# ============ Execution Worker 轮询循环 (P2) ============
+
+def _check_codex_status() -> dict:
+    """检查 Codex 可用状态"""
+    import subprocess, json as _json
+    try:
+        result = subprocess.run(
+            ["node", "/Users/Zhuanz/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/codex-companion.mjs", "status", "--json"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            return _json.loads(result.stdout.strip().split("\n")[0])
+        return {"available": False, "error": result.stderr[:100]}
+    except Exception as e:
+        return {"available": False, "error": str(e)[:100]}
+
+
+def _dispatch_to_codex(task_page_id: str, instruction: str, task_key: str) -> tuple[bool, str]:
+    """
+    通过 Codex companion 发起任务。
+    返回 (success, result_summary)
+    """
+    import subprocess
+    workdir = "/Users/Zhuanz/Desktop/notion-cfd-harness"
+    try:
+        result = subprocess.run(
+            ["node",
+             "/Users/Zhuanz/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/codex-companion.mjs",
+             "task", "--fresh",
+             f"在 {workdir} 目录下执行任务 [{task_key}]：\n\n{instruction}"],
+            capture_output=True, text=True, timeout=600, cwd=workdir
+        )
+        if result.returncode == 0:
+            return True, f"[Codex OK] {result.stdout[:500]}"
+        else:
+            return False, f"[Codex ERR] {result.stderr[:300]}"
+    except subprocess.TimeoutExpired:
+        return False, "[Codex TIMEOUT] 任务超时（10分钟）"
+    except Exception as e:
+        return False, f"[Codex EXC] {str(e)[:200]}"
+
+
+def _dispatch_to_glm(task_page_id: str, instruction: str, task_key: str) -> tuple[bool, str]:
+    """通过 glmext.py 发起 GLM-5.1 任务"""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["python3", "/Users/Zhuanz/Desktop/notion-cfd-harness/glmext.py",
+             "--task", "TASK_DECOMPOSE", instruction],
+            capture_output=True, text=True, timeout=300
+        )
+        if result.returncode == 0:
+            return True, f"[GLM OK] {result.stdout[:500]}"
+        else:
+            return False, f"[GLM ERR] {result.stderr[:300]}"
+    except subprocess.TimeoutExpired:
+        return False, "[GLM TIMEOUT] 任务超时（5分钟）"
+    except Exception as e:
+        return False, f"[GLM EXC] {str(e)[:200]}"
+
+
+def _dispatch_to_minimax(task_page_id: str, instruction: str, task_key: str) -> tuple[bool, str]:
+    """通过 minimix.py 发起 Minimax-2.7 任务"""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["python3", "/Users/Zhuanz/Desktop/notion-cfd-harness/minimix.py",
+             "--task", "TASK_DECOMPOSE", instruction],
+            capture_output=True, text=True, timeout=300
+        )
+        if result.returncode == 0:
+            return True, f"[Minimax OK] {result.stdout[:500]}"
+        else:
+            return False, f"[Minimax ERR] {result.stderr[:300]}"
+    except subprocess.TimeoutExpired:
+        return False, "[Minimax TIMEOUT] 任务超时（5分钟）"
+    except Exception as e:
+        return False, f"[Minimax EXC] {str(e)[:200]}"
+
+
+def _update_task_status(page_id: str, status: str, summary: str) -> bool:
+    """更新 Notion 任务状态和执行摘要"""
+    try:
+        prop_name, _ = _get_task_log_property(
+            notion_get(f"pages/{page_id}")
+        )
+        properties = {
+            "Task Status": {"select": {"name": status}},
+            prop_name: _build_rich_text(summary)
+        }
+        notion_patch(f"pages/{page_id}", {"properties": properties})
+        return True
+    except Exception as e:
+        print(f"  ❌ 更新任务状态失败: {e}")
+        return False
+
+
+def run_exec_loop(interval: int = 120, max_iterations: int = None):
+    """
+    P2: Execution Worker 轮询循环
+
+    1. 从 Tasks DB 拉取 `待领取` 任务
+    2. 根据 task_key（前缀匹配）确定执行模型
+    3. 验证模型可用性（Codex 用 status 命令）
+    4. 发起执行，写入结果到 Notion
+    5. 更新任务状态
+
+    注意：模型不可用 → 立即停止（fail-stop），不降级
+    """
+    iteration = 0
+    print(f"""
+╔══════════════════════════════════════════════════════════════╗
+║     P2 Execution Worker 轮询循环                            ║
+║     轮询间隔: {interval}秒 | 最大迭代: {max_iterations or '无限'}                        ║
+║     原则: 模型不可用即停止，不降级                           ║
+╚══════════════════════════════════════════════════════════════╝
+    """)
+
+    while True:
+        iteration += 1
+        print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 第 {iteration} 次轮询")
+
+        pending = query_pending_tasks("待领取")
+
+        if not pending:
+            print("  📭 暂无待领取任务")
+        else:
+            print(f"  📋 待领取任务: {len(pending)} 个")
+            for task in pending:
+                task_key = _extract_task_title(task)
+                page_id = task["id"]
+                routing = get_model_for_task(task_key)
+                primary = routing["primary"]
+                print(f"\n  ── 处理任务: {task_key} ──")
+                print(f"     执行模型: {primary}")
+
+                # 读取任务内容（Last Run Summary 作为指令）
+                _, instruction = _get_task_log_property(task)
+                if not instruction:
+                    instruction = f"执行任务 {task_key}（详细内容请查看 Notion 页面）"
+
+                # 状态 → 执行中
+                _update_task_status(page_id, "执行中",
+                    f"[{datetime.now().strftime('%H:%M:%S')}] 开始执行 | 模型: {primary}\n{instruction[:200]}")
+
+                # 根据模型分派
+                success = False
+                result_msg = ""
+
+                if primary == "codex":
+                    codex_status = _check_codex_status()
+                    if not codex_status.get("available", False):
+                        err = codex_status.get("error", "unknown")
+                        result_msg = f"[FAIL-STOP] Codex 不可用: {err} | 任务中止，不降级"
+                        _update_task_status(page_id, "失败", result_msg)
+                        print(f"     🚫 {result_msg}")
+                        continue
+
+                    print(f"     🔄 正在通过 Codex 执行...")
+                    success, result_msg = _dispatch_to_codex(page_id, instruction, task_key)
+
+                elif primary == "glm_51":
+                    print(f"     🔄 正在通过 GLM-5.1 执行...")
+                    success, result_msg = _dispatch_to_glm(page_id, instruction, task_key)
+
+                elif primary == "minimax_27":
+                    print(f"     🔄 正在通过 Minimax-2.7 执行...")
+                    success, result_msg = _dispatch_to_minimax(page_id, instruction, task_key)
+
+                elif primary == "notion_opus":
+                    result_msg = "[需要人工] Opus 4.6 需手动在 Notion 页面触发"
+                    print(f"     ⚠️  {result_msg}")
+                    _update_task_status(page_id, "待领取", result_msg)
+                    continue
+
+                else:
+                    result_msg = f"[未知模型] primary={primary}，请检查模型路由表"
+                    print(f"     ❌ {result_msg}")
+                    _update_task_status(page_id, "失败", result_msg)
+                    continue
+
+                # 更新最终状态
+                final_status = "已完成" if success else "失败"
+                ts = datetime.now().strftime('%H:%M:%S')
+                _update_task_status(page_id, final_status,
+                    f"[{ts}] {'✅' if success else '❌'} {routing.get('reason', '')}\n{result_msg[:800]}")
+                print(f"     {'✅' if success else '❌'} 执行{'成功' if success else '失败'}")
+
+        print(f"\n  ⏰ 下次轮询: {interval}秒后")
+        time.sleep(interval)
+
+        if max_iterations and iteration >= max_iterations:
+            print("\n✅ 达到最大迭代次数，退出")
+            break
+
+
+# ============ 状态轮询循环（仅展示）============
 
 def run_harness_loop(interval: int = 60, max_iterations: int = None):
     """
-    Well-Harness 主循环
+    Well-Harness 主循环（只读展示模式）
     1. 查询 Notion 中待处理的任务
     2. 生成 Claude Code 可执行的指令
     3. 输出指令供 Claude Code 执行
@@ -316,7 +512,7 @@ def run_harness_loop(interval: int = 60, max_iterations: int = None):
     iteration = 0
     print(f"""
 ╔══════════════════════════════════════════════════════════════╗
-║     Well-Harness 自动化循环引擎启动                          ║
+║     Well-Harness 自动化循环引擎启动（展示模式）             ║
 ║     轮询间隔: {interval}秒 | 最大迭代: {max_iterations or '无限'}                        ║
 ╚══════════════════════════════════════════════════════════════╝
     """)
@@ -2130,6 +2326,9 @@ if __name__ == "__main__":
 4. 启动轮询循环:
    python3 notion_cfd_loop.py --loop
 
+4b. P2 Execution Worker 轮询循环（执行并写回Notion）:
+   python3 notion_cfd_loop.py --exec-loop
+
 5. 触发 Notion AI (Opus 4.6) 指令:
    python3 notion_cfd_loop.py --opus-prompt <G0|G1|G2|G3|G4|G5|G6|ARCH|TASK>
 
@@ -2162,6 +2361,9 @@ if __name__ == "__main__":
                 print(f"  [{status}]: {len(tasks)} 个")
         elif cmd == "--loop":
             run_harness_loop(interval=30, max_iterations=3)
+        elif cmd == "--exec-loop":
+            print("\n⚠️  Execution Worker 轮询循环 (P2)")
+            run_exec_loop(interval=60, max_iterations=None)
         elif cmd == "--opus-prompt":
             if len(sys.argv) < 3:
                 print("用法: python3 notion_cfd_loop.py --opus-prompt <G0|G1|G2|G3|G4|G5|G6|ARCH|TASK>")

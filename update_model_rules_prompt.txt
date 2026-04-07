@@ -1,0 +1,140 @@
+更新 Notion 页面 '模型调用规范'（页面ID: 33bc6894-2bed-81c1-8e65-fdc4befbc61d），用以下严格规则文本替换原有内容。
+
+---
+
+# 模型调用规范 (v1.1) - 强制执行版
+
+## 核心原则（不可违背）
+
+1. 模型即责任边界：每个任务类型绑定唯一执行模型，不可跨越
+2. 失败即阻塞：模型调用失败时，执行必须立即停止，不降级、不重试、不跳过
+3. 未验证不执行：在不知道目标模型是否可用的前提下，禁止自行决定降级
+
+## 模型分工表（严格绑定）
+
+任务类型 | 唯一指定执行模型 | 降级备选 | 审查模型
+M1-1 状态机引擎 | Codex (GPT-5.4) | 无 | Opus 4.6
+M1-2 G0任务门 | Minimax-2.7 | 无 | Opus 4.6
+M1-3 Task向导 | GLM-5.1 | 无 | Opus 4.6
+M1-4/6 pytest测试 | Codex (GPT-5.4) | 无 | Opus 4.6
+M1-5 Evidence库 | Opus 4.6 | 无 | Opus 4.6
+G3/G4/G5/G6 Gate | Codex (GPT-5.4) | 无 | Opus 4.6
+架构审查 | Opus 4.6 | 禁止降级 | Opus 4.6
+v1架构迁移 | Codex (GPT-5.4) | 无 | Opus 4.6
+文档更新 | Codex (GPT-5.4) | 无 | Opus 4.6
+知识抽取/绑定 | GLM-5.1 | 无 | Opus 4.6
+
+## Codex 调用规范
+
+判断规则：
+- IF Codex running: 等待完成（不降级）
+- ELIF Codex available: 直接调用
+- ELIF Codex available = false (明确不可用): 使用任务指定的降级模型
+- ELIF 未知（未验证状态）: 先验证，不自行降级
+
+验证状态命令（bash）：
+codex-status: node /Users/Zhuanz/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/codex-companion.mjs status --json
+
+发起新任务-阻塞式（bash）：
+codex-task: node /Users/Zhuanz/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/codex-companion.mjs task --fresh "任务描述"
+
+发起新任务-后台（bash）：
+codex-task-bg: node /Users/Zhuanz/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/codex-companion.mjs task --fresh --background "任务描述"
+
+Resume任务（bash）：
+codex-resume: node /Users/Zhuanz/.claude/plugins/cache/openai-codex/codex/1.0.2/scripts/codex-companion.mjs task --resume --id task-id
+
+## GLM-5.1 调用规范
+
+触发条件：任务类型 = M1-3 或 知识抽取/绑定，且 Codex 不可用（已验证）
+
+CLI调用（bash）：
+glm-task: python3 glmext.py --task M1_3_WIZARD '需求描述'
+glm-decompose: python3 glmext.py --task TASK_DECOMPOSE '任务描述'
+
+失败处理：GLM-5.1调用失败 -> 立即停止执行，报告错误，不降级
+
+## Minimax-2.7 调用规范
+
+触发条件：任务类型 = M1-2，且 Codex 不可用（已验证）
+
+CLI调用（bash）：
+minimax-task: python3 minimix.py --task TASK_DECOMPOSE '任务描述'
+minimax-gate: python3 minimix.py --task VALIDATE_GATE --task-id 'id' --gate 'G0'
+
+失败处理：Minimax调用失败 -> 立即停止执行，报告错误，不降级
+
+## Opus 4.6 调用规范
+
+触发条件：任务类型 = 架构审查 或 Gate评审
+
+调用方式：在 Notion 页面中 @Opus 4.6 输入审查 prompt
+
+标准审查Prompt模板：
+【架构审查 - Well-Harness v1】
+请对[对象]进行深度审查：
+1. [审查维度1]
+2. [审查维度2]
+3. [审查维度3]
+请给出具体修复建议。
+
+失败处理：Opus调用失败 -> 立即停止执行，报告错误
+
+## 强制规则：失败即阻塞
+
+什么是"调用失败"：
+- 模型返回错误
+- 模型返回超时
+- 模型返回空结果
+- 状态验证返回 available = false 且无备选
+
+失败后的正确行为：
+1. 立即停止当前执行流
+2. 打印错误信息：[模型调用失败] 模型名 | 失败原因
+3. 不降级到其他模型
+4. 不重试
+5. 等待人工介入
+
+错误示例（禁止）：
+- 禁止：Codex失败了，用Minimax试试
+- 禁止：Codex超时了，等一下再试
+- 禁止：Opus返回错误，跳过审查继续
+- 禁止：不确定Codex是否可用，先用Minimax
+
+## Codex挂死检测与处理
+
+识别挂死：Codex任务运行超过2小时且无新活动视为挂死
+
+处理流程：
+1. 运行状态验证命令
+2. 如确认挂死：调用 cancel 停止任务
+3. 重新发起新任务
+
+禁止行为：
+- 发现Codex挂死后不取消就发起新任务
+- 在未验证状态前自行降级
+
+## 禁止事项（违反即停）
+
+1. 禁止未知状态下降级：未验证Codex可用性就自行降级
+2. 禁止跳过指定模型：任务要求Opus但自行用Codex
+3. 禁止失败后继续：模型调用失败后继续执行
+4. 禁止隐藏降级行为：不告知用户就擅自使用备选模型
+5. 禁止并发调用：同时运行多个Codex任务
+6. 禁止在审查完成前推进：Gate评审未通过就进入下一阶段
+
+## 执行检查清单（每次任务前必查）
+
+- 确认任务类型
+- 确认指定执行模型
+- 验证模型可用性（status命令）
+- 如可用：发起调用
+- 如不可用且无降级规则：立即停止
+- 如不可用且有降级规则：使用降级模型
+- 调用失败：立即停止
+- 任务完成：记录到执行日志
+- 推送GitHub（代码变更必须同步）
+
+---
+
+请将上述内容更新到Notion页面，替换原有内容。页面ID: 33bc6894-2bed-81c1-8e65-fdc4befbc61d。
