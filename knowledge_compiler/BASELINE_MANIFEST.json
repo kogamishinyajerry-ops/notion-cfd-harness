@@ -1,0 +1,104 @@
+{
+  "baseline_version": "v1.0",
+  "baseline_commit": "e178ea2fb76bf0f4bbc36c9c2ee9f46e9e2b8ce6",
+  "baseline_date": "2026-04-07",
+  "opus_review": "REV-P2-001 CONDITIONAL PASS",
+  "baseline_files": {
+    "total": 20,
+    "root": [
+      "BASELINE-v1.md",
+      "capture_parse_rules.md",
+      "diff_engine.md",
+      "normalize_rules.md",
+      "phase1_manifest.json",
+      "publish_contract.md",
+      "source_mapping.json"
+    ],
+    "units": [
+      "units/chapters.yaml",
+      "units/chart_rules.yaml",
+      "units/data_points.yaml",
+      "units/evidence.yaml",
+      "units/formulas.yaml"
+    ],
+    "schema": [
+      "schema/canonical_schema.json",
+      "schema/executable_schema.json",
+      "schema/parsed_schema.json",
+      "schema/raw_schema.json"
+    ],
+    "executables": [
+      "executables/bench_ghia1982.py",
+      "executables/bench_naca.py",
+      "executables/chart_template.py",
+      "executables/formula_validator.py"
+    ]
+  },
+  "opus_findings": {
+    "blocked": [],
+    "conditional_pass_items": [
+      {
+        "id": "F-P2-001",
+        "severity": "Minor",
+        "description": "JSON Schema type简写不标准 (array[integer])",
+        "location": "raw_schema.json, executable_schema.json, canonical_schema.json",
+        "mapped_to": "P3-01 (Knowledge Runtime Adapter - schema validation)"
+      },
+      {
+        "id": "F-P2-002",
+        "severity": "Minor",
+        "description": "capture_parse regex仅匹配H1-H3",
+        "location": "capture_parse_rules.md §2.1",
+        "mapped_to": "P3-05 (CAD Semantic Parser - extend to H4)"
+      },
+      {
+        "id": "F-P2-003",
+        "severity": "Medium",
+        "description": "x/H和x/L映射为同一x*，缺少reference_length区分",
+        "location": "normalize_rules.md §2.2",
+        "mapped_to": "P3-05 (CAD Semantic Parser - reference meta-field)"
+      },
+      {
+        "id": "F-P2-004",
+        "severity": "Minor",
+        "description": "diff_engine数据点变更阈值0.01%对坐标过灵敏",
+        "location": "diff_engine.md §2.3",
+        "mapped_to": "P3-02 (diff_engine.py - configurable thresholds)"
+      },
+      {
+        "id": "F-P2-005",
+        "severity": "Medium",
+        "description": "diff_engine.md无Python实现",
+        "location": "diff_engine.md",
+        "mapped_to": "P3-02 (diff_engine.py - PRIORITY)"
+      },
+      {
+        "id": "F-P2-007",
+        "severity": "Medium",
+        "description": "bench_naca排除动态失速点均值未纳入pass/fail",
+        "location": "bench_naca.py",
+        "mapped_to": "P3-10 (Verify Console - dual threshold)"
+      },
+      {
+        "id": "F-P2-008",
+        "severity": "Minor",
+        "description": "Propagation条件引用未实现的diff_engine自动检查",
+        "location": "publish_contract.md §5",
+        "mapped_to": "P3-02 (diff_engine.py implementation)"
+      }
+    ]
+  },
+  "integrity": {
+    "all_tests_pass": true,
+    "formula_validator": "5/5 tests pass",
+    "chart_template": "3/3 tests pass",
+    "bench_ghia1982": "OVERALL PASS",
+    "bench_naca": "OVERALL PASS (mean 6.92%, excl DS 6.40%)"
+  },
+  "next_phase_dependencies": {
+    "P3-01": "Knowledge Runtime Adapter - F-P2-001",
+    "P3-02": "diff_engine.py - F-P2-005, F-P2-008 (PRIORITY)",
+    "P3-05": "CAD Semantic Parser - F-P2-002, F-P2-003",
+    "P3-10": "Verify Console - F-P2-007"
+  }
+}
