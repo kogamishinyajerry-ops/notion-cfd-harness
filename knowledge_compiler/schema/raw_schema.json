@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "layer": "Raw",
+  "description": "Raw layer — original CFD data as captured from source files",
+  "fields": [
+    {
+      "field_id": "raw_id",
+      "type": "string",
+      "description": "Unique identifier for raw artifact",
+      "format": "RAW-{source_file_hash}-{timestamp}",
+      "required": true
+    },
+    {
+      "field_id": "source_file",
+      "type": "string",
+      "description": "Original file path or URL",
+      "required": true,
+      "examples": ["Phase1-ReportSpec-Candidate.md", "Case2_NACA_Benchmark.pdf"]
+    },
+    {
+      "field_id": "raw_text",
+      "type": "string",
+      "description": "Exact text content as captured",
+      "required": true
+    },
+    {
+      "field_id": "capture_timestamp",
+      "type": "string",
+      "description": "ISO8601 timestamp of capture",
+      "format": "YYYY-MM-DDTHH:MM:SSZ",
+      "required": true
+    },
+    {
+      "field_id": "capture_method",
+      "type": "string",
+      "description": "How the data was captured",
+      "enum": ["file_read", "pdf_parse", "api_fetch", "manual_entry"],
+      "required": true
+    },
+    {
+      "field_id": "source_line_range",
+      "type": "array[integer]",
+      "description": "Start and end line numbers in source file",
+      "minItems": 2,
+      "maxItems": 2,
+      "example": [14, 19]
+    },
+    {
+      "field_id": "parser_version",
+      "type": "string",
+      "description": "Version of parser that processed this",
+      "default": "1.0"
+    },
+    {
+      "field_id": "checksum",
+      "type": "string",
+      "description": "SHA256 hash of raw_text for integrity verification",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    {
+      "field_id": "parent_raw_id",
+      "type": ["string", "null"],
+      "description": "Parent raw artifact if this is derived",
+      "required": false
+    },
+    {
+      "field_id": "annotations",
+      "type": "object",
+      "description": "Free-form annotations (e.g. 'data_gap', 'uncertainty')",
+      "additionalProperties": true
+    }
+  ],
+  "required_fields": ["raw_id", "source_file", "raw_text", "capture_timestamp", "capture_method"]
+}

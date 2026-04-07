@@ -1,0 +1,130 @@
+# Phase1 ReportSpec v1.1 — 公式定义单元
+version: v1.1
+unit_type: formula
+source_id: SPEC-001
+
+formulas:
+  - id: FORM-001
+    name: 无量纲速度
+    symbol: "u*"
+    definition: "u* = u / u_ref"
+    variables:
+      - symbol: u
+        description: local velocity
+        unit: m/s
+      - symbol: u_ref
+        description: reference velocity (inlet or free-stream)
+        unit: m/s
+    usage: "坐标 normalization，中心线速度剖面"
+
+  - id: FORM-002
+    name: 无量纲坐标
+    symbol: "x*, y*"
+    definition: "x* = x / L, y* = y / H"
+    variables:
+      - symbol: L
+        description: characteristic length
+        unit: m
+      - symbol: H
+        description: characteristic height
+        unit: m
+    usage: "几何 normalization"
+
+  - id: FORM-003
+    name: 压力系数
+    symbol: Cp
+    definition: "Cp = (p - p_ref) / (0.5 * rho * u_ref^2)"
+    variables:
+      - symbol: p
+        description: local static pressure
+        unit: Pa
+      - symbol: p_ref
+        description: reference pressure
+        unit: Pa
+      - symbol: rho
+        description: fluid density
+        unit: kg/m^3
+      - symbol: u_ref
+        description: reference velocity
+        unit: m/s
+    usage: "压力分布描述"
+
+  - id: FORM-004
+    name: 推力系数
+    symbol: Ct
+    definition: "Ct = T / (0.5 * rho * u_ref^2 * A)"
+    variables:
+      - symbol: T
+        description: thrust force
+        unit: N
+      - symbol: A
+        description: reference area
+        unit: m^2
+    usage: "风力机性能指标"
+
+  - id: FORM-005
+    name: 功率系数
+    symbol: Cp
+    definition: "Cp = P / (0.5 * rho * u_ref^3 * A)"
+    variables:
+      - symbol: P
+        description: power
+        unit: W
+    usage: "风力机峰值功率对比"
+
+  - id: FORM-006
+    name: L1 范数（平均绝对误差）
+    symbol: L1
+    definition: "L1 = (1/N) * Σ |u_cfd - u_exp|"
+    variables:
+      - symbol: N
+        description: number of data points
+      - symbol: u_cfd
+        description: CFD computed value
+      - symbol: u_exp
+        description: experimental/benchmark value
+    error_type: absolute
+    usage: "误差统计"
+
+  - id: FORM-007
+    name: L2 范数（均方根误差 RMSE）
+    symbol: L2
+    definition: "L2 = sqrt((1/N) * Σ (u_cfd - u_exp)^2)"
+    error_type: rmse
+    usage: "误差统计"
+
+  - id: FORM-008
+    name: 相对误差
+    symbol: "ε_rel"
+    definition: |
+      当 |u_exp| >= 阈值（|u_exp| >= 0.01 * u_max）时：
+          ε_rel = |u_cfd - u_exp| / |u_exp| * 100%
+      当 |u_exp| < 阈值（|u_exp| < 0.01 * u_max）时：
+          退化为绝对误差，标注 "@ near-zero reference"
+    variables:
+      - symbol: u_max
+        description: maximum velocity in dataset
+      - symbol: threshold
+        description: 0.01 * u_max
+    special_handling: zero_reference
+    usage: "单点误差评估"
+
+  - id: FORM-009
+    name: GCI 网格收敛指数
+    symbol: GCI
+    definition: "GCI_{12} = |ε_{12}| / (r^p - 1) * 100%"
+    variables:
+      - symbol: "ε_{12}"
+        description: "(φ_2 - φ_1) / φ_1，网格2和网格1之间的解差异"
+      - symbol: r
+        description: "L_fine / L_coarse，网格尺寸比"
+      - symbol: p
+        description: "阶数（2阶格式通常取 p ≈ 2）"
+    threshold: 5  # GCI < 5% 表示网格无关
+    usage: "网格敏感性分析"
+
+  - id: FORM-010
+    name: 涡量
+    symbol: "ψ"
+    definition: "ψ = ∂v/∂x - ∂u/∂y (2D)"
+    usage: "涡量场描述，主涡心强度"

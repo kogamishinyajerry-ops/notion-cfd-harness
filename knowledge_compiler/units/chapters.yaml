@@ -1,0 +1,65 @@
+# Phase1 ReportSpec v1.1 — 章节结构单元
+version: v1.1
+unit_type: chapter_structure
+source_id: SPEC-001
+
+chapters:
+  - id: CH-001
+    name: Geometry
+    name_zh: 几何描述
+    required_fields:
+      - 几何尺寸（单位：m 或 mm，需明确）
+      - 坐标系定义（原点位置、轴方向）
+      - 边界条件类型（wall/inlet/outlet/symmetry）
+      - 关键几何特征标注
+    order: 1
+
+  - id: CH-002
+    name: Mesh
+    name_zh: 网格信息
+    required_fields:
+      - 网格生成工具和算法
+      - 网格级别定义（Coarse/Medium/Fine）
+      - 网格质量指标（element count, max skewness, max aspect ratio）
+      - 网格无关性验证结果（GCI 表）
+    order: 2
+
+  - id: CH-003
+    name: Solver Settings
+    name_zh: 求解器配置
+    required_fields:
+      - 求解器名称和版本
+      - 湍流模型
+      - 收敛准则（残差阈值、监控物理量）
+      - 时间步长设置（瞬态求解器）
+    order: 3
+
+  - id: CH-003-1
+    name: Boundary Conditions
+    name_zh: 边界条件
+    parent: CH-003
+    required_fields:
+      - 边界条件完整列表（每面的物理类型）
+      - 进口速度/压力/温度等参数值
+      - 出口边界条件设置
+      - 对称面/周期性边界说明
+    order: 3.1
+
+  - id: CH-004
+    name: Results
+    name_zh: 结果
+    required_fields:
+      - 关键监控物理量的收敛历史
+      - 速度/压力/温度等场可视化（云图、矢量图）
+      - 关键性能指标数值（升力/阻力/力矩等）
+    order: 4
+
+  - id: CH-005
+    name: Validation
+    name_zh: 验证
+    required_fields:
+      - 与实验数据或解析解的定量对比
+      - 误差指标计算（RMSE / L1 / L2）
+      - 关键数据点对照表
+      - 图表标准化渲染
+    order: 5

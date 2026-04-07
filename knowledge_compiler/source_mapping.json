@@ -1,0 +1,127 @@
+{
+  "source_mapping_version": "1.0",
+  "description": "Maps knowledge units to their source files and line ranges",
+  "unit_to_source": [
+    {
+      "unit_id": "CH-001",
+      "unit_name": "Geometry",
+      "source_file": "Phase1-ReportSpec-Candidate.md",
+      "source_line_range": [14, 19],
+      "version_tag": "SPEC-001-v1.1",
+      "content_hash": "sha256:see_git"
+    },
+    {
+      "unit_id": "CH-002",
+      "unit_name": "Mesh",
+      "source_file": "Phase1-ReportSpec-Candidate.md",
+      "source_line_range": [21, 29],
+      "version_tag": "SPEC-001-v1.1"
+    },
+    {
+      "unit_id": "CH-003",
+      "unit_name": "Solver Settings",
+      "source_file": "Phase1-ReportSpec-Candidate.md",
+      "source_line_range": [31, 34],
+      "version_tag": "SPEC-001-v1.1"
+    },
+    {
+      "unit_id": "CH-003-1",
+      "unit_name": "Boundary Conditions",
+      "source_file": "Phase1-ReportSpec-Candidate.md",
+      "source_line_range": [36, 41],
+      "version_tag": "SPEC-001-v1.1"
+    },
+    {
+      "unit_id": "CH-004",
+      "unit_name": "Results",
+      "source_file": "Phase1-ReportSpec-Candidate.md",
+      "source_line_range": [43, 46],
+      "version_tag": "SPEC-001-v1.1"
+    },
+    {
+      "unit_id": "CH-005",
+      "unit_name": "Validation",
+      "source_file": "Phase1-ReportSpec-Candidate.md",
+      "source_line_range": [48, 52],
+      "version_tag": "SPEC-001-v1.1"
+    },
+    {
+      "unit_id": "FORM-006",
+      "unit_name": "L1 范数",
+      "source_file": "Phase1-ReportSpec-Candidate.md",
+      "source_line_range": [65, 68],
+      "version_tag": "SPEC-001-v1.1"
+    },
+    {
+      "unit_id": "FORM-007",
+      "unit_name": "L2/RMSE 范数",
+      "source_file": "Phase1-ReportSpec-Candidate.md",
+      "source_line_range": [70, 73],
+      "version_tag": "SPEC-001-v1.1"
+    },
+    {
+      "unit_id": "FORM-008",
+      "unit_name": "相对误差",
+      "source_file": "Phase1-ReportSpec-Candidate.md",
+      "source_line_range": [75, 83],
+      "version_tag": "SPEC-001-v1.1"
+    },
+    {
+      "unit_id": "FORM-009",
+      "unit_name": "GCI",
+      "source_file": "Phase1/chart_standards.md",
+      "source_line_range": [77, 86],
+      "version_tag": "CHART-001-v1.0"
+    },
+    {
+      "unit_id": "CHART-001",
+      "unit_name": "Velocity Profile 规则",
+      "source_file": "Phase1/chart_standards.md",
+      "source_line_range": [8, 45],
+      "version_tag": "CHART-001-v1.0"
+    },
+    {
+      "unit_id": "CHART-002",
+      "unit_name": "Pressure Contour 规则",
+      "source_file": "Phase1/chart_standards.md",
+      "source_line_range": [48, 65],
+      "version_tag": "CHART-001-v1.0"
+    },
+    {
+      "unit_id": "CASE-001",
+      "unit_name": "Case1 Ghia1982 数据",
+      "source_file": "Phase1-ReportSpec-Candidate.md",
+      "source_line_range": [87, 112],
+      "version_tag": "SPEC-001-v1.1"
+    },
+    {
+      "unit_id": "CASE-002",
+      "unit_name": "Case2 NACA VAWT 数据",
+      "source_file": "Phase1-ReportSpec-Candidate.md",
+      "source_line_range": [115, 149],
+      "version_tag": "SPEC-001-v1.1"
+    },
+    {
+      "unit_id": "EVID-CHAIN-001",
+      "unit_name": "Lid Cavity 验证流程",
+      "source_file": "Phase1/procedure_evidence.md",
+      "source_line_range": [8, 48],
+      "version_tag": "EVID-001-v1.0"
+    },
+    {
+      "unit_id": "EVID-CHAIN-002",
+      "unit_name": "NACA VAWT 验证流程",
+      "source_file": "Phase1/procedure_evidence.md",
+      "source_line_range": [51, 113],
+      "version_tag": "EVID-001-v1.0"
+    }
+  ],
+  "version_tag_rules": {
+    "pattern": "{artifact_id}-v{version}",
+    "examples": [
+      "SPEC-001-v1.1",
+      "CHART-001-v1.0",
+      "EVID-001-v1.0"
+    ]
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0",
+  "layer": "Parsed",
+  "description": "Parsed layer — structured data extracted from Raw layer",
+  "fields": [
+    {
+      "field_id": "parsed_id",
+      "type": "string",
+      "description": "Unique identifier for parsed artifact",
+      "format": "PARSED-{parsed_at_timestamp}",
+      "required": true
+    },
+    {
+      "field_id": "raw_id",
+      "type": "string",
+      "description": "Reference to source raw artifact",
+      "required": true
+    },
+    {
+      "field_id": "structured_data",
+      "type": "object",
+      "description": "Structured data extracted from raw",
+      "required": true,
+      "properties": {
+        "unit_type": {
+          "type": "string",
+          "enum": ["chapter", "formula", "data_point", "chart_rule", "evidence"],
+          "required": true
+        },
+        "unit_id": {
+          "type": "string",
+          "description": "Extracted unit identifier",
+          "required": true
+        },
+        "content": {
+          "type": "object",
+          "description": "Unit-specific structured content"
+        }
+      }
+    },
+    {
+      "field_id": "parser_version",
+      "type": "string",
+      "description": "Parser version used",
+      "required": true
+    },
+    {
+      "field_id": "parsed_at",
+      "type": "string",
+      "format": "YYYY-MM-DDTHH:MM:SSZ",
+      "required": true
+    },
+    {
+      "field_id": "extraction_confidence",
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Confidence score of extraction quality"
+    },
+    {
+      "field_id": "extraction_warnings",
+      "type": "array[string]",
+      "description": "Warnings during extraction (e.g. missing fields, ambiguous content)"
+    },
+    {
+      "field_id": "parse_rule_version",
+      "type": "string",
+      "description": "Version of capture_parse_rules.md used",
+      "required": true
+    }
+  ],
+  "required_fields": ["parsed_id", "raw_id", "structured_data", "parser_version", "parsed_at", "parse_rule_version"]
+}

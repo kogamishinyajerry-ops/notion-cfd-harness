@@ -1,0 +1,91 @@
+{
+  "schema_version": "1.0",
+  "layer": "Executable",
+  "description": "Executable layer — runnable code derived from canonical knowledge",
+  "fields": [
+    {
+      "field_id": "executable_id",
+      "type": "string",
+      "description": "Unique identifier for executable asset",
+      "format": "EXEC-{asset_type}-{seq_num}",
+      "required": true
+    },
+    {
+      "field_id": "canonical_id",
+      "type": "string",
+      "description": "Reference to source canonical artifact",
+      "required": true
+    },
+    {
+      "field_id": "executable_code",
+      "type": "string",
+      "description": "Actual code content",
+      "required": true
+    },
+    {
+      "field_id": "language",
+      "type": "string",
+      "enum": ["python", "javascript", "bash", "yaml", "json"],
+      "required": true
+    },
+    {
+      "field_id": "asset_type",
+      "type": "string",
+      "enum": ["formula_validator", "chart_template", "bench_validator", "diff_engine"],
+      "required": true
+    },
+    {
+      "field_id": "test_cases",
+      "type": "array[object]",
+      "description": "Test cases for validation",
+      "items": {
+        "type": "object",
+        "properties": {
+          "test_id": {"type": "string"},
+          "input": {"type": "object"},
+          "expected_output": {"type": "object"},
+          "pass_criterion": {"type": "string"}
+        }
+      },
+      "required": true
+    },
+    {
+      "field_id": "dependencies",
+      "type": "array[string]",
+      "description": "Other executable_ids this depends on"
+    },
+    {
+      "field_id": "compiled_at",
+      "type": "string",
+      "format": "YYYY-MM-DDTHH:MM:SSZ",
+      "required": true
+    },
+    {
+      "field_id": "compile_rule_version",
+      "type": "string",
+      "description": "Version of compilation rules used"
+    },
+    {
+      "field_id": "benchmark_source",
+      "type": "string",
+      "description": "For bench_validators: source benchmark (e.g. Ghia1982)",
+      "required": false
+    },
+    {
+      "field_id": "pass_count",
+      "type": "integer",
+      "description": "Number of test cases passing",
+      "default": 0
+    },
+    {
+      "field_id": "total_count",
+      "type": "integer",
+      "description": "Total number of test cases",
+      "default": 0
+    }
+  ],
+  "required_fields": [
+    "executable_id", "canonical_id", "executable_code", "language",
+    "asset_type", "test_cases", "compiled_at"
+  ]
+}

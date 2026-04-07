@@ -1,0 +1,53 @@
+{
+  "manifest_version": "1.0",
+  "phase": "Phase1",
+  "generated_at": "2026-04-07",
+  "source_artifacts": [
+    {
+      "artifact_id": "SPEC-001",
+      "name": "Phase1-ReportSpec v1.1",
+      "file_path": "Phase1-ReportSpec-Candidate.md",
+      "version": "v1.1",
+      "sha256": "see git commit",
+      "content_summary": "CFD后处理报告规范：5章节结构(Geometry/Mesh/Solver/Results/Validation)，数据格式规范，误差计算公式，Case1/2关键数据",
+      "status": "Active",
+      "supersedes": "Phase1-ReportSpec-Candidate"
+    },
+    {
+      "artifact_id": "CHART-001",
+      "name": "CFD图表标准化规则",
+      "file_path": "Phase1/chart_standards.md",
+      "version": "v1.0",
+      "sha256": "see git commit",
+      "content_summary": "速度剖面图/压力云图/GCI图表渲染规范，标记样式枚举，零参考值处理规则，共用matplotlib模板",
+      "status": "Active"
+    },
+    {
+      "artifact_id": "EVID-001",
+      "name": "Procedure Evidence 证据片段",
+      "file_path": "Phase1/procedure_evidence.md",
+      "version": "v1.0",
+      "sha256": "see git commit",
+      "content_summary": "Case1 Ghia1982 Lid Cavity验证流程，Case2 NACA VAWT Thomas&Loutun2021验证流程，网格独立性数据",
+      "status": "Active"
+    }
+  ],
+  "dependencies": [
+    {
+      "from": "EVID-001",
+      "to": "SPEC-001",
+      "relation": "provides validation data for error formulas"
+    },
+    {
+      "from": "CHART-001",
+      "to": "SPEC-001",
+      "relation": "provides rendering rules for Results section"
+    }
+  ],
+  "knowledge_layers": {
+    "raw": ["原始markdown文件", "Phase1-ReportSpec-Candidate.md"],
+    "parsed": ["结构化章节/公式/数据点", "knowledge_compiler/units/"],
+    "canonical": ["符合ReportSpec v1.1格式", "knowledge_compiler/schema/"],
+    "executable": ["可执行验证函数", "knowledge_compiler/executables/"]
+  }
+}

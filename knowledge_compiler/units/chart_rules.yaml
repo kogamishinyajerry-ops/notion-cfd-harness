@@ -1,0 +1,91 @@
+# Phase1 ReportSpec v1.1 — 图表标准化规则单元
+version: v1.0
+unit_type: chart_rules
+source_id: CHART-001
+
+chart_types:
+  - type_id: CHART-001
+    name: Velocity Profile
+    name_zh: 速度剖面图
+    axes:
+      x: "u/u_ref (dimensionless velocity ratio) or v/v_ref"
+      y: "y/H (dimensionless vertical position) or x/H"
+    rendering:
+      experiment_marker: "circle, facecolors='none', edgecolors='blue'"
+      cfd_marker: "circle, facecolors='C0', edgecolors='C0'"
+      error_bars: "2σ or experimental uncertainty"
+      marker_size: "6-8pt diameter"
+    marker_style_enumeration:
+      # When reporting 3+ datasets, enforce these markers:
+      - marker: "o (hollow)"
+        data_type: "Experiment/Benchmark reference"
+        matplotlib: "marker='o', facecolors='none'"
+      - marker: "o (filled)"
+        data_type: "CFD computation result"
+        matplotlib: "marker='o', facecolors='C0'"
+      - marker: "^ (up triangle)"
+        data_type: "Grid convergence intermediate solution"
+        matplotlib: "marker='^'"
+      - marker: "v (down triangle)"
+        data_type: "Literature data comparison"
+        matplotlib: "marker='v'"
+      - marker: "s (square)"
+        data_type: "Other turbulence model comparison"
+        matplotlib: "marker='s'"
+      - marker: "D (diamond)"
+        data_type: "Grid sensitivity analysis"
+        matplotlib: "marker='D'"
+    zero_reference_handling:
+      condition: "|u_exp| < 0.01 * u_max"
+      action: "Switch to absolute error display"
+      annotation: '"@ near-zero reference (|u_exp| < 1%)"'
+      legend_separation: "Distinguish relative vs absolute error in legend"
+    labels:
+      x_label: "u/u_ref or v/v_ref"
+      y_label: "y/H or x/H"
+      legend_position: "lower right or right side"
+      font_size: "10-12pt Arial"
+
+  - type_id: CHART-002
+    name: Pressure Contour
+    name_zh: 压力云图
+    colormap:
+      default: "viridis (perceptually uniform, colorblind-friendly)"
+      alternative: "coolwarm (for positive/negative pressure regions)"
+    rendering:
+      contour_spacing: "arithmetic or logarithmic (choose based on data range)"
+      contour_labels: "Show values on contour lines"
+      colorbar: "REQUIRED — show physical quantity and unit"
+      colorbar_label: '"Pressure Coefficient Cp" or "Static Pressure [Pa]"'
+    grid_overlay:
+      mesh_lines: "gray, semi-transparent, line width 0.3-0.5pt"
+      boundary_lines: "black, line width 1.0pt"
+
+  - type_id: CHART-003
+    name: Grid Convergence Index (GCI)
+    name_zh: 网格收敛性
+    grid_levels:
+      coarse: "Base grid for initial calculation"
+      medium: "1.5-2x refinement of coarse"
+      fine: "1.5-2x refinement of medium (used for final report)"
+    gci_formula: "GCI_{12} = |ε_{12}| / (r^p - 1) * 100%"
+    table_format:
+      columns: ["Level", "h (mm)", "N (cells)", "Max Skewness", "φ (monitor)", "GCI %"]
+      level_defs:
+        coarse: "h1, N1, s1, φ1"
+        medium: "h2, N2, s2, φ2, GCI_{21}"
+        fine: "h3, N3, s3, φ3, GCI_{32}"
+    acceptance_criterion: "GCI_{32} < 5% → grid independent"
+
+matplotlib_template: |
+  plt.figure(figsize=(8, 6))
+  plt.scatter(y_H, u_uref_exp, marker='o', facecolors='none', edgecolors='blue', label='Experiment (Ghia1982)')
+  plt.scatter(y_H, u_uref_cfd, marker='o', facecolors='blue', edgecolors='blue', label='CFD (icoFoam)')
+  plt.errorbar(y_H, u_uref_cfd, yerr=error_bars, fmt='none', ecolor='gray', capsize=3)
+  plt.xlabel('y/H', fontsize=12)
+  plt.ylabel('u/u_ref', fontsize=12)
+  plt.legend(loc='lower right', fontsize=10)
+  plt.grid(True, alpha=0.3)
+  plt.title('Lid Cavity Centerline Velocity (Re=1000)', fontsize=12)
+  plt.tight_layout()
+  plt.savefig('velocity_profile.png', dpi=300)

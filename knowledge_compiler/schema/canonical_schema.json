@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "layer": "Canonical",
+  "description": "Canonical layer — normalized knowledge conforming to ReportSpec v1.1",
+  "fields": [
+    {
+      "field_id": "canonical_id",
+      "type": "string",
+      "description": "Unique identifier for canonical knowledge asset",
+      "format": "CANON-{unit_type}-{seq_num}",
+      "required": true
+    },
+    {
+      "field_id": "parsed_id",
+      "type": "string",
+      "description": "Reference to source parsed artifact",
+      "required": true
+    },
+    {
+      "field_id": "normalized_form",
+      "type": "object",
+      "description": "Normalized representation",
+      "required": true,
+      "properties": {
+        "unit_type": {
+          "type": "string",
+          "enum": ["chapter", "formula", "data_point", "chart_rule", "evidence"],
+          "required": true
+        },
+        "unit_id": {
+          "type": "string",
+          "required": true
+        },
+        "spec_version": {
+          "type": "string",
+          "const": "v1.1",
+          "required": true
+        },
+        "canonical_content": {
+          "type": "object",
+          "description": "Unit-type specific canonical fields"
+        }
+      }
+    },
+    {
+      "field_id": "spec_version",
+      "type": "string",
+      "const": "v1.1",
+      "required": true
+    },
+    {
+      "field_id": "unit_type",
+      "type": "string",
+      "enum": ["chapter", "formula", "data_point", "chart_rule", "evidence"],
+      "required": true
+    },
+    {
+      "field_id": "normalized_at",
+      "type": "string",
+      "format": "YYYY-MM-DDTHH:MM:SSZ",
+      "required": true
+    },
+    {
+      "field_id": "normalize_rule_version",
+      "type": "string",
+      "description": "Version of normalize_rules.md used",
+      "required": true
+    },
+    {
+      "field_id": "terminology_map",
+      "type": "object",
+      "description": "Alias to canonical term mappings applied",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    {
+      "field_id": "conflict_flags",
+      "type": "array[string]",
+      "description": "Any conflicts detected during normalization"
+    },
+    {
+      "field_id": "data_gaps",
+      "type": "array[string]",
+      "description": "Missing fields that were expected",
+      "example": ["CL/CD polar curves not available in Case2 PDF"]
+    }
+  ],
+  "required_fields": [
+    "canonical_id", "parsed_id", "normalized_form", "spec_version", "unit_type",
+    "normalized_at", "normalize_rule_version"
+  ]
+}
