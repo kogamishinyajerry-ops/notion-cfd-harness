@@ -8,6 +8,10 @@
   "artifacts_db": "33bc6894-2bed-81c0-983f-d5eb1f5b6f4c",
   "evidence_db": "33ac6894-2bed-8188-ba53-e80fb7920398",
   "ai_cfd_001_project_page": "33bc6894-2bed-819d-822a-c2144bb95e97",
+  "component_library_db": "33bc6894-2bed-8125-b843-e53df7e10af3",
+  "case_library_db": "33bc6894-2bed-8101-9b8d-e11220c8cfaa",
+  "baseline_library_db": "33bc6894-2bed-81aa-8355-e01028f12e1a",
+  "rule_library_db": "33bc6894-2bed-81f5-a389-dcea7c9b4f73",
   "p0_fixes": {
     "artifacts_linked_task": "✅ added",
     "artifacts_linked_phase": "✅ added",
