@@ -31,6 +31,20 @@ from knowledge_compiler.phase2c.benchmark_replay import (
     replay_correction_with_benchmark,
 )
 
+# Knowledge Compiler
+from knowledge_compiler.phase2c.knowledge_compiler import (
+    ExtendedKnowledgeLayer,
+    PatternKnowledge,
+    RuleKnowledge,
+    KnowledgeExtractor,
+    AnomalyPatternExtractor,
+    FixPatternExtractor,
+    KnowledgeValidator,
+    KnowledgeManager,
+    extract_and_validate_knowledge,
+    find_similar_corrections,
+)
+
 __all__ = [
     # Correction Recorder
     "CorrectionSeverity",
@@ -48,4 +62,15 @@ __all__ = [
     "BenchmarkSuite",
     "create_standard_benchmark_suite",
     "replay_correction_with_benchmark",
+    # Knowledge Compiler
+    "ExtendedKnowledgeLayer",
+    "PatternKnowledge",
+    "RuleKnowledge",
+    "KnowledgeExtractor",
+    "AnomalyPatternExtractor",
+    "FixPatternExtractor",
+    "KnowledgeValidator",
+    "KnowledgeManager",
+    "extract_and_validate_knowledge",
+    "find_similar_corrections",
 ]
