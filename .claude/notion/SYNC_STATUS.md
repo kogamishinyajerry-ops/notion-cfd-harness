@@ -84,7 +84,7 @@ python3 .claude/notion/sync.py create-task --task-id "TEST-001" --task-type "Tes
 | #70 | completed | 重构 Physics Planner 设计 ✅ |
 | #71 | pending | 更新 Phase 2 开发优先级 |
 | #81 | **completed** | **Phase 2c T1: Correction Recorder** ✅ 23/23 测试 (2026-04-08) |
-| #82 | pending | Phase 2c T2: Benchmark Replay Engine |
+| #82 | **completed** | **Phase 2c T2: Benchmark Replay Engine** ✅ 30/30 测试 (2026-04-08) |
 
 ---
 
