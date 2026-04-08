@@ -33,9 +33,10 @@ from knowledge_compiler.phase2.execution_layer.result_validator import (
 
 class PermissionLevel(Enum):
     """权限级别 - 控制自动化行为的安全性"""
-    SUGGEST_ONLY = "suggest_only"  # 仅建议，不修改参数
-    DRY_RUN = "dry_run"  # 演练模式，返回参数但不执行
-    EXECUTE = "execute"  # 完全执行自动化
+    SUGGEST_ONLY = "suggest_only"  # L0: 仅建议，不修改参数
+    DRY_RUN = "dry_run"  # L1: 演练模式，返回参数但不执行
+    EXECUTE = "execute"  # L2: 完全执行自动化
+    EXPLORE = "explore"  # L3: 允许低成本试探，禁止正式高成本执行
 
 
 class FailureAction(Enum):

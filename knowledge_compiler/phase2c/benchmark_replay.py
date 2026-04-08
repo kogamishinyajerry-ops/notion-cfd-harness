@@ -502,6 +502,114 @@ class BenchmarkReplayEngine:
         with open(output_path, "w") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
+    def replay_correction_incremental(
+        self,
+        correction: CorrectionRecord,
+        filter_tags: Optional[List[str]] = None,
+        filter_category: Optional[str] = None,
+        max_cases: int = 5,
+        simulate_execution: bool = True,
+    ) -> List[BenchmarkReplayResult]:
+        """增量回放：只重跑与当前修正相关的样板子集
+
+        根据 correction 的 error_type 和 impact_scope 筛选相关的 benchmark cases，
+        而非重跑全集。当样板集从 5 个增长到 50 个时，显著减少回归时间。
+
+        Args:
+            correction: 要回放的修正记录
+            filter_tags: 按标签过滤（可选）
+            filter_category: 按类别过滤（可选）
+            max_cases: 最大回放案例数（默认5）
+            simulate_execution: 是否模拟执行
+
+        Returns:
+            List[BenchmarkReplayResult]: 增量回放结果列表
+        """
+        # Step 1: 筛选相关案例
+        relevant_cases = self._filter_relevant_cases(
+            correction,
+            filter_tags=filter_tags,
+            filter_category=filter_category,
+        )
+
+        # Step 2: 限制数量
+        relevant_cases = relevant_cases[:max_cases]
+
+        # Step 3: 只回放筛选后的案例
+        results = []
+        for case in relevant_cases:
+            result = self.replay_correction(
+                correction,
+                case.case_id,
+                simulate_execution=simulate_execution,
+            )
+            results.append(result)
+
+        return results
+
+    def _filter_relevant_cases(
+        self,
+        correction: CorrectionRecord,
+        filter_tags: Optional[List[str]] = None,
+        filter_category: Optional[str] = None,
+    ) -> List[BenchmarkCase]:
+        """筛选与当前修正相关的样板案例
+
+        相关性匹配规则：
+        1. 类别匹配：benchmark.category 与 correction.error_type 对应
+        2. 标签匹配：benchmark.tags 包含 filter_tags 中的任一项
+        3. 优先级排序：匹配度高的排前面
+        """
+        all_cases = self.benchmark_suite.list_cases()
+        scored_cases = []
+
+        # error_type → category 映射
+        error_category_map = {
+            "missing_data": "validation",
+            "incorrect_data": "validation",
+            "wrong_plot": "visualization",
+            "misinterpretation": "visualization",
+            "wrong_formula": "numerical",
+            "wrong_boundary": "boundary",
+            "wrong_mesh": "mesh",
+            "convergence_failure": "numerical",
+            "nan_detected": "numerical",
+        }
+
+        target_category = filter_category or error_category_map.get(
+            correction.error_type.value if hasattr(correction.error_type, "value") else str(correction.error_type),
+            None,
+        )
+
+        # 类别过滤：当显式指定 filter_category 时，只保留匹配的案例
+        if filter_category:
+            filtered = [c for c in all_cases if c.category == filter_category]
+        else:
+            filtered = all_cases
+
+        for case in filtered:
+            score = 0
+
+            # 类别匹配（权重最高）
+            if target_category and case.category == target_category:
+                score += 10
+
+            # 标签匹配
+            if filter_tags:
+                case_tags = getattr(case, "tags", [])
+                matching_tags = set(filter_tags) & set(case_tags)
+                score += len(matching_tags) * 3
+
+            # 基础分（保证至少有案例可选）
+            score += 1
+
+            scored_cases.append((score, case))
+
+        # 按分数降序排序
+        scored_cases.sort(key=lambda x: x[0], reverse=True)
+
+        return [case for _, case in scored_cases]
+
 
 # ============================================================================
 # Convenience Functions

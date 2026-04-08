@@ -470,10 +470,9 @@ class PipelineOrchestrator:
                 # 更新上下文
                 self._update_context_from_stage(stage, result, input_data)
 
-            # 聚合结果
-            self._aggregate_results()
-
+            # 更新状态并聚合结果
             self.state = PipelineState.COMPLETED
+            self._aggregate_results()
             self.monitor.stop()
 
             return self._get_final_results()
