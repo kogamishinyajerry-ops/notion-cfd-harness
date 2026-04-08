@@ -56,6 +56,7 @@ from knowledge_compiler.phase2.execution_layer.result_validator import (
 
 # Failure Handler
 from knowledge_compiler.phase2.execution_layer.failure_handler import (
+    PermissionLevel,
     FailureAction,
     FailureCategory,
     FailureContext,
@@ -135,6 +136,7 @@ __all__ = [
     "validate_field_data",
     "validate_mesh_quality",
     # Failure Handler
+    "PermissionLevel",
     "FailureAction",
     "FailureCategory",
     "FailureContext",

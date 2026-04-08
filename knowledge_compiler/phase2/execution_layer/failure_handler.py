@@ -31,6 +31,13 @@ from knowledge_compiler.phase2.execution_layer.result_validator import (
 )
 
 
+class PermissionLevel(Enum):
+    """权限级别 - 控制自动化行为的安全性"""
+    SUGGEST_ONLY = "suggest_only"  # 仅建议，不修改参数
+    DRY_RUN = "dry_run"  # 演练模式，返回参数但不执行
+    EXECUTE = "execute"  # 完全执行自动化
+
+
 class FailureAction(Enum):
     """失败处理动作"""
     RETRY = "retry"  # 自动重试
@@ -265,9 +272,16 @@ class IncreaseIterationsStrategy(RetryStrategy):
 
 
 class RetryHandler:
-    """重试处理器"""
+    """重试处理器
 
-    def __init__(self):
+    支持权限级别控制自动化安全性：
+    - suggest_only: 仅返回建议，不修改参数
+    - dry_run: 返回完整参数但标记为演练
+    - execute: 完全执行自动化
+    """
+
+    def __init__(self, permission_level: PermissionLevel = PermissionLevel.DRY_RUN):
+        self.permission_level = permission_level
         self.strategies: List[RetryStrategy] = [
             ReduceTimeStepStrategy(),
             IncreaseIterationsStrategy(),
@@ -276,10 +290,27 @@ class RetryHandler:
     def get_retry_params(
         self, handling_result: FailureHandlingResult, context: FailureContext
     ) -> Dict[str, Any]:
-        """获取重试参数"""
+        """
+        获取重试参数
+
+        根据 permission_level 返回不同级别的内容：
+        - suggest_only: 仅返回建议描述
+        - dry_run: 返回完整参数但添加 _dry_run 标记
+        - execute: 返回可执行的完整参数
+        """
         # 先使用分析器生成的参数
         if handling_result.retry_with:
             strategy = handling_result.retry_with.get("strategy", "")
+            reason = handling_result.retry_with.get("reason", "")
+
+            # suggest_only 模式：仅返回建议
+            if self.permission_level == PermissionLevel.SUGGEST_ONLY:
+                return {
+                    "suggestion": reason,
+                    "strategy": strategy,
+                    "note": "SUGGEST_ONLY mode: No parameters modified",
+                }
+
             base_params = {"strategy": strategy}
 
             if strategy == "reduce_time_step":
@@ -298,12 +329,29 @@ class RetryHandler:
                     "relaxation_factor": 0.7 + 0.1 * context.attempt_count,
                 })
 
+            # dry_run 模式：添加标记
+            if self.permission_level == PermissionLevel.DRY_RUN:
+                base_params["_dry_run"] = True
+                base_params["_note"] = "DRY_RUN mode: Review before executing"
+
             return base_params
 
         # 尝试应用预定义策略
         for strategy in self.strategies:
             if strategy.can_apply(context):
-                return strategy.get_params(context)
+                params = strategy.get_params(context)
+
+                if self.permission_level == PermissionLevel.SUGGEST_ONLY:
+                    return {
+                        "suggestion": f"Apply {strategy.__class__.__name__}",
+                        "note": "SUGGEST_ONLY mode: No parameters modified",
+                    }
+
+                if self.permission_level == PermissionLevel.DRY_RUN:
+                    params["_dry_run"] = True
+                    params["_note"] = "DRY_RUN mode: Review before executing"
+
+                return params
 
         return {}
 
@@ -440,13 +488,15 @@ class FailureHandler:
         max_attempts: int = 3,
         enable_retry: bool = True,
         enable_correction: bool = True,
+        permission_level: PermissionLevel = PermissionLevel.DRY_RUN,
     ):
         self.max_attempts = max_attempts
         self.enable_retry = enable_retry
         self.enable_correction = enable_correction
+        self.permission_level = permission_level
 
         self.analyzer = FailureAnalyzer()
-        self.retry_handler = RetryHandler()
+        self.retry_handler = RetryHandler(permission_level=permission_level)
         self.gate_reporter = GateReporter()
         self.correction_generator = CorrectionSpecGenerator()
 

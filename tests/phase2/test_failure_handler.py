@@ -6,6 +6,7 @@ Tests for Failure Handler - 失败路径处理器
 import pytest
 
 from knowledge_compiler.phase2.execution_layer.failure_handler import (
+    PermissionLevel,
     FailureAction,
     FailureAnalyzer,
     FailureCategory,
@@ -248,6 +249,102 @@ class TestRetryHandler:
 
         assert params["strategy"] == "increase_iterations"
         assert params["max_iter"] >= 1000
+
+    def test_permission_level_suggest_only(self):
+        """测试 SUGGEST_ONLY 权限级别"""
+        retry_handler = RetryHandler(permission_level=PermissionLevel.SUGGEST_ONLY)
+
+        result = ValidationResult()
+        result.add_anomaly(Anomaly(
+            anomaly_type=AnomalyType.RESIDUAL_SPIKE,
+            severity="high",
+            message="残差突然增大"
+        ))
+
+        handling_result = FailureHandlingResult(
+            action=FailureAction.RETRY,
+            category=FailureCategory.RECOVERABLE,
+            retry_with={"strategy": "reduce_time_step", "reason": "残差突然增大，降低时间步长"}
+        )
+
+        context = FailureContext(validation_result=result)
+        params = retry_handler.get_retry_params(handling_result, context)
+
+        # SUGGEST_ONLY 模式应返回建议而非实际参数
+        assert "suggestion" in params
+        assert params["strategy"] == "reduce_time_step"
+        assert "note" in params
+        assert "SUGGEST_ONLY" in params["note"]
+
+    def test_permission_level_dry_run(self):
+        """测试 DRY_RUN 权限级别"""
+        retry_handler = RetryHandler(permission_level=PermissionLevel.DRY_RUN)
+
+        result = ValidationResult()
+        result.add_anomaly(Anomaly(
+            anomaly_type=AnomalyType.DIVERGENCE,
+            severity="high",
+            message="求解发散"
+        ))
+
+        handling_result = FailureHandlingResult(
+            action=FailureAction.RETRY,
+            category=FailureCategory.RECOVERABLE,
+            retry_with={"strategy": "increase_iterations"}
+        )
+
+        context = FailureContext(validation_result=result)
+        params = retry_handler.get_retry_params(handling_result, context)
+
+        # DRY_RUN 模式应返回参数但添加 _dry_run 标记
+        assert params["strategy"] == "increase_iterations"
+        assert params.get("_dry_run") is True
+        assert "_note" in params
+
+    def test_permission_level_execute(self):
+        """测试 EXECUTE 权限级别"""
+        retry_handler = RetryHandler(permission_level=PermissionLevel.EXECUTE)
+
+        result = ValidationResult()
+        result.add_anomaly(Anomaly(
+            anomaly_type=AnomalyType.RESIDUAL_SPIKE,
+            severity="high",
+            message="残差突然增大"
+        ))
+
+        handling_result = FailureHandlingResult(
+            action=FailureAction.RETRY,
+            category=FailureCategory.RECOVERABLE,
+            retry_with={"strategy": "reduce_time_step", "time_step_factor": 0.5}
+        )
+
+        context = FailureContext(validation_result=result)
+        params = retry_handler.get_retry_params(handling_result, context)
+
+        # EXECUTE 模式应返回完整参数，无 _dry_run 标记
+        assert params["strategy"] == "reduce_time_step"
+        assert params.get("_dry_run") is None
+        assert "delta_t" in params
+
+    def test_failure_handler_with_permission_level(self):
+        """测试 FailureHandler 传递 permission_level"""
+        handler = FailureHandler(permission_level=PermissionLevel.SUGGEST_ONLY)
+
+        result = ValidationResult()
+        result.add_anomaly(Anomaly(
+            anomaly_type=AnomalyType.RESIDUAL_SPIKE,
+            severity="high",
+            message="残差突然增大"
+        ))
+
+        context = FailureContext(validation_result=result)
+        handling_result = handler.handle(context)
+
+        assert handling_result.action == FailureAction.RETRY
+
+        # 获取重试参数应使用 SUGGEST_ONLY 模式
+        params = handler.get_retry_params(handling_result, context)
+        assert "suggestion" in params or "_note" in params
 
 
 class TestGateReporter:
