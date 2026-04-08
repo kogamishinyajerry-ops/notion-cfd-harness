@@ -27,6 +27,8 @@ from knowledge_compiler.performance.connection_pool import (
 )
 from knowledge_compiler.performance import PerformanceManager, create_performance_manager
 
+import pytest
+
 
 def run_async_test(coro):
     """Helper to run async tests without pytest-asyncio"""
@@ -68,6 +70,7 @@ class TestRateLimiter:
         # Should wait for token refill
         assert elapsed >= 0.01  # At least 10ms for 1 token at 100/sec
 
+    @pytest.mark.asyncio
     async def test_rate_limiter_acquire_async(self):
         """RateLimiter should acquire tokens asynchronously"""
         limiter = RateLimiter(rate=10.0, burst=5)
@@ -159,6 +162,7 @@ class TestNotionConnectionPool:
 
 
 class TestPerformanceManagerAsync:
+    @pytest.mark.asyncio
     async def test_performance_manager_has_connection_pool(self):
         """PerformanceManager should have connection pool when API key available"""
         # Skip if NOTION_API_KEY is set (real API)
@@ -184,6 +188,7 @@ class TestPerformanceManagerAsync:
 
         assert pm.connection_pool is None
 
+    @pytest.mark.asyncio
     async def test_get_cached_node_async(self):
         """PerformanceManager should get cached node asynchronously"""
         pm = PerformanceManager()
@@ -200,6 +205,7 @@ class TestPerformanceManagerAsync:
         assert result is not None
         assert result["unit_id"] == "FORM-009"
 
+    @pytest.mark.asyncio
     async def test_warm_up_cache_async(self):
         """PerformanceManager should warm up cache asynchronously"""
         pm = PerformanceManager()
@@ -219,6 +225,7 @@ class TestPerformanceManagerAsync:
         assert await pm.get_cached_node_async("FORM-010", "v1.0") is not None
         assert await pm.get_cached_node_async("FORM-011", "v1.0") is not None
 
+    @pytest.mark.asyncio
     async def test_fetch_multiple_concurrent(self):
         """PerformanceManager should fetch multiple nodes concurrently"""
         pm = PerformanceManager()
@@ -247,6 +254,7 @@ class TestPerformanceManagerAsync:
         # Should be fast (concurrent)
         assert elapsed < 0.1
 
+    @pytest.mark.asyncio
     async def test_get_version_chain_async(self):
         """PerformanceManager should get version chain asynchronously"""
         pm = PerformanceManager()
@@ -278,6 +286,7 @@ class TestPerformanceManagerAsync:
         chain = await pm.get_version_chain_async("FORM-009")
         assert len(chain) == 2
 
+    @pytest.mark.asyncio
     async def test_get_latest_version_async(self):
         """PerformanceManager should get latest version asynchronously"""
         pm = PerformanceManager()
@@ -310,6 +319,7 @@ class TestPerformanceManagerAsync:
         assert latest is not None
         assert latest["version"] == "v1.1"
 
+    @pytest.mark.asyncio
     async def test_async_context_manager(self):
         """PerformanceManager should work as async context manager"""
         async with PerformanceManager(
@@ -320,6 +330,7 @@ class TestPerformanceManagerAsync:
 
 
 class TestConcurrencyPerformance:
+    @pytest.mark.asyncio
     async def test_concurrent_fetch_multiple(self):
         """Test that concurrent fetches work correctly"""
         pm = PerformanceManager()
@@ -336,6 +347,7 @@ class TestConcurrencyPerformance:
         assert len(results) == 50
         assert all(r is not None for r in results)
 
+    @pytest.mark.asyncio
     async def test_100_qps_target(self):
         """Test that we can handle 100+ QPS"""
         pm = PerformanceManager()
@@ -359,6 +371,7 @@ class TestConcurrencyPerformance:
         # Should achieve >100 QPS for cached data
         assert qps > 100, f"QPS: {qps:.1f}, expected >100"
 
+    @pytest.mark.asyncio
     async def test_close_cleanup(self):
         """Close should cleanup resources"""
         pm = PerformanceManager(
@@ -380,6 +393,7 @@ class TestCreateFunctions:
         assert pm is not None
         assert pm.connection_pool is None
 
+    @pytest.mark.asyncio
     async def test_create_notion_pool(self):
         """create_notion_pool factory should work"""
         pool = await create_notion_pool(api_key="test_key")

@@ -76,7 +76,13 @@ class RateLimiter:
         self.burst = burst
         self.tokens = burst
         self.last_update = time.time()
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None
+
+    def _get_lock(self) -> asyncio.Lock:
+        """Lazily create asyncio.Lock to avoid requiring event loop at init time"""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     async def acquire(self, tokens: int = 1) -> None:
         """
@@ -85,7 +91,7 @@ class RateLimiter:
         Args:
             tokens: Number of tokens to acquire
         """
-        async with self._lock:
+        async with self._get_lock():
             now = time.time()
             elapsed = now - self.last_update
             # Refill tokens based on elapsed time
