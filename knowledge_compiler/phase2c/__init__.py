@@ -21,6 +21,16 @@ from knowledge_compiler.phase2c.correction_recorder import (
     record_from_failure,
 )
 
+# Benchmark Replay Engine
+from knowledge_compiler.phase2c.benchmark_replay import (
+    BenchmarkCase,
+    BenchmarkReplayResult,
+    BenchmarkReplayEngine,
+    BenchmarkSuite,
+    create_standard_benchmark_suite,
+    replay_correction_with_benchmark,
+)
+
 __all__ = [
     # Correction Recorder
     "CorrectionSeverity",
@@ -31,4 +41,11 @@ __all__ = [
     "ConstraintsChecker",
     "CorrectionRecorder",
     "record_from_failure",
+    # Benchmark Replay Engine
+    "BenchmarkCase",
+    "BenchmarkReplayResult",
+    "BenchmarkReplayEngine",
+    "BenchmarkSuite",
+    "create_standard_benchmark_suite",
+    "replay_correction_with_benchmark",
 ]
