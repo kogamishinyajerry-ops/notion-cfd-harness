@@ -699,6 +699,7 @@ class TrialEvaluator:
         "no_divergence": "发散检查：残差未上升",
         "within_budget": "预算检查：在预算内完成",
         "physical_plausibility": "物理合理性：结果量级合理",
+        "mock_data": "数据真实性：非 mock 数据（自动检测）",
     }
 
     def __init__(
@@ -706,10 +707,12 @@ class TrialEvaluator:
         gates: Optional[Dict[str, str]] = None,
         max_acceptable_deviation: float = 0.15,
         convergence_threshold: float = 0.01,
+        coarse_mesh_tolerance_factor: float = 3.0,
     ):
         self._gates = gates or self.DEFAULT_GATES
         self._max_deviation = max_acceptable_deviation
         self._convergence_threshold = convergence_threshold
+        self._coarse_tolerance_factor = coarse_mesh_tolerance_factor
 
     def evaluate(
         self,
@@ -737,6 +740,13 @@ class TrialEvaluator:
         # Gate 检查
         trial.gate_results = self._check_gates(trial)
 
+        # No Data Fabrication: mock 数据不可用于最终决策
+        if trial.output_data.get("is_mock"):
+            trial.gate_results["mock_data"] = False
+            trial.evaluation_notes.append(
+                "试探结果为 mock 数据，不可用于生产决策"
+            )
+
         # 偏差计算
         if expected:
             trial.deviation_from_expected = self._compute_deviation(
@@ -751,13 +761,14 @@ class TrialEvaluator:
             analogy_dev = self._compute_deviation(
                 trial.output_data, analogy_reference
             )
+            analogy_threshold = self._max_deviation * self._coarse_tolerance_factor
             trial.gate_results["analogy_deviation"] = (
-                analogy_dev <= self._max_deviation * 3  # 粗网格允许更宽松
+                analogy_dev <= analogy_threshold
             )
-            if analogy_dev > self._max_deviation * 3:
+            if analogy_dev > analogy_threshold:
                 trial.evaluation_notes.append(
                     f"类比偏差过大: {analogy_dev * 100:.1f}% "
-                    f"(阈值: {self._max_deviation * 300:.1f}%)"
+                    f"(阈值: {analogy_threshold * 100:.1f}%)"
                 )
 
         # 综合判断
@@ -1015,6 +1026,11 @@ class AnalogicalOrchestrator:
         orch = AnalogicalOrchestrator(store)
         spec = AnalogySpec(target_case_id="NEW-001", ...)
         result = orch.run(spec)
+
+    并发安全:
+    - 非线程安全：内部组件（SimilarityEngine, TrialRunner 等）均无锁
+    - 单次 run() 调用是同步的，不应并发调用同一实例
+    - 多线程场景应为每个线程创建独立的 Orchestrator 实例
     """
 
     def __init__(

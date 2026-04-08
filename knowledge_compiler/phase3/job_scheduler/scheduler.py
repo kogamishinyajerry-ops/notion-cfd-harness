@@ -48,6 +48,11 @@ class JobScheduler:
     2. CRITICAL > HIGH > MEDIUM > LOW
     3. 同优先级按提交顺序（FIFO）
     4. 受 max_concurrent 并发限制
+
+    并发安全:
+    - 非线程安全：内部使用 OrderedDict 和 list，无锁保护
+    - 单线程设计：适用于单进程 CFD 工作流编排
+    - 多线程场景需外部加锁或使用线程安全包装器
     """
 
     def __init__(self, max_concurrent: int = 2):

@@ -126,7 +126,12 @@ def _parse_stl_binary(data: bytes) -> Dict[str, Any]:
         vertices.extend([v1, v2, v3])
         offset += STL_TRIANGLE_SIZE
 
-    return {"facets": facets, "normals": normals, "vertices": vertices}
+    return {
+        "facets": facets,
+        "normals": normals,
+        "vertices": vertices,
+        "truncated": len(facets) < n_facets,
+    }
 
 
 # ============================================================================
@@ -185,7 +190,12 @@ def _compute_surface_area(facets: List[Tuple]) -> float:
 
 
 def _compute_volume(facets: List[Tuple]) -> float:
-    """计算封闭网格体积（散度定理）"""
+    """计算封闭网格体积（散度定理）
+
+    警告：此函数假设网格是封闭的（水密的）。
+    对非水密网格调用此函数会返回无意义的值。
+    调用方应先调用 _check_watertight() 确认水密性。
+    """
     total = 0.0
     for tri in facets:
         if len(tri) < 3:
@@ -363,6 +373,10 @@ class CADParser:
 
         repair_needed = []
         if not is_watertight:
+            logger.warning(
+                "网格非水密: volume=0.0 (散度定理仅对封闭网格有效), 问题: %s",
+                "; ".join(issues),
+            )
             repair_needed.extend(issues)
             repair_needed.append("建议: 执行表面封闭/缝合操作")
         if surface_area == 0.0:
