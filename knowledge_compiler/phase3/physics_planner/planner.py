@@ -4,6 +4,11 @@ Phase 3: Physics Planner
 
 基于几何特征和问题描述，自动规划物理模型、求解器选择和边界条件。
 
+复用策略:
+- 求解器选择: 委托 Phase 2 的 select_solver_by_matrix()
+- 收敛标准: 委托 Phase 2 的 get_default_convergence_criteria()
+- Phase 3 特有: 关键词分类、BC 模板、BC 矛盾检测、批量规划
+
 核心组件:
 - PhysicsPlanner: 物理规划器
 - BatchPhysicsPlanner: 批量规划器
@@ -13,12 +18,25 @@ Phase 3: Physics Planner
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any, Callable, Dict, List, Optional
 
+from knowledge_compiler.phase2.execution_layer.schema import (
+    select_solver_by_matrix as _p2_select_solver,
+    get_default_convergence_criteria as _p2_get_convergence,
+    SolverType as P2SolverType,
+    Compressibility as P2Compressibility,
+    TimeTreatment as P2TimeTreatment,
+    ProblemType as P2ProblemType,
+)
+from knowledge_compiler.phase3.adapter import (
+    compressibility_to_p2,
+    convergence_to_p3,
+    problem_type_to_p2,
+    solver_type_to_p3,
+    time_treatment_to_p2,
+)
 from knowledge_compiler.phase3.schema import (
     BoundaryCondition,
-    MeshFormat,
     PhysicsModel,
     PhysicsPlan,
     SolverType,
@@ -28,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# 规则定义
+# Phase 3 特有规则（Phase 2 没有的）
 # ============================================================================
 
 # 流动类型 → 默认湍流模型
@@ -36,32 +54,6 @@ _TURBULENCE_MODEL_MAP = {
     "turbulent": "kOmegaSST",
     "transitional": "kOmegaSST",
     "laminar": "none",
-}
-
-# 问题类型 → 求解器推荐
-_SOLVER_RECOMMENDATIONS = {
-    "internal_flow": {
-        "incompressible": ("simpleFoam", SolverType.OPENFOAM),
-        "compressible": ("rhoSimpleFoam", SolverType.OPENFOAM),
-        "transient": ("pimpleFoam", SolverType.OPENFOAM),
-    },
-    "external_flow": {
-        "incompressible": ("simpleFoam", SolverType.OPENFOAM),
-        "compressible": ("rhoSimpleFoam", SolverType.OPENFOAM),
-        "transient": ("pimpleFoam", SolverType.OPENFOAM),
-    },
-    "heat_transfer": {
-        "conjugate": ("chtMultiRegionFoam", SolverType.OPENFOAM),
-        "single_region": ("buoyantSimpleFoam", SolverType.OPENFOAM),
-    },
-    "multiphase": {
-        "voi": ("interFoam", SolverType.OPENFOAM),
-        "eulerian": ("multiphaseEulerFoam", SolverType.OPENFOAM),
-    },
-    "compressible": {
-        "steady": ("rhoSimpleFoam", SolverType.OPENFOAM),
-        "transient": ("rhoPimpleFoam", SolverType.OPENFOAM),
-    },
 }
 
 # 关键词 → 问题类型映射
@@ -88,15 +80,6 @@ _PROBLEM_TYPE_KEYWORDS = {
     ],
 }
 
-# 收敛标准默认值
-_DEFAULT_CONVERGENCE = {
-    "residual_u": 1e-5,
-    "residual_p": 1e-5,
-    "residual_k": 1e-5,
-    "residual_omega": 1e-5,
-    "residual_energy": 1e-6,
-}
-
 
 # ============================================================================
 # PhysicsPlanner: 主规划器
@@ -109,11 +92,11 @@ class PhysicsPlanner:
     推荐物理模型、求解器和边界条件。
 
     规划策略:
-    1. 分析问题描述 → 推断问题类型
-    2. 基于问题类型 → 选择求解器
-    3. 基于流动特征 → 选择湍流模型
-    4. 生成默认边界条件
-    5. 设置收敛标准
+    1. 分析问题描述 → 推断问题类型（Phase 3 特有）
+    2. 基于压缩性×时间 → 选择求解器（委托 Phase 2 矩阵）
+    3. 基于流动特征 → 选择湍流模型（Phase 3）
+    4. 生成默认边界条件（Phase 3 模板）
+    5. 设置收敛标准（委托 Phase 2 + Phase 3 能量扩展）
     """
 
     def __init__(
@@ -148,22 +131,24 @@ class PhysicsPlanner:
         Returns:
             PhysicsPlan 物理规划方案
         """
-        # 1. 推断问题类型
+        # 1. 推断问题类型（Phase 3 特有逻辑）
         problem_type = self._classify_problem(
             problem_description, geometry_features
         )
         logger.info("推断问题类型: %s", problem_type)
 
-        # 2. 推荐求解器
+        # 2. 推荐求解器（委托 Phase 2 二维决策矩阵）
         if custom_solver:
             solver_type = custom_solver
+            solver_name = custom_solver.value
         else:
-            solver_type = self._recommend_solver(
-                problem_type, compressibility, steady_state
+            p2_solver = _p2_select_solver(
+                compressibility=compressibility_to_p2(compressibility),
+                time_treatment=time_treatment_to_p2(steady_state),
+                is_multiphase=(problem_type == "multiphase"),
             )
-        solver_name = self._get_solver_name(
-            problem_type, compressibility, steady_state
-        )
+            solver_type = solver_type_to_p3(p2_solver)
+            solver_name = p2_solver.value
         logger.info("推荐求解器: %s (%s)", solver_name, solver_type.value)
 
         # 3. 选择湍流模型
@@ -179,15 +164,17 @@ class PhysicsPlanner:
             multiphase_model=problem_type == "multiphase",
         )
 
-        # 5. 生成边界条件
+        # 5. 生成边界条件（Phase 3 特有模板）
         boundary_conditions = self._generate_boundary_conditions(
             problem_type, geometry_features
         )
 
-        # 6. 设置收敛标准
-        convergence = dict(_DEFAULT_CONVERGENCE)
-        if not energy:
-            convergence.pop("residual_energy", None)
+        # 6. 设置收敛标准（委托 Phase 2 + Phase 3 能量扩展）
+        p2_problem_type = problem_type_to_p2(problem_type)
+        p2_criteria = _p2_get_convergence(p2_problem_type)
+        convergence = convergence_to_p3(p2_criteria)
+        if energy:
+            convergence["residual_energy"] = 1e-6
 
         # 7. 求解器设置
         solver_settings = self._generate_solver_settings(
@@ -213,7 +200,7 @@ class PhysicsPlanner:
         description: str,
         geometry_features: Optional[Dict[str, Any]],
     ) -> str:
-        """推断问题类型"""
+        """推断问题类型（Phase 3 特有：关键词+几何特征推断）"""
         if self._classifier:
             return self._classifier(description)
 
@@ -239,50 +226,12 @@ class PhysicsPlanner:
 
         return "internal_flow"  # 默认
 
-    def _recommend_solver(
-        self,
-        problem_type: str,
-        compressibility: str,
-        steady_state: bool,
-    ) -> SolverType:
-        """推荐求解器类型"""
-        type_map = _SOLVER_RECOMMENDATIONS.get(problem_type, {})
-
-        if compressibility == "compressible" and "compressible" in type_map:
-            return type_map["compressible"][1]
-
-        if not steady_state and "transient" in type_map:
-            return type_map["transient"][1]
-
-        key = compressibility if compressibility in type_map else "incompressible"
-        return type_map.get(key, ("simpleFoam", SolverType.OPENFOAM))[1]
-
-    def _get_solver_name(
-        self,
-        problem_type: str,
-        compressibility: str,
-        steady_state: bool,
-    ) -> str:
-        """获取求解器名称"""
-        type_map = _SOLVER_RECOMMENDATIONS.get(problem_type, {})
-
-        if not steady_state and "transient" in type_map:
-            return type_map["transient"][0]
-        if compressibility == "compressible" and "compressible" in type_map:
-            return type_map["compressible"][0]
-
-        key = compressibility if compressibility in type_map else "incompressible"
-        return type_map.get(key, ("simpleFoam", SolverType.OPENFOAM))[0]
-
     def _generate_boundary_conditions(
         self,
         problem_type: str,
         geometry_features: Optional[Dict[str, Any]],
     ) -> List[BoundaryCondition]:
-        """生成默认边界条件
-
-        基于问题类型生成典型边界条件模板。
-        """
+        """生成默认边界条件（Phase 3 特有模板）"""
         conditions = []
 
         if problem_type == "internal_flow":

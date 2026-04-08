@@ -4,8 +4,13 @@ Phase 3: CAD Parser
 
 解析 CAD 几何文件，提取特征，检测水密性，推荐修复方案。
 
+复用策略:
+- 文件解析: 委托 Phase 2 CADParser（STL/OBJ/STEP 读取）
+- 几何计算: 使用 Phase 3 实现（更精确的体积/水密性检测）
+- Phase 3 特有: mock 模式、自定义解析器、批量解析
+
 核心组件:
-- CADParser: 几何文件解析器
+- CADParser: 几何文件解析器（委托 Phase 2 + Phase 3 几何分析）
 - BatchCADParser: 批量解析器
 - 便捷函数: parse_geometry, create_parsed_geometry
 """
@@ -19,6 +24,10 @@ import struct
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from knowledge_compiler.phase3.adapter import (
+    bounding_box_to_p3,
+    p2_parsed_geometry_to_p3,
+)
 from knowledge_compiler.phase3.schema import (
     GeometryFeature,
     MeshFormat,
@@ -44,17 +53,7 @@ _VERTEX_MERGE_TOLERANCE = 1e-8
 # ============================================================================
 
 def detect_format(file_path: str) -> MeshFormat:
-    """根据文件扩展名和内容检测几何格式
-
-    Args:
-        file_path: 几何文件路径
-
-    Returns:
-        检测到的 MeshFormat
-
-    Raises:
-        ValueError: 不支持的格式
-    """
+    """根据文件扩展名检测几何格式"""
     ext = Path(file_path).suffix.lower()
     ext_map = {
         ".stl": MeshFormat.STL,
@@ -71,20 +70,15 @@ def detect_format(file_path: str) -> MeshFormat:
 
 
 # ============================================================================
-# STL 解析
+# STL 解析（Phase 3 实现，用于 mock 和自定义解析器场景）
 # ============================================================================
 
 def _parse_stl_ascii(content: str) -> Dict[str, Any]:
-    """解析 ASCII STL 文件
-
-    Returns:
-        包含 facets, normals, vertices 的字典
-    """
+    """解析 ASCII STL 文件"""
     facets = []
     normals = []
     vertices = []
 
-    # 提取所有 facet
     facet_pattern = re.compile(
         r"facet\s+normal\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s*"
         r"outer\s+loop\s*"
@@ -109,12 +103,7 @@ def _parse_stl_ascii(content: str) -> Dict[str, Any]:
 
 
 def _parse_stl_binary(data: bytes) -> Dict[str, Any]:
-    """解析二进制 STL 文件
-
-    Returns:
-        包含 facets, normals, vertices 的字典
-    """
-    # 跳过 header
+    """解析二进制 STL 文件"""
     if len(data) < STL_HEADER_SIZE + STL_TRIANGLE_COUNT_SIZE:
         return {"facets": [], "normals": [], "vertices": []}
 
@@ -140,79 +129,8 @@ def _parse_stl_binary(data: bytes) -> Dict[str, Any]:
     return {"facets": facets, "normals": normals, "vertices": vertices}
 
 
-def _parse_stl(file_path: str) -> Dict[str, Any]:
-    """解析 STL 文件（自动检测 ASCII/二进制）"""
-    with open(file_path, "rb") as f:
-        data = f.read()
-
-    # 检测是否为 ASCII STL
-    try:
-        content = data.decode("ascii")
-        if "facet" in content.lower() and "vertex" in content.lower():
-            return _parse_stl_ascii(content)
-    except UnicodeDecodeError:
-        pass
-
-    return _parse_stl_binary(data)
-
-
 # ============================================================================
-# OBJ 解析
-# ============================================================================
-
-def _parse_obj(file_path: str) -> Dict[str, Any]:
-    """解析 OBJ 文件
-
-    Returns:
-        包含 vertices, faces, normals 的字典
-    """
-    vertices = []
-    faces = []
-    normals = []
-    face_normals = []
-
-    with open(file_path, "r") as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith("v "):
-                parts = line.split()[1:4]
-                vertices.append(tuple(float(x) for x in parts))
-            elif line.startswith("vn "):
-                parts = line.split()[1:4]
-                normals.append(tuple(float(x) for x in parts))
-            elif line.startswith("f "):
-                # f v1/vt1/vn1 v2/vt2/vn2 ...
-                face_verts = []
-                face_n = []
-                for part in line.split()[1:]:
-                    indices = part.split("/")
-                    vi = int(indices[0]) - 1 if indices[0] else None
-                    if vi is not None:
-                        face_verts.append(vi)
-                    if len(indices) > 2 and indices[2]:
-                        face_n.append(int(indices[2]) - 1)
-                if face_verts:
-                    faces.append(face_verts)
-                if face_n:
-                    face_normals.append(face_n)
-
-    # 转换为三角面片
-    facets = []
-    for face in faces:
-        for i in range(1, len(face) - 1):
-            if face[0] < len(vertices) and face[i] < len(vertices) and face[i + 1] < len(vertices):
-                facets.append((vertices[face[0]], vertices[face[i]], vertices[face[i + 1]]))
-
-    return {
-        "facets": facets,
-        "vertices": vertices,
-        "faces": faces,
-        "normals": normals,
-    }
-
-
-# ============================================================================
-# 几何计算
+# 几何计算（Phase 3 精确实现）
 # ============================================================================
 
 def _compute_bounding_box(vertices: List[Tuple[float, ...]]) -> Optional[Dict[str, float]]:
@@ -267,16 +185,12 @@ def _compute_surface_area(facets: List[Tuple]) -> float:
 
 
 def _compute_volume(facets: List[Tuple]) -> float:
-    """计算封闭网格体积（散度定理）
-
-    仅当网格水密时结果有意义。
-    """
+    """计算封闭网格体积（散度定理）"""
     total = 0.0
     for tri in facets:
         if len(tri) < 3:
             continue
         v1, v2, v3 = tri[0], tri[1], tri[2]
-        # 有符号体积 = v1 · (v2 × v3) / 6
         cross = _cross(v2, v3)
         total += v1[0] * cross[0] + v1[1] * cross[1] + v1[2] * cross[2]
     return abs(total) / 6.0
@@ -288,15 +202,10 @@ def _quantize_vertex(v: Tuple[float, ...], tolerance: float = _VERTEX_MERGE_TOLE
 
 
 def _check_watertight(facets: List[Tuple]) -> Tuple[bool, List[str]]:
-    """检查网格水密性
-
-    简化检查：每条边应该恰好出现在 2 个面中。
-    使用浮点容差合并顶点，避免精度差异导致误判。
-    """
+    """检查网格水密性"""
     if not facets:
         return False, ["无面片数据"]
 
-    # 构建边 → 面计数（使用量化顶点做容差合并）
     edge_count: Dict[Tuple, int] = {}
     for tri in facets:
         if len(tri) < 3:
@@ -305,11 +214,9 @@ def _check_watertight(facets: List[Tuple]) -> Tuple[bool, List[str]]:
         for i in range(3):
             v_a = verts[i]
             v_b = verts[(i + 1) % 3]
-            # 归一化边（小端在前）
             edge = tuple(sorted([v_a, v_b]))
             edge_count[edge] = edge_count.get(edge, 0) + 1
 
-    # 检查非流形边
     boundary_edges = sum(1 for c in edge_count.values() if c != 2)
     non_manifold_edges = sum(1 for c in edge_count.values() if c > 2)
 
@@ -331,7 +238,6 @@ def _extract_features(
     """提取几何特征"""
     features = []
 
-    # 整体体积特征
     if facets:
         features.append(GeometryFeature(
             type="volume",
@@ -343,7 +249,6 @@ def _extract_features(
             },
         ))
 
-    # 边界盒特征
     if bbox:
         features.append(GeometryFeature(
             type="volume",
@@ -359,7 +264,6 @@ def _extract_features(
             },
         ))
 
-    # 面特征（按法向量聚类 — 简化：按主方向分组）
     if facets and len(facets) > 10:
         features.append(GeometryFeature(
             type="face",
@@ -374,14 +278,14 @@ def _extract_features(
 
 
 # ============================================================================
-# CADParser: 主解析器
+# CADParser: 主解析器（委托 Phase 2 + Phase 3 几何分析）
 # ============================================================================
 
 class CADParser:
     """CAD 几何文件解析器
 
-    支持 STL（ASCII/二进制）、OBJ 格式。
-    提取特征、计算几何属性、检测水密性。
+    文件读取委托 Phase 2 CADParser，
+    几何分析使用 Phase 3 精确实现（体积/水密性）。
     """
 
     def __init__(
@@ -391,6 +295,15 @@ class CADParser:
     ):
         self._mock_mode = mock_mode
         self._custom_parser = custom_parser
+        # 延迟导入 Phase 2 CADParser（仅在非 mock/非 custom 场景使用）
+        self._p2_parser = None
+
+    def _get_p2_parser(self):
+        """延迟初始化 Phase 2 CADParser"""
+        if self._p2_parser is None:
+            from knowledge_compiler.phase2.execution_layer.cad_parser import CADParser as P2CADParser
+            self._p2_parser = P2CADParser()
+        return self._p2_parser
 
     def parse(self, file_path: str, format: Optional[MeshFormat] = None) -> ParsedGeometry:
         """解析几何文件
@@ -401,41 +314,35 @@ class CADParser:
 
         Returns:
             ParsedGeometry 解析结果
-
-        Raises:
-            FileNotFoundError: 文件不存在
-            ValueError: 不支持的格式
         """
-        if not self._mock_mode and not os.path.exists(file_path):
-            raise FileNotFoundError(f"几何文件不存在: {file_path}")
-
         if format is None:
             format = detect_format(file_path)
 
-        # Mock 模式
+        # Mock 模式 — 使用 Phase 3 生成模拟数据
         if self._mock_mode:
             return self._mock_parse(file_path, format)
 
-        # 使用自定义解析器
+        # 自定义解析器 — 使用 Phase 3 处理
         if self._custom_parser:
-            raw = self._custom_parser(file_path)
-        else:
-            raw = self._parse_by_format(file_path, format)
+            return self._custom_parse(file_path, format)
 
+        # 标准模式 — 委托 Phase 2 进行文件解析
+        return self._delegate_to_p2(file_path)
+
+    def _delegate_to_p2(self, file_path: str) -> ParsedGeometry:
+        """委托 Phase 2 CADParser 解析文件"""
+        # Phase 2 不抛 FileNotFoundError，需要提前检查
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"几何文件不存在: {file_path}")
+
+        p2_parser = self._get_p2_parser()
+        p2_geom = p2_parser.parse(file_path, extract_features=True)
+        return p2_parsed_geometry_to_p3(p2_geom)
+
+    def _custom_parse(self, file_path: str, format: MeshFormat) -> ParsedGeometry:
+        """使用自定义解析器"""
+        raw = self._custom_parser(file_path)
         return self._build_geometry(file_path, format, raw)
-
-    def _parse_by_format(self, file_path: str, format: MeshFormat) -> Dict[str, Any]:
-        """按格式选择解析器"""
-        if format == MeshFormat.STL:
-            return _parse_stl(file_path)
-        elif format == MeshFormat.OBJ:
-            return _parse_obj(file_path)
-        elif format in (MeshFormat.STEP, MeshFormat.IGES):
-            # STEP/IGES 需要专业库（OpenCASCADE），提供桩实现
-            logger.warning("STEP/IGES 格式需要 OpenCASCADE 支持，返回基础信息")
-            return {"facets": [], "vertices": [], "normals": []}
-        else:
-            return {"facets": [], "vertices": [], "normals": []}
 
     def _build_geometry(
         self,
@@ -443,21 +350,17 @@ class CADParser:
         format: MeshFormat,
         raw: Dict[str, Any],
     ) -> ParsedGeometry:
-        """从原始数据构建 ParsedGeometry"""
+        """从原始数据构建 ParsedGeometry（Phase 3 精确几何分析）"""
         facets = raw.get("facets", [])
         vertices = raw.get("vertices", [])
 
-        # 去重顶点用于边界盒计算
         unique_verts = list(set(vertices)) if vertices else []
 
         bbox = _compute_bounding_box(unique_verts)
         surface_area = _compute_surface_area(facets)
         is_watertight, issues = _check_watertight(facets)
-
-        # 水密时才计算体积
         volume = _compute_volume(facets) if is_watertight else 0.0
 
-        # 修复建议
         repair_needed = []
         if not is_watertight:
             repair_needed.extend(issues)
@@ -465,7 +368,6 @@ class CADParser:
         if surface_area == 0.0:
             repair_needed.append("零表面积: 检查几何数据有效性")
 
-        # 提取特征
         features = _extract_features(facets, unique_verts, bbox)
 
         return ParsedGeometry(
@@ -481,20 +383,18 @@ class CADParser:
 
     def _mock_parse(self, file_path: str, format: MeshFormat) -> ParsedGeometry:
         """Mock 解析（测试用）"""
-        # 生成简单的立方体几何
-        s = 1.0  # 半边长
+        s = 1.0
         v = [
             (-s, -s, -s), (s, -s, -s), (s, s, -s), (-s, s, -s),
             (-s, -s, s), (s, -s, s), (s, s, s), (-s, s, s),
         ]
-        # 12 个三角面片（6 面 × 2 三角形）
         facets = [
-            (v[0], v[1], v[2]), (v[0], v[2], v[3]),  # 底面
-            (v[4], v[6], v[5]), (v[4], v[7], v[6]),  # 顶面
-            (v[0], v[4], v[5]), (v[0], v[5], v[1]),  # 前面
-            (v[2], v[6], v[7]), (v[2], v[7], v[3]),  # 后面
-            (v[0], v[3], v[7]), (v[0], v[7], v[4]),  # 左面
-            (v[1], v[5], v[6]), (v[1], v[6], v[2]),  # 右面
+            (v[0], v[1], v[2]), (v[0], v[2], v[3]),
+            (v[4], v[6], v[5]), (v[4], v[7], v[6]),
+            (v[0], v[4], v[5]), (v[0], v[5], v[1]),
+            (v[2], v[6], v[7]), (v[2], v[7], v[3]),
+            (v[0], v[3], v[7]), (v[0], v[7], v[4]),
+            (v[1], v[5], v[6]), (v[1], v[6], v[2]),
         ]
 
         bbox = _compute_bounding_box(v)
@@ -521,10 +421,7 @@ class CADParser:
 # ============================================================================
 
 class BatchCADParser:
-    """批量几何解析器
-
-    支持并行解析多个几何文件，汇总统计信息。
-    """
+    """批量几何解析器"""
 
     def __init__(self, mock_mode: bool = False):
         self._parser = CADParser(mock_mode=mock_mode)
@@ -534,15 +431,7 @@ class BatchCADParser:
         file_paths: List[str],
         formats: Optional[List[MeshFormat]] = None,
     ) -> List[ParsedGeometry]:
-        """批量解析几何文件
-
-        Args:
-            file_paths: 文件路径列表
-            formats: 对应格式列表（None=自动检测）
-
-        Returns:
-            解析结果列表
-        """
+        """批量解析几何文件"""
         results = []
         fmts = formats or [None] * len(file_paths)
 
@@ -561,14 +450,7 @@ class BatchCADParser:
         return results
 
     def get_summary(self, results: List[ParsedGeometry]) -> Dict[str, Any]:
-        """汇总统计
-
-        Args:
-            results: 解析结果列表
-
-        Returns:
-            统计信息
-        """
+        """汇总统计"""
         total = len(results)
         watertight = sum(1 for r in results if r.is_watertight)
         needs_repair = sum(1 for r in results if r.repair_needed)
