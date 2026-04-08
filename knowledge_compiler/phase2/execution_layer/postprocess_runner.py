@@ -52,7 +52,12 @@ class FieldType(Enum):
 
 @dataclass
 class FieldData:
-    """场数据"""
+    """场数据
+
+    支持稳态和瞬态数据:
+    - 稳态: time_steps 为空或只包含一个时间点
+    - 瞬态: time_steps 包含多个时间点，可按时间索引数据
+    """
     name: str  # 场名称 (p, U, T, etc.)
     field_type: FieldType
     dimensions: int  # 维度 (1=标量, 3=矢量, 9=张量)
@@ -61,8 +66,18 @@ class FieldData:
     max_value: Optional[float] = None
     mean_value: Optional[float] = None
     data_location: str = ""  # 数据位置 (文件路径或内存引用)
-    time_steps: List[float] = field(default_factory=list)  # 可用的时间步
+    time_steps: List[float] = field(default_factory=list)  # 可用的时间步 (瞬态支持)
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def is_transient(self) -> bool:
+        """检查是否为瞬态数据"""
+        return len(self.time_steps) > 1
+
+    @property
+    def n_time_steps(self) -> int:
+        """获取时间步数量"""
+        return len(self.time_steps)
 
 
 @dataclass
@@ -92,6 +107,11 @@ class StandardPostprocessResult:
 
     这是 Postprocess Runner 的标准输出，不依赖任何特定的可视化或 NL 接口。
     Adapter 层负责将此格式转换为其他系统需要的格式。
+
+    支持模式:
+    - 单案例稳态: case_path 为单个路径，fields 的 time_steps 为空或单点
+    - 单案例瞬态: case_path 为单个路径，fields 的 time_steps 包含多点
+    - 多案例对比: 使用 related_case_paths 引用相关案例
     """
     result_id: str = field(default_factory=lambda: f"PP-{time.time():.0f}")
     status: PostprocessStatus = PostprocessStatus.PENDING
@@ -103,7 +123,8 @@ class StandardPostprocessResult:
     derived_quantities: List[DerivedQuantity] = field(default_factory=list)  # 衍生量
 
     # 元数据
-    case_path: str = ""  # 算例路径
+    case_path: str = ""  # 算例路径 (主案例)
+    related_case_paths: List[str] = field(default_factory=list)  # 相关案例路径 (多案例对比)
     solver_type: str = ""  # 求解器类型
     solver_version: str = ""
     mesh_info: Dict[str, Any] = field(default_factory=dict)  # 网格信息
@@ -137,7 +158,24 @@ class StandardPostprocessResult:
             "converged": self.residuals.converged if self.residuals else False,
             "n_derivatives": len(self.derived_quantities),
             "processing_time": self.processing_time,
+            "is_multi_case": len(self.related_case_paths) > 0,
+            "is_transient": any(f.is_transient for f in self.fields),
         }
+
+    def add_related_case(self, case_path: str) -> None:
+        """添加相关案例（用于多案例对比）"""
+        if case_path not in self.related_case_paths:
+            self.related_case_paths.append(case_path)
+
+    @property
+    def is_multi_case(self) -> bool:
+        """检查是否为多案例对比"""
+        return len(self.related_case_paths) > 0
+
+    @property
+    def is_transient(self) -> bool:
+        """检查是否包含瞬态数据"""
+        return any(f.is_transient for f in self.fields)
 
 
 # ============================================================================

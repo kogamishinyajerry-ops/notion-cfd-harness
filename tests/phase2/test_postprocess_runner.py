@@ -453,6 +453,104 @@ class TestConvenienceFunctions:
 
 
 # ============================================================================
+# Test Multi-Case and Transient Support
+# ============================================================================
+
+class TestMultiCaseAndTransientSupport:
+    """测试多案例和瞬态数据支持"""
+
+    def test_field_data_transient_detection(self):
+        """测试场数据瞬态检测"""
+        # Steady field
+        steady_field = FieldData(
+            name="p",
+            field_type=FieldType.SCALAR,
+            dimensions=1,
+            time_steps=[],
+        )
+
+        assert steady_field.is_transient is False
+        assert steady_field.n_time_steps == 0
+
+        # Transient field
+        transient_field = FieldData(
+            name="p",
+            field_type=FieldType.SCALAR,
+            dimensions=1,
+            time_steps=[0.0, 0.1, 0.2, 0.3],
+        )
+
+        assert transient_field.is_transient is True
+        assert transient_field.n_time_steps == 4
+
+    def test_result_multi_case_support(self):
+        """测试结果多案例支持"""
+        result = StandardPostprocessResult()
+        result.case_path = "/cases/base"
+
+        # Initially single case
+        assert result.is_multi_case is False
+        assert len(result.related_case_paths) == 0
+
+        # Add related cases
+        result.add_related_case("/cases/variant1")
+        result.add_related_case("/cases/variant2")
+
+        assert result.is_multi_case is True
+        assert len(result.related_case_paths) == 2
+        assert "/cases/variant1" in result.related_case_paths
+        assert "/cases/variant2" in result.related_case_paths
+
+        # Adding duplicate should be ignored
+        result.add_related_case("/cases/variant1")
+        assert len(result.related_case_paths) == 2
+
+    def test_result_transient_detection(self):
+        """测试结果瞬态检测"""
+        # All steady fields
+        steady_result = StandardPostprocessResult()
+        steady_result.fields = [
+            FieldData(name="p", field_type=FieldType.SCALAR, dimensions=1),
+            FieldData(name="U", field_type=FieldType.VECTOR, dimensions=3),
+        ]
+
+        assert steady_result.is_transient is False
+
+        # Has transient field
+        transient_result = StandardPostprocessResult()
+        transient_result.fields = [
+            FieldData(name="p", field_type=FieldType.SCALAR, dimensions=1),
+            FieldData(
+                name="U",
+                field_type=FieldType.VECTOR,
+                dimensions=3,
+                time_steps=[0.0, 0.1, 0.2],
+            ),
+        ]
+
+        assert transient_result.is_transient is True
+
+    def test_summary_includes_multi_case_and_transient(self):
+        """测试摘要包含多案例和瞬态信息"""
+        result = StandardPostprocessResult()
+        result.case_path = "/cases/base"
+        result.add_related_case("/cases/variant1")
+        result.fields = [
+            FieldData(
+                name="U",
+                field_type=FieldType.VECTOR,
+                dimensions=3,
+                time_steps=[0.0, 0.1, 0.2],
+            ),
+        ]
+
+        summary = result.get_summary()
+
+        assert summary["is_multi_case"] is True
+        assert summary["is_transient"] is True
+
+
+# ============================================================================
 # Test Data Flow (End-to-End)
 # ============================================================================
 
