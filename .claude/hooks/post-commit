@@ -5,8 +5,8 @@
 # 获取最后的 commit 消息
 COMMIT_MSG=$(git log -1 --format=%B)
 
-# 解析任务 ID
-TASK_ID=$(echo "$COMMIT_MSG" | grep -oE "#[A-Z]+-[0-9]+" | head -1 | sed 's/#//')
+# 解析任务 ID (支持 P2-79, TASK-123 等格式)
+TASK_ID=$(echo "$COMMIT_MSG" | grep -oE "#[A-Z0-9]+-[0-9]+" | head -1 | sed 's/#//')
 
 if [ -n "$TASK_ID" ]; then
     echo "🔄 Syncing commit to Notion task $TASK_ID..."

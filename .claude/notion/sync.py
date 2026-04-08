@@ -115,9 +115,16 @@ class NotionAPI:
         )
 
     def get_select_options(self, database_id: str, property_name: str) -> List[str]:
-        """获取 select 属性的选项"""
+        """获取 select 或 status 属性的选项"""
         db_info = self._request("GET", f"/databases/{database_id}")
         prop = db_info.get("properties", {}).get(property_name, {})
+
+        # Handle status type
+        if prop.get("type") == "status":
+            status_info = prop.get("status", {})
+            return [opt.get("name", "") for opt in status_info.get("options", [])]
+
+        # Handle select type
         select_info = prop.get("select", {})
         return [opt.get("name", "") for opt in select_info.get("options", [])]
 
@@ -139,38 +146,33 @@ class TaskSync:
         linked_project: str = "",
     ) -> Dict:
         """创建任务"""
+        # Task Name + Task Status (required field)
+        # 使用属性名称而非 ID，更稳定可靠
         properties = {
-            self.field_map.get("id", "Task ID"): {
-                "title": [{"text": {"content": task_id}}]
-            },
-            self.field_map.get("status", "Task Status"): {
-                "select": {"name": "Todo"}
-            },
-            self.field_map.get("type", "Task Type"): {
-                "select": {"name": task_type}
-            },
-            self.field_map.get("priority", "Priority"): {
-                "select": {"name": priority}
-            },
+            "Task Name": {"title": [{"text": {"content": task_id}}]},
+            "Task Status": {"status": {"name": "Queued"}},
         }
 
         if linked_phase:
-            properties[self.field_map.get("linked_phase", "Linked Phase")] = {
-                "rich_text": [{"text": {"content": linked_phase}}]
+            properties["Linked Phase"] = {
+                "relation": [{"id": linked_phase}] if linked_phase else []
             }
 
         if linked_project:
-            properties[self.field_map.get("linked_project", "Linked Project")] = {
-                "rich_text": [{"text": {"content": linked_project}}]
+            properties["Linked Project"] = {
+                "relation": [{"id": linked_project}] if linked_project else []
             }
 
         return self.api.create_page(self.config.tasks_db_id, properties)
 
     def update_task_status(self, page_id: str, status: str) -> Dict:
-        """更新任务状态"""
+        """更新任务状态
+
+        注意: status 类型使用 "status" 键而非 "select" 键
+        """
         return self.api.update_page(
             page_id,
-            {self.field_map.get("status", "Task Status"): {"select": {"name": status}}},
+            {"Task Status": {"status": {"name": status}}},
         )
 
     def update_task_branch(self, page_id: str, branch: str) -> Dict:
@@ -178,7 +180,7 @@ class TaskSync:
         return self.api.update_page(
             page_id,
             {
-                self.field_map.get("git_branch", "Git Branch"): {
+                "Git Branch": {
                     "rich_text": [{"text": {"content": branch}}]
                 }
             },
@@ -188,15 +190,19 @@ class TaskSync:
         """更新 PR 链接"""
         return self.api.update_page(
             page_id,
-            {self.field_map.get("pr_link", "PR Link"): {"url": pr_url}},
+            {"PR Link": {"url": pr_url}},
         )
 
     def find_task_by_id(self, task_id: str) -> Optional[Dict]:
-        """根据 Task ID 查找任务"""
+        """根据 Task ID 查找任务
+
+        使用 Task Name (title) 字段搜索，因为 Task ID 是 unique_id 类型
+        不支持字符串过滤。
+        """
         results = self.api.query_database(
             self.config.tasks_db_id,
             filter={
-                "property": self.field_map.get("id", "Task ID"),
+                "property": "Task Name",
                 "title": {"equals": task_id},
             },
         )
@@ -205,7 +211,7 @@ class TaskSync:
     def get_available_statuses(self) -> List[str]:
         """获取可用的任务状态"""
         return self.api.get_select_options(
-            self.config.tasks_db_id, self.field_map.get("status", "Task Status")
+            self.config.tasks_db_id, "Task Status"
         )
 
 
@@ -312,8 +318,8 @@ def get_commit_message() -> str:
 
 def parse_task_from_commit(msg: str) -> Optional[str]:
     """从 commit 消息解析任务 ID"""
-    # 支持 #TASK-123 或 TASK-123: 或 [TASK-123] 格式
-    match = re.search(r"#?([A-Z]+-\d+)", msg)
+    # 支持 #P2-79, #TASK-123, TASK-123: 或 [TASK-123] 格式
+    match = re.search(r"#?([A-Z0-9]+-\d+)", msg)
     return match.group(1) if match else None
 
 
@@ -388,7 +394,7 @@ def check_review_status(pr_number: int) -> str:
 
     # 检查是否有审查评论
     result = subprocess.run(
-        ["gh", "pr", "checks", str(pr_number), "--json", "name,conclusion" -q "."],
+        ["gh", "pr", "checks", str(pr_number), "--json", "name,conclusion", "-q", "."],
         capture_output=True,
         text=True,
     )
@@ -509,13 +515,15 @@ def main():
             if task_id:
                 task = task_sync.find_task_by_id(task_id)
                 if task:
-                    # 推断状态
-                    if any(w in msg.lower() for w in ["complete", "finish", "done", "fix"]):
-                        status = "Done"
-                    elif any(w in msg.lower() for w in ["start", "begin", "wip"]):
-                        status = "In Progress"
+                    # 推断状态 (映射到有效的 Task Status 选项)
+                    if any(w in msg.lower() for w in ["complete", "finish", "done", "fix", "success"]):
+                        status = "Succeeded"
+                    elif any(w in msg.lower() for w in ["start", "begin", "wip", "progress"]):
+                        status = "Running"
+                    elif any(w in msg.lower() for w in ["fail", "error", "bug"]):
+                        status = "Failed"
                     else:
-                        status = "Todo"
+                        status = "Queued"
 
                     task_sync.update_task_status(task["id"], status)
                     print(f"✓ 已同步任务 {task_id} 状态为 {status}")
@@ -594,8 +602,8 @@ def main():
                 if task:
                     # 更新 PR 链接
                     task_sync.update_task_pr(task["id"], pr_info["url"])
-                    # 更新状态为 In Review
-                    task_sync.update_task_status(task["id"], "In Review")
+                    # 更新状态为 Running (因为 PR 已创建表示任务正在执行)
+                    task_sync.update_task_status(task["id"], "Running")
                     print(f"✓ 已同步 PR #{pr_number} 到任务 {task_id}")
                     print(f"  PR URL: {pr_info['url']}")
                 else:

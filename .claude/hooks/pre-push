@@ -21,7 +21,7 @@ echo "✓ All tests passed"
 
 # 2. 检查是否有相关联的 Notion 任务
 COMMIT_MSG=$(git log -1 --format=%B)
-TASK_ID=$(echo "$COMMIT_MSG" | grep -oE "#[A-Z]+-[0-9]+" | head -1 | sed 's/#//')
+TASK_ID=$(echo "$COMMIT_MSG" | grep -oE "#[A-Z0-9]+-[0-9]+" | head -1 | sed 's/#//')
 
 if [ -n "$TASK_ID" ]; then
     echo "📋 Associated task: $TASK_ID"
