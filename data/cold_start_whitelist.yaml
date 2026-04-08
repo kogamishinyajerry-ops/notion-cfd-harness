@@ -1,0 +1,553 @@
+whitelist_name: ai_cfd_cold_start_official_tutorial_whitelist
+version: v1
+selection_rules:
+  goal: Seed an AI-CFD agent with official, reproducible, low-ambiguity tutorials before moving to papers and community cases.
+  preferred_order:
+    - core_seed
+    - bridge
+    - breadth
+  mesh_strategy_legend:
+    A: ready_mesh_provided
+    B: mesh_or_regions_built_from_case_scripts_or_geometry
+cases:
+  - id: OF-01
+    rank: 1
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: lid_driven_cavity
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressible/icoFoam/cavity/cavity"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleFluid/cavity"
+      tutorial_page: "https://www.openfoam.com/documentation/tutorial-guide/2-incompressible-flow/2.1-lid-driven-cavity-flow"
+    source_provenance: Official OpenFOAM tutorial guide with explicit 2D cavity workflow.
+    verification_basis: official_tutorial_page
+    mesh_strategy: B
+    mesh_details: Uses case-provided blockMeshDict; generate a single-cell-thick 2D mesh with empty front/back boundaries.
+    solver_command: "blockMesh && icoFoam"
+    success_criteria: blockMesh writes constant/polyMesh; icoFoam advances without FATAL ERROR and writes nonzero time folders containing U and p.
+    why_whitelisted: Best first OpenFOAM seed; tiny geometry, explicit boundaries, ideal for AI parsing of fields and dictionaries.
+
+  - id: OF-02
+    rank: 2
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: backward_facing_step_steady
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleFluid/pitzDailySteady"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleFluid/pitzDailySteady"
+      tutorial_page: "https://doc.cfd.direct/openfoam/user-guide-v13/backwardstep"
+    source_provenance: Official OpenFOAM user guide backward-facing-step tutorial.
+    verification_basis: official_user_guide
+    mesh_strategy: B
+    mesh_details: Case provides blockMeshDict and 2D setup via empty boundaries; mesh generated before solve.
+    solver_command: "blockMesh && foamRun"
+    success_criteria: Case runs to completion and writes result times; post-process speed magnitude successfully with foamPostProcess -func 'mag(U)'.
+    why_whitelisted: Canonical internal laminar benchmark; teaches inlet profile, reattachment, and validation-oriented setup.
+
+  - id: OF-03
+    rank: 6
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic_to_intermediate
+    case_name: cylinder_crossflow
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleFluid/cylinder"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleFluid/cylinder"
+    source_provenance: Official OpenFOAM-13 tutorial case directory and README.
+    verification_basis: official_repo_case_dir
+    mesh_strategy: B
+    mesh_details: Case directory contains 0/ constant/ system/ plus Allrun; parameterized blockMeshDict scales the domain and mesh with cylinder diameter.
+    solver_command: "./Allrun"
+    success_criteria: Allrun completes and writes log files without FOAM FATAL ERROR; resulting field shows cylinder wake / pressure gradient around obstacle.
+    why_whitelisted: Good bridge from cavity/step to external bluff-body flow; README also explains how to increase Re and switch to transient/turbulent modes.
+
+  - id: OF-04
+    rank: 9
+    platform: OpenFOAM
+    tier: bridge
+    dimension: 2D
+    difficulty: basic_to_intermediate
+    case_name: dam_break_laminar_vof
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleVoF/damBreakLaminar"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleVoF/damBreakLaminar"
+    source_provenance: Official OpenFOAM-13 VOF tutorial case directory.
+    verification_basis: official_repo_case_dir
+    mesh_strategy: B
+    mesh_details: Case directory contains 0/ constant/ system/ and Allrun; mesh and phase setup come from case dictionaries.
+    solver_command: "./Allrun"
+    success_criteria: Allrun finishes and writes time-resolved alpha/velocity fields; free-surface front visibly propagates as a gravity-driven collapse.
+    why_whitelisted: Introduces VOF, free-surface transport, and transient workflows without complex geometry.
+
+  - id: OF-05
+    rank: 15
+    platform: OpenFOAM
+    tier: bridge
+    dimension: 2D
+    difficulty: intermediate
+    case_name: cooling_cylinder_2d_cht
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/multiRegion/CHT/coolingCylinder2D"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/multiRegion/CHT/coolingCylinder2D"
+    source_provenance: Official OpenFOAM-13 multiRegion/CHT tutorial case directory.
+    verification_basis: official_repo_case_dir
+    mesh_strategy: B
+    mesh_details: Case directory provides region dictionaries and Allrun; mesh/regions are prepared from the case scripts.
+    solver_command: "./Allrun"
+    success_criteria: Allrun completes multi-region solve and writes fluid/solid temperature fields; solid-to-fluid cooling pattern is visible in output regions.
+    why_whitelisted: First compact CHT seed; useful for teaching AI how OpenFOAM splits regions and couples fluid/solid energy equations.
+
+  - id: OF-06
+    rank: 22
+    platform: OpenFOAM
+    tier: breadth
+    dimension: 2D_or_quasi_2D
+    difficulty: intermediate
+    case_name: heated_duct_cht
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/multiRegion/CHT/heatedDuct"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/multiRegion/CHT/heatedDuct"
+    source_provenance: Official OpenFOAM-13 multiRegion/CHT tutorial case directory.
+    verification_basis: official_repo_case_dir
+    mesh_strategy: B
+    mesh_details: Case directory contains 0/ constant/ system/ Allclean and Allrun; mesh and region execution are controlled by case scripts.
+    solver_command: "./Allrun"
+    success_criteria: Allrun completes without FOAM FATAL ERROR and writes coupled flow/thermal fields for duct and heated walls.
+    why_whitelisted: Adds channel-heat-transfer topology after simpler CHT seeds and broadens the thermal training set.
+
+  - id: SU2-01
+    rank: 3
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: inviscid_bump_in_channel
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/compressible_flow/Inviscid_Bump"
+      tutorial_page: "https://su2code.github.io/tutorials/Inviscid_Bump/"
+    source_provenance: Official SU2 tutorial page and official Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided mesh_channel_256x128.su2 and inv_channel.cfg; no mesh generation required.
+    solver_command: "SU2_CFD inv_channel.cfg"
+    success_criteria: Solver reaches configured convergence and writes output files; pressure/Mach field shows the expected channel-bump acceleration pattern.
+    why_whitelisted: Excellent first SU2 case; 2D, tiny, explicit markers, and very clean internal-flow boundary-condition semantics.
+
+  - id: SU2-02
+    rank: 4
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: inviscid_supersonic_wedge
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/compressible_flow/Inviscid_Wedge"
+      tutorial_page: "https://su2code.github.io/tutorials/Inviscid_Wedge/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided mesh_wedge_inv.cgns and inv_wedge_HLLC.cfg; requires SU2 build with CGNS support.
+    solver_command: "SU2_CFD inv_wedge_HLLC.cfg"
+    success_criteria: Solver converges and the solution shows a clean oblique shock attached to the wedge.
+    why_whitelisted: High-value compressible seed; introduces CGNS, supersonic BCs, and analytically interpretable shock structure.
+
+  - id: SU2-03
+    rank: 5
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: laminar_flat_plate_compressible
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/compressible_flow/Laminar_Flat_Plate"
+      tutorial_page: "https://su2code.github.io/tutorials/Laminar_Flat_Plate/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided lam_flatplate.cfg and mesh_flatplate_65x65.su2.
+    solver_command: "SU2_CFD lam_flatplate.cfg"
+    success_criteria: Solver converges; exported solution shows a boundary layer that compares qualitatively with Blasius behavior.
+    why_whitelisted: Classic boundary-layer seed with analytic reference behavior and simple far-field/wall semantics.
+
+  - id: SU2-04
+    rank: 7
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: laminar_cylinder_compressible
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/compressible_flow/Laminar_Cylinder"
+      tutorial_page: "https://su2code.github.io/tutorials/Laminar_Cylinder/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided lam_cylinder.cfg and mesh_cylinder_lam.su2.
+    solver_command: "SU2_CFD lam_cylinder.cfg"
+    success_criteria: Solver converges and produces the expected attached/near-wake flow for low-Re cylinder crossflow.
+    why_whitelisted: Simple bluff-body external flow seed with clear marker names and force outputs.
+
+  - id: SU2-05
+    rank: 8
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: inviscid_hydrofoil_incompressible
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Inviscid_Hydrofoil"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Inviscid_Hydrofoil/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided inv_naca0012.cfg and mesh_NACA0012_5deg_6814.su2.
+    solver_command: "SU2_CFD inv_naca0012.cfg"
+    success_criteria: Solver converges and writes visualization files; velocity/pressure fields around the hydrofoil are physically plausible.
+    why_whitelisted: First incompressible SU2 seed with an airfoil-like geometry but still very lightweight.
+
+  - id: SU2-06
+    rank: 10
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: laminar_flat_plate_incompressible_heat_transfer
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Laminar_Flat_Plate"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Laminar_Flat_Plate/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided lam_flatplate.cfg and mesh_flatplate_65x65.su2.
+    solver_command: "SU2_CFD lam_flatplate.cfg"
+    success_criteria: Solver converges and outputs both flow and thermal fields; velocity profile and wall heat-transfer trend are reasonable.
+    why_whitelisted: Strong bridge from pure flow to energy equation without changing geometry complexity.
+
+  - id: SU2-07
+    rank: 11
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: laminar_backward_facing_step_incompressible
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Laminar_Step"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Laminar_Step/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided lam_backwardstep.cfg and mesh_backward_step_481x65.su2.
+    solver_command: "SU2_CFD lam_backwardstep.cfg"
+    success_criteria: Solver converges and shows a separated recirculation bubble behind the step.
+    why_whitelisted: One of the best internal-flow validation seeds; also teaches file-driven inlet profile handling.
+
+  - id: SU2-08
+    rank: 12
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: laminar_buoyancy_driven_cavity
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Laminar_Cavity"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Laminar_Cavity/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided lam_buoyancy_cavity.cfg and mesh_cavity_257x257.su2.
+    solver_command: "SU2_CFD lam_buoyancy_cavity.cfg"
+    success_criteria: Solver converges and the cavity develops the expected natural-convection circulation between hot/cold walls.
+    why_whitelisted: Compact natural-convection seed with explicit heat and buoyancy coupling.
+
+  - id: SU2-09
+    rank: 13
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: turbulent_flat_plate_incompressible
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Turbulent_Flat_Plate"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Turbulent_Flat_Plate/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided turb_flatplate.cfg and mesh_flatplate_turb_545x385.su2.
+    solver_command: "SU2_CFD turb_flatplate.cfg"
+    success_criteria: Solver converges; wall-bounded turbulent profile and skin-friction trend are reasonable.
+    why_whitelisted: Best first RANS seed in the incompressible branch.
+
+  - id: SU2-10
+    rank: 14
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: intermediate
+    case_name: unsteady_von_karman_vortex_shedding
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Von_Karman"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Von_Karman/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided unsteady_incomp_cylinder.cfg, cylinder_wake.su2, and cylinder_wake.geo.
+    solver_command: "SU2_CFD unsteady_incomp_cylinder.cfg"
+    success_criteria: Unsteady run progresses stably and shows periodic wake shedding behind the cylinder.
+    why_whitelisted: Best first unsteady incompressible seed; introduces timestep control and spectral thinking.
+
+  - id: SU2-11
+    rank: 16
+    platform: SU2
+    tier: bridge
+    dimension: 2D
+    difficulty: basic_to_intermediate
+    case_name: turbulent_naca0012_incompressible
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Turbulent_NACA0012"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Turbulent_NACA0012/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided turb_naca0012.cfg and n0012_897-257.su2.
+    solver_command: "SU2_CFD turb_naca0012.cfg"
+    success_criteria: Solver converges and produces plausible Cp/Cf behavior for the NACA0012 tutorial conditions.
+    why_whitelisted: Adds external RANS airfoil behavior after flat-plate basics.
+
+  - id: SU2-12
+    rank: 17
+    platform: SU2
+    tier: bridge
+    dimension: 2D
+    difficulty: intermediate
+    case_name: species_transport_venturi_mixer
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Species_Transport"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Species_Transport/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided species3_primitiveVenturi.cfg, primitiveVenturi.su2, and primitiveVenturi.geo.
+    solver_command: "SU2_CFD species3_primitiveVenturi.cfg"
+    success_criteria: Flow and species residuals converge; scalar fields show physically plausible mixing from the two inlets.
+    why_whitelisted: Compact scalar-transport seed; useful for extending AI beyond momentum-only cases.
+
+  - id: SU2-13
+    rank: 18
+    platform: SU2
+    tier: bridge
+    dimension: 3D
+    difficulty: intermediate
+    case_name: species_transport_composition_dependent_kenics
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Species_Transport_Composition_Dependent_Model"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Species_Transport_Composition_Dependent_Model/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided kenics_mixer_tutorial.cfg, kenics.su2, and kenics_mixer_tutorial.geo.
+    solver_command: "SU2_CFD kenics_mixer_tutorial.cfg"
+    success_criteria: Solver converges and mixture/species fields show progressive mixing through the Kenics elements.
+    why_whitelisted: Good 3D scalar/mixture breadth case after the 2D venturi species seed.
+
+  - id: SU2-14
+    rank: 19
+    platform: SU2
+    tier: bridge
+    dimension: 2D
+    difficulty: intermediate
+    case_name: streamwise_periodic_pin_fin_unit_cell
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Streamwise_Periodic"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Streamwise_Periodic/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Tutorial folder contains the mesh file, two configuration files, and a gmsh script.
+    solver_command: "SU2_CFD sp_pinArray_2d_dp_hf_tp.cfg"
+    success_criteria: Periodic run converges and reproduces a physically consistent pressure-drop / periodic-cell solution.
+    why_whitelisted: Teaches periodic BC semantics, which are common in heat-exchanger and repeated-cell CFD.
+
+  - id: SU2-15
+    rank: 20
+    platform: SU2
+    tier: bridge
+    dimension: 3D
+    difficulty: intermediate
+    case_name: turbulent_bend_with_wall_functions
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Turbulent_Bend_Wallfunctions"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Turbulent_Bend/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided sudo.cfg, sudo_coarse.su2, and sudo_coarse.geo.
+    solver_command: "mpirun -n 4 SU2_CFD sudo.cfg"
+    success_criteria: Run converges in the expected iteration range and post-processing shows plausible velocity distribution through the bend.
+    why_whitelisted: Introduces wall functions, curved internal geometry, and recommended MPI workflow.
+
+  - id: SU2-16
+    rank: 21
+    platform: SU2
+    tier: bridge
+    dimension: 2D
+    difficulty: basic_to_intermediate
+    case_name: turbulent_flat_plate_compressible
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/compressible_flow/Turbulent_Flat_Plate"
+      tutorial_page: "https://su2code.github.io/tutorials/Turbulent_Flat_Plate/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided turb_SA_flatplate.cfg and flat-plate tutorial meshes.
+    solver_command: "SU2_CFD turb_SA_flatplate.cfg"
+    success_criteria: Solver converges and produces a reasonable compressible turbulent boundary layer on the plate.
+    why_whitelisted: Useful branch point for compressible RANS after incompressible RANS is learned.
+
+  - id: SU2-17
+    rank: 23
+    platform: SU2
+    tier: breadth
+    dimension: 2D
+    difficulty: intermediate
+    case_name: transitional_flat_plate
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/compressible_flow/Transitional_Flat_Plate"
+      tutorial_page: "https://su2code.github.io/tutorials/Transitional_Flat_Plate/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided transitional_BC_model_ConfigFile.cfg and grid.su2.
+    solver_command: "SU2_CFD transitional_BC_model_ConfigFile.cfg"
+    success_criteria: Solver converges and the skin-friction distribution exhibits a laminar-to-turbulent transition trend.
+    why_whitelisted: Adds transition modeling without introducing geometric complexity.
+
+  - id: SU2-18
+    rank: 24
+    platform: SU2
+    tier: breadth
+    dimension: 2D
+    difficulty: intermediate
+    case_name: unsteady_naca0012_urans
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/compressible_flow/Unsteady_NACA0012"
+      tutorial_page: "https://su2code.github.io/tutorials/Unsteady_NACA0012/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided unsteady_naca0012.cfg, unsteady_naca0012_mesh.su2, and restart files.
+    solver_command: "SU2_CFD unsteady_naca0012.cfg"
+    success_criteria: Unsteady run advances stably and the flow reaches a repeatable periodic state around the airfoil.
+    why_whitelisted: Adds URANS, dual time stepping, and periodic-flow convergence criteria.
+
+  - id: SU2-19
+    rank: 25
+    platform: SU2
+    tier: breadth
+    dimension: 3D
+    difficulty: intermediate
+    case_name: turbulent_onera_m6
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/compressible_flow/Turbulent_ONERAM6"
+      tutorial_page: "https://su2code.github.io/tutorials/Turbulent_ONERAM6/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided turb_ONERAM6.cfg and mesh_ONERAM6_turb_hexa_43008.su2.
+    solver_command: "SU2_CFD turb_ONERAM6.cfg"
+    success_criteria: Run converges and produces plausible pressure distribution on the wing with usable force outputs.
+    why_whitelisted: First compact 3D aerodynamic RANS seed.
+
+  - id: SU2-20
+    rank: 26
+    platform: SU2
+    tier: breadth
+    dimension: 3D
+    difficulty: intermediate
+    case_name: actuator_disk_variable_load
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/compressible_flow/ActuatorDisk_VariableLoad"
+      tutorial_page: "https://su2code.github.io/tutorials/ActuatorDisk_VariableLoad/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided propeller_variable_load.cfg, propeller_variable_load.su2, and ActuatorDisk.dat.
+    solver_command: "SU2_CFD propeller_variable_load.cfg"
+    success_criteria: Solver converges and shows the expected pressure jump / swirl behavior across the actuator disk.
+    why_whitelisted: Efficient propulsor surrogate seed without requiring full rotating-blade meshing.
+
+  - id: SU2-21
+    rank: 27
+    platform: SU2
+    tier: breadth
+    dimension: 2D_multizone
+    difficulty: advanced
+    case_name: static_conjugate_heat_transfer_three_cylinders
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/multiphysics/steady_cht"
+      tutorial_page: "https://su2code.github.io/tutorials/Static_CHT/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided flow/solid config files, master config cht_2d_3cylinders.cfg, and mesh_cht_3cyl_ffd.su2.
+    solver_command: "SU2_CFD cht_2d_3cylinders.cfg"
+    success_criteria: Multizone solve converges and writes coupled fluid/solid thermal fields for all cylinders.
+    why_whitelisted: Best first SU2 CHT seed; compact but teaches multizone orchestration clearly.
+
+  - id: SU2-22
+    rank: 28
+    platform: SU2
+    tier: breadth
+    dimension: 2D
+    difficulty: advanced
+    case_name: radiative_heat_transfer_buoyancy_cavity
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/multiphysics/radiation"
+      tutorial_page: "https://su2code.github.io/tutorials/Basic_RHT/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided config_radiation.cfg and cavity mesh file; no mesh generation required.
+    solver_command: "SU2_CFD config_radiation.cfg"
+    success_criteria: Flow, temperature, and radiation-energy residuals all drop and the cavity reaches a coupled radiative-convective solution.
+    why_whitelisted: Adds radiation to an already simple cavity geometry, ideal for controlled multiphysics expansion.
+
+  - id: SU2-23
+    rank: 29
+    platform: SU2
+    tier: breadth
+    dimension: 2D_multizone
+    difficulty: advanced
+    case_name: unsteady_conjugate_heat_transfer
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/Inc_Heated_Cylinders_Unsteady"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Heated_Cylinders_Unsteady/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: A
+    mesh_details: Provided flow/solid config files, master config cht_2d_3cylinders.cfg, and mesh_cht_3cyl.su2.
+    solver_command: "SU2_CFD cht_2d_3cylinders.cfg"
+    success_criteria: Time-domain multizone run advances stably across many time steps and produces evolving coupled temperature/flow fields.
+    why_whitelisted: Natural next step after steady CHT; teaches time-marching and outer/inner iteration logic.
+
+  - id: SU2-24
+    rank: 30
+    platform: SU2
+    tier: breadth
+    dimension: multizone
+    difficulty: advanced
+    case_name: solid_to_solid_cht_with_contact_resistance
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/multiphysics/contact_resistance_cht"
+      tutorial_page: "https://su2code.github.io/tutorials/SS_CR_CHT/"
+    source_provenance: Official SU2 tutorial page and Tutorials repository.
+    verification_basis: official_tutorial_page
+    mesh_strategy: B
+    mesh_details: Tutorial provides fluid.cfg, solid_1.cfg, solid_2.cfg, master.cfg, and Gmsh .geo files to generate the meshes.
+    solver_command: "SU2_CFD master.cfg"
+    success_criteria: Multizone run converges and produces consistent fluid/solid temperatures with nonzero contact-resistance effect across interfaces.
+    why_whitelisted: Good late-stage breadth case for interface resistance and mesh-from-geometry workflows.
