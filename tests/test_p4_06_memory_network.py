@@ -35,6 +35,15 @@ from knowledge_compiler.memory_network import (
 KNOWLEDGE_COMPILER_PATH = REPO_ROOT / "knowledge_compiler"
 
 
+def _can_import(module_name: str) -> bool:
+    """Check if a module can be imported"""
+    try:
+        __import__(module_name)
+        return True
+    except ImportError:
+        return False
+
+
 def make_formula_change(
     new_value: str = "GCI_12 = abs(e_12) / (r^p - 1) * 100%",
     code_mappings=None,
@@ -118,6 +127,10 @@ class TestChangeLifecycle:
         assert decision.status == GovernanceDecision.REJECTED
         assert any("Placeholder" in reason for reason in decision.reasons)
 
+    @pytest.mark.skipif(
+        not _can_import("matplotlib"),
+        reason="matplotlib not installed in this environment",
+    )
     def test_register_change_runs_full_lifecycle_and_updates_state(self, network):
         result = network.register_change(
             "FORM-009",

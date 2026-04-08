@@ -29,6 +29,15 @@ from knowledge_compiler.memory_network import (
 KNOWLEDGE_COMPILER_PATH = Path(__file__).parent.parent / "knowledge_compiler"
 
 
+def _can_import(module_name: str) -> bool:
+    """Check if a module can be imported"""
+    try:
+        __import__(module_name)
+        return True
+    except ImportError:
+        return False
+
+
 def make_canonical_formula_unit():
     """Return a canonical unit that satisfies all governance checks."""
     return {
@@ -243,6 +252,10 @@ class TestGovernanceChecks:
         assert result.passed is False
         assert any("GCI formula" in failure for failure in result.failed_checks)
 
+    @pytest.mark.skipif(
+        not _can_import("matplotlib"),
+        reason="matplotlib not installed in this environment",
+    )
     def test_check_executable_validation_runs_project_suite(self):
         engine = GovernanceEngine(base_path=KNOWLEDGE_COMPILER_PATH)
 

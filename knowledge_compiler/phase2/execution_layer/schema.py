@@ -410,8 +410,6 @@ def is_converged(
     Returns:
         (是否收敛, 状态消息)
     """
-    import numpy as np
-
     for c in criteria:
         if c.name not in history or len(history[c.name]) < c.window:
             return False, f"{c.name}: insufficient data (need {c.window} steps)"
@@ -425,7 +423,7 @@ def is_converged(
         elif c.comparison == "stable_within":
             if len(values) < 2:
                 continue
-            mean_val = np.mean(values)
+            mean_val = sum(values) / len(values)
             if mean_val == 0:
                 # 避免除零
                 variation = (max(values) - min(values)) / (max(abs(v) for v in values) or 1)
