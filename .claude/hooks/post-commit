@@ -1,0 +1,22 @@
+#!/bin/bash
+# .claude/hooks/post-commit
+# Git post-commit hook - 提交后同步到 Notion
+
+# 获取最后的 commit 消息
+COMMIT_MSG=$(git log -1 --format=%B)
+
+# 解析任务 ID
+TASK_ID=$(echo "$COMMIT_MSG" | grep -oE "#[A-Z]+-[0-9]+" | head -1 | sed 's/#//')
+
+if [ -n "$TASK_ID" ]; then
+    echo "🔄 Syncing commit to Notion task $TASK_ID..."
+
+    # 同步 commit
+    python3 .claude/notion/sync.py sync-commit 2>/dev/null
+
+    # 获取当前分支
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    python3 .claude/notion/sync.py sync-branch 2>/dev/null
+fi
+
+exit 0

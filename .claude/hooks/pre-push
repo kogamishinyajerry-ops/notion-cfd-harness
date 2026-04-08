@@ -1,0 +1,46 @@
+#!/bin/bash
+# .claude/hooks/pre-push
+# Git pre-push hook - 推送前检查
+
+echo "🔍 Running pre-push checks..."
+
+# 1. 运行测试
+echo "🧪 Running tests..."
+pytest tests/ -q --tb=no --maxfail=10
+TEST_RESULT=$?
+
+if [ $TEST_RESULT -ne 0 ]; then
+    echo ""
+    echo "❌ Tests failed!"
+    echo "   Fix failing tests before pushing, or use --no-verify to bypass."
+    echo ""
+    exit 1
+fi
+
+echo "✓ All tests passed"
+
+# 2. 检查是否有相关联的 Notion 任务
+COMMIT_MSG=$(git log -1 --format=%B)
+TASK_ID=$(echo "$COMMIT_MSG" | grep -oE "#[A-Z]+-[0-9]+" | head -1 | sed 's/#//')
+
+if [ -n "$TASK_ID" ]; then
+    echo "📋 Associated task: $TASK_ID"
+
+    # 检查任务是否在 Notion 中存在
+    TASK_EXISTS=$(python3 .claude/notion/sync.py check-task --task-id "$TASK_ID" 2>/dev/null)
+
+    if [ "$TASK_EXISTS" = "false" ]; then
+        echo "⚠️  Task $TASK_ID not found in Notion"
+        echo "   Create it with: python3 .claude/notion/sync.py create-task --task-id $TASK_ID"
+    fi
+fi
+
+# 3. 检查分支名称规范
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [[ ! "$BRANCH" =~ ^(feature/|bugfix/|hotfix/) ]]; then
+    echo "⚠️  Branch name doesn't follow convention (feature/, bugfix/, hotfix/)"
+    echo "   Current branch: $BRANCH"
+fi
+
+echo "✓ Pre-push checks completed"
+exit 0
