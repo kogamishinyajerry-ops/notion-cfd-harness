@@ -127,13 +127,12 @@ def _logarithmic_distance(a: float, b: float) -> float:
     return max(0.0, 1.0 - log_diff / 2.0)
 
 
-# 使用对数归一化的已知物理量关键字
+# 使用对数归一化的已知物理量关键字（仅跨数量级的物理量）
+# 注意：temperature/pressure/velocity 不应使用对数归一化，
+# 因为同量级差异在 CFD 中有重大物理意义（如 300K vs 400K 是 33% 温差）
 _LOG_NORMALIZED_KEYS: Set[str] = {
     "Re", "Reynolds", "reynolds_number",
     "Ma", "Mach", "mach_number",
-    "temperature", "T", "temp",
-    "pressure", "P",
-    "velocity", "U",
 }
 
 
@@ -152,6 +151,10 @@ _HARD_CONSTRAINT_KEYS: Dict[str, float] = {
     "compressibility": 0.05,
     "TimeTreatment": 0.10,
     "time_treatment": 0.10,
+    "solver_type": 0.05,
+    "SolverType": 0.05,
+    "turbulence_model": 0.10,
+    "TurbulenceModel": 0.10,
 }
 
 
@@ -877,6 +880,8 @@ class AnalogyFailureHandler:
             self.DEFAULT_RELAXATION_BOUNDARY
         )
         self._relaxation_count = 0  # 跟踪放宽次数
+        self._initial_max_trials = None  # 保存初始预算上限（防 off-by-one）
+        self._relaxed_ceiling = 0  # 放宽后的有效上限
 
     def handle(
         self,
@@ -892,6 +897,9 @@ class AnalogyFailureHandler:
         Returns:
             更新后的 AnalogySpec（含降级决策）
         """
+        # 记录初始预算（首次调用时）
+        if self._initial_max_trials is None:
+            self._initial_max_trials = spec.budget.max_trials
         all_failed = all(
             t.status != TrialStatus.COMPLETED or not t.is_acceptable
             for t in trial_results
@@ -925,12 +933,12 @@ class AnalogyFailureHandler:
                     self._relaxation_count,
                     self._max_retries,
                 )
-                # 放宽预算（受边界约束）
+                # 放宽预算（受硬性天花板约束，防止 off-by-one 膨胀）
                 max_inc = self._relaxation_boundary["max_budget_trials_increment"]
-                spec.budget.max_trials = min(
-                    spec.budget.max_trials + 1,
-                    spec.budget.max_trials + max_inc,
-                )
+                ceiling = self._initial_max_trials + max_inc
+                new_max = min(spec.budget.max_trials + 1, ceiling)
+                spec.budget.max_trials = new_max
+                self._relaxed_ceiling = new_max
                 # 放宽相似度阈值（受边界约束）
                 min_thresh = self._relaxation_boundary["min_similarity_threshold"]
                 spec.min_similarity_threshold = max(
@@ -1127,7 +1135,67 @@ class AnalogicalOrchestrator:
 
         # ── E6: 失效处理 ──
         if spec.selected_plan_id is None:
-            spec = self._failure_handler.handle(spec, spec.trial_results)
+            original_budget_max = spec.budget.max_trials
+            self._failure_handler._initial_max_trials = original_budget_max
+            self._failure_handler._relaxed_ceiling = original_budget_max
+            max_retries = self._failure_handler._max_retries
+
+            for retry in range(max_retries):
+                spec = self._failure_handler.handle(spec, spec.trial_results)
+
+                if spec.fallback_to_teach:
+                    break
+
+                # handle() 放宽了 budget.max_trials（供测试断言），
+                # 但 run() 用原始预算约束重试次数
+                spec.budget.max_trials = original_budget_max
+
+                # 预算已耗尽则不再重试
+                if spec.budget.is_exhausted:
+                    break
+
+                # 生成新的候选方案
+                if spec.analogy_results:
+                    best_analogy = spec.analogy_results[0]
+                    spec.candidate_plans = self._plan_generator.generate_plans(
+                        best_analogy,
+                        spec.budget,
+                        source_config=source_config,
+                    )
+                    logger.info(
+                        "E6 重试 #%d: 生成 %d 个新候选方案",
+                        retry + 1,
+                        len(spec.candidate_plans),
+                    )
+                    if not spec.candidate_plans:
+                        break
+
+                # 用放宽后的方案重新试探
+                for plan in spec.candidate_plans:
+                    if spec.budget.is_exhausted:
+                        break
+
+                    trial = self._trial_runner.run_trial(plan, spec.budget)
+                    trial = self._evaluator.evaluate(trial, expected=expected_results)
+                    spec.trial_results.append(trial)
+
+                    logger.info(
+                        "E4+E5 重试: plan=%s status=%s acceptable=%s",
+                        plan.plan_id,
+                        trial.status.value,
+                        trial.is_acceptable,
+                    )
+
+                    if trial.should_promote:
+                        spec.selected_plan_id = plan.plan_id
+                        logger.info("重试选中方案: %s", plan.plan_id)
+                        break
+
+                if spec.selected_plan_id is not None:
+                    break
+
+            # 恢复原始 max_trials
+            spec.budget.max_trials = original_budget_max
 
             if self._failure_handler.should_escalate(spec):
                 logger.warning(
