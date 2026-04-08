@@ -298,6 +298,53 @@ class TrialResult:
 
 
 # ============================================================================
+# AnalogyFailureBundle - 类比失效上下文
+# ============================================================================
+
+@dataclass
+class AnalogyFailureBundle:
+    """类比失效上下文包
+
+    当 E6 决定回退 Teach Bench 时，向 Phase 2 Correction Recorder
+    传递完整的类比失败信号——包含"系统认为相似但实际不相似"的学习价值。
+    """
+    bundle_id: str = field(default_factory=lambda: f"AFB-{uuid.uuid4().hex[:8]}")
+    spec_id: str = ""
+    target_case_id: str = ""
+    created_at: float = field(default_factory=time.time)
+
+    # 失败原因分类
+    failure_type: str = ""  # "no_similar" | "trial_failed" | "analogy_mismatch"
+    failure_summary: str = ""
+
+    # 类比匹配上下文
+    best_similarity_score: float = 0.0
+    best_source_case_id: str = ""
+    similarity_dimensions: List[Dict[str, Any]] = field(default_factory=list)
+
+    # 候选方案和试探结果摘要
+    candidate_plans_tried: int = 0
+    trial_summaries: List[Dict[str, Any]] = field(default_factory=list)
+
+    # 降级历史
+    relaxation_history: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "bundle_id": self.bundle_id,
+            "spec_id": self.spec_id,
+            "target_case_id": self.target_case_id,
+            "failure_type": self.failure_type,
+            "failure_summary": self.failure_summary,
+            "best_similarity_score": self.best_similarity_score,
+            "best_source_case_id": self.best_source_case_id,
+            "candidate_plans_tried": self.candidate_plans_tried,
+            "trial_summaries": self.trial_summaries,
+            "relaxation_history": self.relaxation_history,
+        }
+
+
+# ============================================================================
 # AnalogySpec - Phase 3 顶层规范
 # ============================================================================
 
@@ -333,6 +380,7 @@ class AnalogySpec:
     # 最终决策
     selected_plan_id: Optional[str] = None
     fallback_to_teach: bool = False
+    failure_bundle: Optional[AnalogyFailureBundle] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -349,4 +397,7 @@ class AnalogySpec:
             "trial_results": [t.to_dict() for t in self.trial_results],
             "selected_plan_id": self.selected_plan_id,
             "fallback_to_teach": self.fallback_to_teach,
+            "failure_bundle": (
+                self.failure_bundle.to_dict() if self.failure_bundle else None
+            ),
         }

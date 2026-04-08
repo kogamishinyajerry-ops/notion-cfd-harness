@@ -17,15 +17,17 @@ Phase 3: Analogical Reasoning Engine (E层)
 from __future__ import annotations
 
 import logging
+import math
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Protocol
+from typing import Any, Callable, Dict, List, Optional, Protocol, Set
 
 from knowledge_compiler.phase3.analogy_schema import (
     AnalogyConfidence,
     AnalogyDimension,
     AnalogyResult,
     AnalogySpec,
+    AnalogyFailureBundle,
     CandidatePlan,
     ExplorationBudget,
     SimilarityScore,
@@ -98,6 +100,54 @@ def _numeric_distance(a: float, b: float, scale: float = 1.0) -> float:
     if scale == 0:
         return 1.0 if a == b else 0.0
     return max(0.0, 1.0 - abs(a - b) / scale)
+
+
+def _logarithmic_distance(a: float, b: float) -> float:
+    """对数归一化数值相似度 (1 = 相同, 0 = 完全不同)
+
+    适用于跨数量级的物理量（Re, Ma 等）。
+    Re=1e6 vs Re=1e7 的差异在物理上是根本性的（层流 vs 湍流），
+    线性归一化会压缩这种差异。
+    """
+    if a == 0 and b == 0:
+        return 1.0
+    if a <= 0 or b <= 0:
+        # 负值或零值退化为线性
+        return _numeric_distance(a, b, scale=max(abs(a), abs(b), 1e-6) * 2)
+    log_a = math.log10(abs(a))
+    log_b = math.log10(abs(b))
+    # 用固定的归一化范围：一个数量级差异 = 相似度下降约 0.5
+    # 这样 1e6 vs 1e7 ≈ 0.5，1e6 vs 1e8 ≈ 0.0
+    log_diff = abs(log_a - log_b)
+    return max(0.0, 1.0 - log_diff / 2.0)
+
+
+# 使用对数归一化的已知物理量关键字
+_LOG_NORMALIZED_KEYS: Set[str] = {
+    "Re", "Reynolds", "reynolds_number",
+    "Ma", "Mach", "mach_number",
+    "temperature", "T", "temp",
+    "pressure", "P",
+    "velocity", "U",
+}
+
+
+def _should_use_log(key: str) -> bool:
+    """判断某个数值字段是否应该使用对数归一化"""
+    return key in _LOG_NORMALIZED_KEYS or any(
+        k in key.lower() for k in ("re", "mach", "ma", "reynolds")
+    )
+
+
+# 硬性一致性约束：这些字符串字段不匹配时直接降为极低分
+_HARD_CONSTRAINT_KEYS: Dict[str, float] = {
+    "FlowType": 0.05,
+    "flow_type": 0.05,
+    "Compressibility": 0.05,
+    "compressibility": 0.05,
+    "TimeTreatment": 0.10,
+    "time_treatment": 0.10,
+}
 
 
 # ============================================================================
@@ -213,18 +263,27 @@ class SimilarityEngine:
             s_set = set(str(x) for x in s_feat.get(key, []))
             sub_scores.append(_jaccard_similarity(t_set, s_set))
 
-        # 数值字段 → 归一化距离
+        # 数值字段 → 对数归一化（物理量）或线性归一化（其他）
         num_keys = [k for k in t_feat if isinstance(t_feat[k], (int, float))]
         for key in num_keys:
             t_val = float(t_feat[key])
             s_val = float(s_feat.get(key, 0))
-            scale = max(abs(t_val), abs(s_val), 1e-6) * 2
-            sub_scores.append(_numeric_distance(t_val, s_val, scale))
+            if _should_use_log(key):
+                sub_scores.append(_logarithmic_distance(t_val, s_val))
+            else:
+                scale = max(abs(t_val), abs(s_val), 1e-6) * 2
+                sub_scores.append(_numeric_distance(t_val, s_val, scale))
 
-        # 字符串字段 → 精确匹配
+        # 字符串字段 → 精确匹配（含硬性一致性约束）
         str_keys = [k for k in t_feat if isinstance(t_feat[k], str)]
         for key in str_keys:
-            sub_scores.append(1.0 if t_feat[key] == s_feat.get(key, "") else 0.0)
+            if t_feat[key] != s_feat.get(key, ""):
+                # 硬约束字段不匹配时直接降为极低分
+                if key in _HARD_CONSTRAINT_KEYS:
+                    return _HARD_CONSTRAINT_KEYS[key]
+                sub_scores.append(0.0)
+            else:
+                sub_scores.append(1.0)
 
         if not sub_scores:
             return 0.5
@@ -602,6 +661,7 @@ class TrialRunner:
                 "time_steps": time_steps,
                 "final_residual": final_residual,
                 "status": "converged" if final_residual < 0.01 else "running",
+                "is_mock": True,  # 防止下游误认为真实仿真结果
             },
             "convergence": {
                 "residuals": residuals,
@@ -647,12 +707,14 @@ class TrialEvaluator:
         self,
         trial: TrialResult,
         expected: Optional[Dict[str, Any]] = None,
+        analogy_reference: Optional[Dict[str, Any]] = None,
     ) -> TrialResult:
         """评估试探结果
 
         Args:
             trial: 试探执行结果
             expected: 预期结果（用于偏差计算）
+            analogy_reference: 类比参考 case 的关键指标（用于 G4-P3 类比偏差检查）
 
         Returns:
             更新后的 TrialResult（含 gate_results 和评估结论）
@@ -675,6 +737,20 @@ class TrialEvaluator:
         else:
             # 无预期时，用收敛质量推断
             trial.deviation_from_expected = self._infer_deviation(trial)
+
+        # G4-P3 类比偏差检查：试探结果 vs 类比参考 case
+        if analogy_reference:
+            analogy_dev = self._compute_deviation(
+                trial.output_data, analogy_reference
+            )
+            trial.gate_results["analogy_deviation"] = (
+                analogy_dev <= self._max_deviation * 3  # 粗网格允许更宽松
+            )
+            if analogy_dev > self._max_deviation * 3:
+                trial.evaluation_notes.append(
+                    f"类比偏差过大: {analogy_dev * 100:.1f}% "
+                    f"(阈值: {self._max_deviation * 300:.1f}%)"
+                )
 
         # 综合判断
         all_gates_pass = all(trial.gate_results.values())
@@ -768,17 +844,34 @@ class AnalogyFailureHandler:
 
     当类比推理失败（低相似度、试探不通过等）时的降级策略：
     - 回退到 Teach Bench（Phase 2）重新学习
-    - 放宽约束重试
+    - 放宽约束重试（受 RelaxationBoundary 约束）
     - 标记为需要人工介入
+
+    安全约束:
+    - max_retries 是硬性上限，防止 RETRY→E4→E5→FAIL→RETRY 无限循环
+    - 放宽操作受 RelaxationBoundary 约束，不可无限放宽
     """
+
+    # 放宽策略的底线配置 (RelaxationBoundary)
+    DEFAULT_RELAXATION_BOUNDARY = {
+        "min_similarity_threshold": 0.2,       # 相似度阈值最低 0.2
+        "max_budget_trials_increment": 3,       # 最多增加 3 次试探预算
+        "convergence_relaxation_limit": 0.1,    # 收敛标准最多放宽到 0.1
+        "mesh_coarsening_limit": 0.05,          # 网格最粗到源案例的 5%
+    }
 
     def __init__(
         self,
-        max_retries: int = 2,
+        max_retries: int = 3,
         similarity_floor: float = 0.3,
+        relaxation_boundary: Optional[Dict[str, Any]] = None,
     ):
         self._max_retries = max_retries
         self._similarity_floor = similarity_floor
+        self._relaxation_boundary = relaxation_boundary or dict(
+            self.DEFAULT_RELAXATION_BOUNDARY
+        )
+        self._relaxation_count = 0  # 跟踪放宽次数
 
     def handle(
         self,
@@ -810,25 +903,61 @@ class AnalogyFailureHandler:
             )
             spec.fallback_to_teach = True
             spec.selected_plan_id = None
+            spec.failure_bundle = AnalogyFailureBundle(
+                spec_id=spec.spec_id,
+                target_case_id=spec.target_case_id,
+                failure_type="no_similar",
+                failure_summary=f"所有源案例相似度低于 {self._similarity_floor:.2f}",
+            )
             return spec
 
         if all_failed and spec.trial_results:
-            # 有相似案例但试探全部失败
-            retry_count = len(spec.trial_results)
-            if retry_count < self._max_retries:
+            # 使用 E6 自己的放宽计数，而非所有试探结果的累计
+            if self._relaxation_count < self._max_retries:
+                self._relaxation_count += 1
                 logger.info(
                     "试探失败，放宽约束重试 (%d/%d)",
-                    retry_count,
+                    self._relaxation_count,
                     self._max_retries,
                 )
-                # 放宽预算尝试更多试探
-                spec.budget.max_trials += 1
+                # 放宽预算（受边界约束）
+                max_inc = self._relaxation_boundary["max_budget_trials_increment"]
+                spec.budget.max_trials = min(
+                    spec.budget.max_trials + 1,
+                    spec.budget.max_trials + max_inc,
+                )
+                # 放宽相似度阈值（受边界约束）
+                min_thresh = self._relaxation_boundary["min_similarity_threshold"]
                 spec.min_similarity_threshold = max(
-                    0.2, spec.min_similarity_threshold - 0.1
+                    min_thresh, spec.min_similarity_threshold - 0.1
                 )
             else:
-                logger.warning("超过最大重试次数，回退到 Teach Bench")
+                logger.warning(
+                    "超过 E6 最大放宽次数 (%d), 回退到 Teach Bench",
+                    self._max_retries,
+                )
                 spec.fallback_to_teach = True
+                # 生成 AnalogyFailureBundle 供 Phase 2 学习
+                best_analogy = spec.analogy_results[0] if spec.analogy_results else None
+                spec.failure_bundle = AnalogyFailureBundle(
+                    spec_id=spec.spec_id,
+                    target_case_id=spec.target_case_id,
+                    failure_type="trial_failed",
+                    failure_summary=(
+                        f"E6 放宽 {self._relaxation_count} 次后仍失败"
+                    ),
+                    best_similarity_score=(
+                        best_analogy.overall_similarity if best_analogy else 0.0
+                    ),
+                    best_source_case_id=(
+                        best_analogy.source_case_id if best_analogy else ""
+                    ),
+                    candidate_plans_tried=len(spec.candidate_plans),
+                    trial_summaries=[t.to_dict() for t in spec.trial_results],
+                    relaxation_history=[
+                        f"放宽 #{i+1}" for i in range(self._relaxation_count)
+                    ],
+                )
 
         return spec
 

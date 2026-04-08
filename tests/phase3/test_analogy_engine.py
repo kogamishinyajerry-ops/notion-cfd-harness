@@ -34,7 +34,13 @@ from knowledge_compiler.phase3.orchestrator.analogy_engine import (
     TrialEvaluator,
     TrialRunner,
     _jaccard_similarity,
+    _logarithmic_distance,
     _numeric_distance,
+    _should_use_log,
+    _HARD_CONSTRAINT_KEYS,
+)
+from knowledge_compiler.phase3.analogy_schema import (
+    AnalogyFailureBundle,
 )
 
 
@@ -125,6 +131,31 @@ class TestHelpers:
         d = _numeric_distance(1.0, 1.5, scale=2.0)
         assert 0.0 < d < 1.0
 
+    def test_log_distance_same(self):
+        assert _logarithmic_distance(1e6, 1e6) == 1.0
+
+    def test_log_distance_one_order(self):
+        d = _logarithmic_distance(1e6, 1e7)
+        assert 0.0 < d < 1.0
+
+    def test_log_distance_many_orders(self):
+        d = _logarithmic_distance(1e2, 1e8)
+        assert d == 0.0  # 6 orders of magnitude apart
+
+    def test_log_distance_zero(self):
+        assert _logarithmic_distance(0, 0) == 1.0
+
+    def test_should_use_log(self):
+        assert _should_use_log("Re")
+        assert _should_use_log("Mach")
+        assert _should_use_log("reynolds_number")
+        assert not _should_use_log("diameter")
+        assert not _should_use_log("mesh_cells")
+
+    def test_hard_constraint_keys_defined(self):
+        assert "FlowType" in _HARD_CONSTRAINT_KEYS
+        assert "Compressibility" in _HARD_CONSTRAINT_KEYS
+
 
 # ============================================================================
 # E1: SimilarityEngine tests
@@ -181,6 +212,24 @@ class TestSimilarityEngine:
             assert len(results[0].dimension_scores) > 0
             for score in results[0].dimension_scores:
                 assert 0.0 <= score.score <= 1.0
+
+    def test_hard_constraint_flowtype_mismatch(self):
+        """FlowType 不匹配应导致物理维度分数极低"""
+        store = MockKnowledgeStore(cases=[
+            _make_case("SRC-EXT", physics={"FlowType": "external", "model": "RANS"}),
+        ])
+        engine = SimilarityEngine(store)
+        target = _make_target(
+            physics={"FlowType": "internal", "model": "RANS"},
+        )
+        results = engine.find_similar_cases(target)
+        if results:
+            phys_scores = [
+                s for s in results[0].dimension_scores
+                if s.dimension == AnalogyDimension.PHYSICS
+            ]
+            if phys_scores:
+                assert phys_scores[0].score < 0.2
 
 
 # ============================================================================
@@ -445,6 +494,29 @@ class TestTrialEvaluator:
         result = self.evaluator.evaluate(trial, expected=None)
         assert result.deviation_from_expected <= 0.1
 
+    def test_analogy_deviation_check_pass(self):
+        """Trial close to analogy reference should pass"""
+        trial = self._make_completed_trial(
+            output_data={"final_residual": 0.001, "Cd": 0.45},
+        )
+        result = self.evaluator.evaluate(
+            trial,
+            analogy_reference={"Cd": 0.42},
+        )
+        assert result.gate_results.get("analogy_deviation", True)
+
+    def test_analogy_deviation_check_fail(self):
+        """Trial far from analogy reference should fail G4-P3"""
+        trial = self._make_completed_trial(
+            output_data={"final_residual": 0.001, "Cd": 2.5},
+        )
+        result = self.evaluator.evaluate(
+            trial,
+            analogy_reference={"Cd": 0.42},
+        )
+        assert not result.gate_results.get("analogy_deviation", True)
+        assert any("类比偏差" in n for n in result.evaluation_notes)
+
 
 # ============================================================================
 # E6: AnalogyFailureHandler tests
@@ -476,7 +548,7 @@ class TestAnalogyFailureHandler:
         assert result.budget.max_trials > original_max or result.fallback_to_teach
 
     def test_max_retries_exceeded(self):
-        handler = AnalogyFailureHandler(max_retries=1)
+        handler = AnalogyFailureHandler(max_retries=0)
         spec = AnalogySpec(
             analogy_results=[AnalogyResult(overall_similarity=0.7)],
             trial_results=[
@@ -492,6 +564,7 @@ class TestAnalogyFailureHandler:
             ],
         )
         assert result.fallback_to_teach is True
+        assert result.failure_bundle is not None
 
     def test_should_escalate_high_sim_all_fail(self):
         spec = AnalogySpec(
@@ -513,6 +586,30 @@ class TestAnalogyFailureHandler:
     def test_no_escalate_when_fallback(self):
         spec = AnalogySpec(fallback_to_teach=True)
         assert not self.handler.should_escalate(spec)
+
+    def test_failure_bundle_on_no_similar(self):
+        """No similar cases should produce AnalogyFailureBundle"""
+        spec = AnalogySpec(
+            analogy_results=[AnalogyResult(overall_similarity=0.1)],
+        )
+        result = self.handler.handle(spec, [])
+        assert result.fallback_to_teach is True
+        assert result.failure_bundle is not None
+        assert result.failure_bundle.failure_type == "no_similar"
+        assert result.failure_bundle.bundle_id.startswith("AFB-")
+
+    def test_failure_bundle_on_max_retries(self):
+        """Max retries exceeded should produce AnalogyFailureBundle"""
+        handler = AnalogyFailureHandler(max_retries=0)
+        spec = AnalogySpec(
+            analogy_results=[AnalogyResult(overall_similarity=0.7)],
+            trial_results=[TrialResult(status=TrialStatus.FAILED)],
+        )
+        result = handler.handle(spec, [TrialResult(status=TrialStatus.FAILED)])
+        assert result.fallback_to_teach is True
+        assert result.failure_bundle is not None
+        assert result.failure_bundle.failure_type == "trial_failed"
+        assert result.failure_bundle.candidate_plans_tried >= 0
 
 
 # ============================================================================
