@@ -102,6 +102,8 @@ def _numeric_distance(a: float, b: float, scale: float = 1.0) -> float:
     return max(0.0, 1.0 - abs(a - b) / scale)
 
 
+_LOG_EPSILON = 1e-10  # 对数归一化的下界保护
+
 def _logarithmic_distance(a: float, b: float) -> float:
     """对数归一化数值相似度 (1 = 相同, 0 = 完全不同)
 
@@ -114,6 +116,9 @@ def _logarithmic_distance(a: float, b: float) -> float:
     if a <= 0 or b <= 0:
         # 负值或零值退化为线性
         return _numeric_distance(a, b, scale=max(abs(a), abs(b), 1e-6) * 2)
+    # epsilon 保护：防止极小正值产生 log10(<0) 量级的极端结果
+    a = max(a, _LOG_EPSILON)
+    b = max(b, _LOG_EPSILON)
     log_a = math.log10(abs(a))
     log_b = math.log10(abs(b))
     # 用固定的归一化范围：一个数量级差异 = 相似度下降约 0.5

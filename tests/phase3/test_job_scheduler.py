@@ -394,3 +394,14 @@ class TestConvenienceFunctions:
         # No dependencies by default
         for job in scheduled:
             assert job.dependencies == []
+
+
+# ============================================================================
+# P1-5: Priority Order Sync Assertion (REV-P3-002)
+# ============================================================================
+
+class TestPriorityOrderSync:
+    def test_priority_order_covers_all_enums(self):
+        """_PRIORITY_ORDER 必须覆盖所有 JobPriority 枚举值"""
+        from knowledge_compiler.phase3.job_scheduler.scheduler import _PRIORITY_ORDER
+        assert set(_PRIORITY_ORDER.keys()) == set(JobPriority)

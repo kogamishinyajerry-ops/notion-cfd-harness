@@ -27,6 +27,17 @@ from knowledge_compiler.phase3.schema import (
 
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# STL 格式常量
+# ============================================================================
+
+STL_HEADER_SIZE = 80
+STL_TRIANGLE_COUNT_SIZE = 4
+STL_TRIANGLE_SIZE = 50  # 12 (normal) + 36 (3 vertices) + 2 (attribute)
+
+# 水密性检测的浮点容差（顶点合并精度）
+_VERTEX_MERGE_TOLERANCE = 1e-8
+
 
 # ============================================================================
 # 文件格式检测
@@ -103,18 +114,18 @@ def _parse_stl_binary(data: bytes) -> Dict[str, Any]:
     Returns:
         包含 facets, normals, vertices 的字典
     """
-    # 跳过 80 字节头
-    if len(data) < 84:
+    # 跳过 header
+    if len(data) < STL_HEADER_SIZE + STL_TRIANGLE_COUNT_SIZE:
         return {"facets": [], "normals": [], "vertices": []}
 
-    n_facets = struct.unpack("<I", data[80:84])[0]
+    n_facets = struct.unpack("<I", data[STL_HEADER_SIZE:STL_HEADER_SIZE + STL_TRIANGLE_COUNT_SIZE])[0]
     facets = []
     normals = []
     vertices = []
 
-    offset = 84
+    offset = STL_HEADER_SIZE + STL_TRIANGLE_COUNT_SIZE
     for _ in range(n_facets):
-        if offset + 50 > len(data):
+        if offset + STL_TRIANGLE_SIZE > len(data):
             break
         nx, ny, nz = struct.unpack("<fff", data[offset:offset + 12])
         v1 = struct.unpack("<fff", data[offset + 12:offset + 24])
@@ -124,7 +135,7 @@ def _parse_stl_binary(data: bytes) -> Dict[str, Any]:
         facets.append((v1, v2, v3))
         normals.append((nx, ny, nz))
         vertices.extend([v1, v2, v3])
-        offset += 50  # 12 + 36 + 2 bytes attribute
+        offset += STL_TRIANGLE_SIZE
 
     return {"facets": facets, "normals": normals, "vertices": vertices}
 
@@ -271,20 +282,26 @@ def _compute_volume(facets: List[Tuple]) -> float:
     return abs(total) / 6.0
 
 
+def _quantize_vertex(v: Tuple[float, ...], tolerance: float = _VERTEX_MERGE_TOLERANCE) -> Tuple[float, ...]:
+    """将顶点坐标量化到容差网格，用于浮点容差合并"""
+    return tuple(round(c / tolerance) * tolerance for c in v)
+
+
 def _check_watertight(facets: List[Tuple]) -> Tuple[bool, List[str]]:
     """检查网格水密性
 
     简化检查：每条边应该恰好出现在 2 个面中。
+    使用浮点容差合并顶点，避免精度差异导致误判。
     """
     if not facets:
         return False, ["无面片数据"]
 
-    # 构建边 → 面计数
+    # 构建边 → 面计数（使用量化顶点做容差合并）
     edge_count: Dict[Tuple, int] = {}
     for tri in facets:
         if len(tri) < 3:
             continue
-        verts = [tri[0], tri[1], tri[2]]
+        verts = [_quantize_vertex(tri[0]), _quantize_vertex(tri[1]), _quantize_vertex(tri[2])]
         for i in range(3):
             v_a = verts[i]
             v_b = verts[(i + 1) % 3]

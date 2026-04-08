@@ -23,6 +23,7 @@ from knowledge_compiler.phase3.physics_planner.planner import (
     BatchPhysicsPlanner,
     create_physics_plan,
     plan_from_geometry,
+    validate_bc_compatibility,
 )
 
 
@@ -293,3 +294,60 @@ class TestConvenienceFunctions:
         )
         assert plan.problem_type == "external_flow"
         assert plan.physics_model is not None
+
+
+# ============================================================================
+# P1-2: BC Compatibility Validation (REV-P3-002)
+# ============================================================================
+
+class TestBCCompatibility:
+    def test_valid_bc_passes(self):
+        """正常 BC 组合不应有警告"""
+        bcs = [
+            BoundaryCondition(name="inlet", type="fixedValue"),
+            BoundaryCondition(name="outlet", type="zeroGradient"),
+            BoundaryCondition(name="walls", type="noSlip"),
+        ]
+        warnings = validate_bc_compatibility(bcs)
+        assert warnings == []
+
+    def test_all_wall_detected(self):
+        """全 wall 应产生警告"""
+        bcs = [
+            BoundaryCondition(name="wall1", type="noSlip"),
+            BoundaryCondition(name="wall2", type="noSlip"),
+        ]
+        warnings = validate_bc_compatibility(bcs)
+        assert any("wall" in w.lower() for w in warnings)
+
+    def test_no_outlet_detected(self):
+        """有 inlet 无 outlet 应产生警告"""
+        bcs = [
+            BoundaryCondition(name="inlet", type="fixedValue"),
+            BoundaryCondition(name="walls", type="noSlip"),
+        ]
+        warnings = validate_bc_compatibility(bcs)
+        assert any("outlet" in w.lower() or "质量" in w for w in warnings)
+
+    def test_all_symmetry_detected(self):
+        """全 symmetry 应产生警告"""
+        bcs = [
+            BoundaryCondition(name="sym1", type="symmetry"),
+            BoundaryCondition(name="sym2", type="symmetry"),
+        ]
+        warnings = validate_bc_compatibility(bcs)
+        assert any("symmetry" in w.lower() for w in warnings)
+
+    def test_empty_bc_detected(self):
+        """空 BC 应产生警告"""
+        warnings = validate_bc_compatibility([])
+        assert len(warnings) > 0
+
+    def test_farfield_no_warning(self):
+        """farfield 同时充当 inlet/outlet 不应触发无 outlet 警告"""
+        bcs = [
+            BoundaryCondition(name="farfield", type="freestream"),
+            BoundaryCondition(name="body", type="noSlip"),
+        ]
+        warnings = validate_bc_compatibility(bcs)
+        assert not any("outlet" in w.lower() for w in warnings)

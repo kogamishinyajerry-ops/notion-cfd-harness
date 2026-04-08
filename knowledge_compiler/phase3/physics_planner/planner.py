@@ -194,6 +194,11 @@ class PhysicsPlanner:
             problem_type, steady_state, turbulence_model
         )
 
+        # 验证边界条件组合的物理合理性
+        bc_warnings = validate_bc_compatibility(boundary_conditions)
+        if bc_warnings:
+            logger.warning("BC 矛盾检测: %s", "; ".join(bc_warnings))
+
         return PhysicsPlan(
             problem_type=problem_type,
             physics_model=physics_model,
@@ -439,6 +444,42 @@ class BatchPhysicsPlanner:
                 if plans else 0.0
             ),
         }
+
+
+# ============================================================================
+# BC Compatibility Validation
+# ============================================================================
+
+def validate_bc_compatibility(conditions: List[BoundaryCondition]) -> List[str]:
+    """验证边界条件组合的物理合理性
+
+    检查常见矛盾组合，返回警告列表（空=通过）。
+    """
+    warnings = []
+    if not conditions:
+        warnings.append("无边界条件")
+        return warnings
+
+    types = {bc.type for bc in conditions}
+    names = {bc.name.lower() for bc in conditions}
+
+    # 全 wall（无进出口）
+    if types == {"noSlip", "wall"} or (len(conditions) > 0 and all(bc.type in ("noSlip", "wall") for bc in conditions)):
+        warnings.append("所有边界都是 wall（无进出口），除非有源项否则无物理意义")
+
+    # 无 outlet
+    has_inlet = any(n in names for n in ("inlet", "farfield"))
+    has_outlet = any(n in names for n in ("outlet", "farfield"))
+    if has_inlet and not has_outlet:
+        # farfield 同时是 inlet 和 outlet，所以不算
+        if "farfield" not in names:
+            warnings.append("有 inlet 但无 outlet，质量不守恒")
+
+    # 全 symmetry
+    if types == {"symmetry"}:
+        warnings.append("全部 symmetry 边界，退化为无边界问题")
+
+    return warnings
 
 
 # ============================================================================

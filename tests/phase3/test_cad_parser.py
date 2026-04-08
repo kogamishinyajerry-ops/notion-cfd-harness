@@ -13,6 +13,7 @@ Coverage:
 """
 
 import os
+import struct
 import tempfile
 
 import pytest
@@ -362,3 +363,64 @@ class TestConvenienceFunctions:
         assert geom.format == MeshFormat.STL
         assert geom.features == []
         assert geom.repair_needed == []
+
+
+# ============================================================================
+# P0-5: Edge Case Tests (REV-P3-002)
+# ============================================================================
+
+class TestEdgeCases:
+    def test_empty_stl_file(self):
+        """0 字节 STL 文件应抛异常或返回空"""
+        with tempfile.NamedTemporaryFile(suffix=".stl", delete=False) as f:
+            path = f.name
+        try:
+            parser = CADParser()
+            result = parser.parse(path)
+            assert result.features == []
+            assert result.surface_area == 0.0
+        finally:
+            os.unlink(path)
+
+    def test_header_only_stl(self):
+        """84 字节 header + count=0 的 STL"""
+        with tempfile.NamedTemporaryFile(suffix=".stl", delete=False) as f:
+            f.write(b"\x00" * 80)  # header
+            f.write(struct.pack("<I", 0))  # 0 triangles
+            f.flush()
+            try:
+                parser = CADParser()
+                result = parser.parse(f.name)
+                assert result.surface_area == 0.0
+                assert result.volume == 0.0
+            finally:
+                os.unlink(f.name)
+
+    def test_truncated_stl(self):
+        """Header 声明 1000 面但只有 10 面数据"""
+        with tempfile.NamedTemporaryFile(suffix=".stl", delete=False) as f:
+            f.write(b"\x00" * 80)  # header
+            f.write(struct.pack("<I", 1000))  # claims 1000 triangles
+            # Only write 10 triangles worth of data
+            for _ in range(10):
+                f.write(b"\x00" * 50)
+            f.flush()
+            try:
+                parser = CADParser()
+                result = parser.parse(f.name)
+                # Should parse what's available without crashing
+                assert isinstance(result, ParsedGeometry)
+            finally:
+                os.unlink(f.name)
+
+    def test_re_zero_logarithmic_distance(self):
+        """P0-4: Re=0 不应崩溃"""
+        from knowledge_compiler.phase3.orchestrator.analogy_engine import _logarithmic_distance
+        # Both zero
+        assert _logarithmic_distance(0, 0) == 1.0
+        # One zero, one positive
+        result = _logarithmic_distance(0, 1e6)
+        assert 0.0 <= result <= 1.0
+        # Very small positive
+        result = _logarithmic_distance(1e-20, 1e6)
+        assert 0.0 <= result <= 1.0
