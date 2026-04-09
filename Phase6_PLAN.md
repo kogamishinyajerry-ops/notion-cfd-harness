@@ -190,3 +190,81 @@ E2E 验证失败时的处理规则：
 **Phase 6 PASS | 项目评分: 9.0/10** — 项目历史最高分
 
 **SSOT 3项残留判定为 Known Limitation**（非阻塞项）：API外部限制，人工随时可处理。
+
+---
+
+## Phase 7 规划 — Real Solver E2E
+
+> 🛑 **GSD 关键点：架构变更需 Opus 4.6 审查后方可实施**
+
+### 背景
+
+Phase 6 完成了 Mock E2E 全链路验证（3/3 PASS），Phase 7 的目标是**用真实 CFD solver（OpenFOAM/SU2）替换 mock executor**，验证物理精度。
+
+### 技术方案
+
+| 组件 | 当前 | Phase 7 目标 |
+|------|------|-------------|
+| Solver Executor | MockExecutor (±1% 扰动) | DockerSolverExecutor (OpenFOAM + SU2) |
+| 执行模式 | is_mock=True | is_mock=False |
+| 精度验证 | Mock 数据误差 < 5% | 真实 solver 误差 < 5% (vs 文献) |
+| 环境依赖 | 无 | Docker daemon |
+
+### Docker Solver 架构
+
+```
+knowledge_compiler/
+├── phase2/
+│   └── execution_layer/
+│       ├── solver_executor.py          # 新增: SolverExecutor ABC
+│       ├── mock_solver.py             # 重命名: 当前 mock (保留)
+│       ├── docker_solver.py            # 新增: DockerSolverExecutor
+│       │   ├── openfoam_container()   # OpenFOAM in Docker
+│       │   └── su2_container()          # SU2 in Docker
+│       └── executor_factory.py          # 新增: 根据 config 返回对应 executor
+```
+
+### 案例映射
+
+| Benchmark | Solver | Docker Image | 验证目标 |
+|-----------|--------|-------------|---------|
+| BENCH-01 (Cavity) | icoFoam | `openfoam/openfoam13-paraview` | u_max 误差 < 5% |
+| BENCH-07 (BFS) | simpleFoam | `openfoam/openfoam13-paraview` | Reattachment 误差 < 5% |
+| BENCH-04 (Cylinder) | pimpleFoam | `openfoam/openfoam13-paraview` | St ≈ 0.164 误差 < 5% |
+
+### 执行顺序
+
+```
+7.1 Docker Solver Executor ABC + Factory   [MiniMax-M2.7]
+7.2 OpenFOAM Docker Container Adapter      [Codex]
+7.3 SU2 Docker Container Adapter            [Codex]
+7.4 Real E2E: Lid-Driven Cavity (Re=100)  [Codex] ← 先行
+7.5 Real E2E: Backward-Facing Step        [Codex]
+7.6 Real E2E: Circular Cylinder Wake     [Codex]
+7.7 物理精度验证 Gate                       [Codex]
+```
+
+### Phase 7 验收标准
+
+- [ ] Docker Solver Executor 支持 OpenFOAM + SU2
+- [ ] Real E2E 3 个案例物理精度 < 5%
+- [ ] Mock → Real 切换不影响现有测试
+- [ ] Opus 4.6 Phase 7 架构审查通过
+
+### 当前状态
+
+- Docker: ✅ 可用 (v29.2.1)
+- OpenFOAM: ❌ 未安装
+- SU2: ❌ 未安装
+- **解决方案**: Docker Hub 官方镜像
+
+### 待确认
+
+1. Docker daemon 是否需要 rootless 模式？
+2. OpenFOAM 镜像内存要求？（建议 ≥8GB）
+3. 是否需要支持 GPU 加速（CUDA/OpenCL）？
+4. 第一个 Real E2E 案例优先级？
+
+---
+
+**等待 Opus 4.6 架构审查后启动 Phase 7 实施。**
