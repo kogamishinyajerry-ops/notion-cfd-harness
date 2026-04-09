@@ -11,9 +11,9 @@
 
 ```
 6.4 SSOT 核对与修复     [MiniMax-M2.7] ✅ 完成 (M5)
-6.3 白名单扩展         [MiniMax-M2.7] ✅ 完成 (55条) ← 完成
-6.1 E2E Mock 演示      [Codex]  ← 下一步
-6.2 Correction 反馈闭环  [Codex]
+6.3 白名单扩展         [MiniMax-M2.7] ✅ 完成 (55条)
+6.1 E2E Mock 演示      [Codex]  ✅ 完成 (3/3 PASS) ← 完成
+6.2 Correction 反馈闭环  [Codex]  ← 下一步
 ```
 
 ---
@@ -140,7 +140,7 @@ E2E 验证失败时的处理规则：
 |------|------|------|
 | M5 SSOT 核对与修复 | MiniMax-M2.7 | ✅ 部分完成 (API限制) |
 | M4 白名单扩展 (30→50+) | MiniMax-M2.7 | ✅ 55条完成 |
-| M1 E2E Mock 演示 | Codex | 待确认 |
+| M1 E2E Mock 演示 | Codex | ✅ 3/3 PASS |
 | M2 案例替换 | Codex | 待确认 |
 | M3 Correction 反馈闭环 | Codex | 待确认 |
 | M6 PermissionLevel L3 | Codex | 待确认 |
@@ -169,6 +169,6 @@ E2E 验证失败时的处理规则：
 - [x] Opus 4.6 Phase 6 规划审查通过 (REV-P6-PLAN-001)
 - [ ] 6.4 SSOT 7 项问题全部清零（4/7完成，3项因API限制需人工处理）
 - [x] 6.3 白名单 ≥ 50 条，其中 ≥ 20 有验证结果 (55条，25条文献验证)
-- [ ] 6.1 Mock E2E 3 个案例全部通过
+- [x] 6.1 Mock E2E 3 个案例全部通过 (3/3 PASS)
 - [ ] 6.2 L2 (消费层) 验证 — Correction 被 AnalogyEngine 读取
 - [ ] Opus 4.6 Phase 6 运营验收通过
