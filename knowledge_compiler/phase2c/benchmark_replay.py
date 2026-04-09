@@ -333,7 +333,7 @@ class BenchmarkReplayEngine:
                     benchmark_case,
                 )
             else:
-                # TODO: 真实执行模式
+                # Real execution mode (via _execute_correction_real)
                 result.status = "running"
                 actual_output = self._execute_correction_real(
                     correction,
