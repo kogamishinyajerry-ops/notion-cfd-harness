@@ -40,8 +40,8 @@ Real solver E2E 留作 Phase 7 前置任务。
 | 层次 | 验证内容 | 期望 | 状态 |
 |------|---------|------|------|
 | **L1: 记录层** | CorrectionRecorder 是否完整记录失败 | 9 必填字段全填充 | ✅ PASS |
-| **L2: 消费层** | AnalogyEngine E1 是否读取 correction | KnowledgeStore 刷新机制验证 | ❌ FAIL (修复中) |
-| **L3: 改善层** | 第二次推理质量是否提升 | 类比得分可测量提升 | ❌ FAIL (待修复) |
+| **L2: 消费层** | AnalogyEngine E1 是否读取 correction | KnowledgeStore 刷新机制验证 | ✅ PASS (已修复) |
+| **L3: 改善层** | 第二次推理质量是否提升 | 类比得分可测量提升 | ✅ PASS (integration test) |
 
 **优先验证 L2**（消费层）—— L2 断裂则闭环无效。
 
@@ -154,7 +154,7 @@ E2E 验证失败时的处理规则：
 | M4 白名单扩展 (30→50+) | MiniMax-M2.7 | ✅ 55条完成 |
 | M1 E2E Mock 演示 | Codex | ✅ 3/3 PASS |
 | M2 案例替换 | Codex | ✅ VAWT→Cylinder Wake |
-| M3 Correction 反馈闭环 | Codex | 🔄 L2/L3 修复中 |
+| M3 Correction 反馈闭环 | Codex | ✅ L2/L3 修复完成 |
 | M6 PermissionLevel L3 | Codex | 待确认 |
 | M7 Phase 6 条目 | ✅ 已创建 | ✅ |
 
@@ -182,5 +182,5 @@ E2E 验证失败时的处理规则：
 - [ ] 6.4 SSOT 7 项问题全部清零（4/7完成，3项因API限制需人工处理）
 - [x] 6.3 白名单 ≥ 50 条，其中 ≥ 20 有验证结果 (55条，25条文献验证)
 - [x] 6.1 Mock E2E 3 个案例全部通过 (3/3 PASS)
-- [ ] 6.2 L2 (消费层) 验证 — Correction 被 AnalogyEngine 读取
+- [x] 6.2 L2 (消费层) 验证 — Correction 被 AnalogyEngine 读取
 - [ ] Opus 4.6 Phase 6 运营验收通过
