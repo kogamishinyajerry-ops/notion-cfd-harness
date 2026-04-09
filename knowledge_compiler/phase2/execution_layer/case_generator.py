@@ -29,7 +29,7 @@ class OpenFOAMCaseGenerator:
         "system/blockMeshDict",
         "0/U",
         "0/p",
-        "constant/transportProperties",
+        "constant/physicalProperties",
     )
     _PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([A-Za-z0-9_]+)\s*\}\}")
     _TEMPLATE_ROOT = Path(__file__).resolve().parent / "templates" / "openfoam"
@@ -77,6 +77,7 @@ class OpenFOAMCaseGenerator:
                 "EPSILON_INLET": "2.16e-03",
             },
             required_files=(
+                "constant/physicalProperties",
                 "constant/turbulenceProperties",
                 "0/k",
                 "0/epsilon",
@@ -108,11 +109,11 @@ class OpenFOAMCaseGenerator:
                 "REYNUMBER": "100",
                 "STROUHAL": "0.164",
                 "NU": "0.001",
-                "END_TIME": "50.0",
-                "DELTA_T": "0.002",
-                "MAX_CO": "1.0",
-                "MAX_DELTA_T": "0.002",
-                "WRITE_INTERVAL": "1.0",
+                "END_TIME": "20.0",
+                "DELTA_T": "0.01",
+                "MAX_CO": "2.0",
+                "MAX_DELTA_T": "0.02",
+                "WRITE_INTERVAL": "0.2",
             },
         ),
     }
