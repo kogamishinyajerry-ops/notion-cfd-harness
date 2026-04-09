@@ -1,5 +1,6 @@
 # 模型调用规范 v1.2 - 增加 Code Review 审查
-## 核心变更：新增 Codex Code Review Gate，提高代码质量
+## ⚠️ 已过时 - 请参考 MODEL_ROUTING_TABLE_v2.md
+## 本文档保留仅作为历史参考
 
 ---
 

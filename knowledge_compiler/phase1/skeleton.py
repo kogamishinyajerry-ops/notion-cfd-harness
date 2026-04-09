@@ -194,7 +194,7 @@ class Phase1Gates:
         problem_type: ProblemType,
     ) -> GateResult:
         """
-        P1-G1: Field Completeness Gate
+        G1-P1: Field Completeness Gate
 
         Checks if required field data is available for the problem type.
         """
@@ -220,7 +220,7 @@ class Phase1Gates:
             warnings.append(f"Missing asset types: {missing}")
 
         return GateResult(
-            gate_id="P1-G1",
+            gate_id="G1-P1",
             gate_name="Field Completeness",
             passed=passed,
             score=score,
@@ -237,7 +237,7 @@ class Phase1Gates:
     @staticmethod
     def p1_g2_plot_standards(draft: ReportDraft) -> GateResult:
         """
-        P1-G2: Plot Standards Gate
+        G2-P1: Plot Standards Gate
 
         Checks if plot specifications follow chart_standards.md rules.
         """
@@ -266,7 +266,7 @@ class Phase1Gates:
         passed = score >= 70  # 70% threshold for plot standards
 
         return GateResult(
-            gate_id="P1-G2",
+            gate_id="G2-P1",
             gate_name="Plot Standards",
             passed=passed,
             score=score,
@@ -529,18 +529,18 @@ class ReportSkeletonGenerator:
         problem_type: ProblemType,
     ) -> None:
         """Run Phase 1 gates and populate gates_status"""
-        # P1-G1: Field Completeness
+        # G1-P1: Field Completeness
         g1_result = Phase1Gates.p1_g1_field_completeness(manifest, problem_type)
-        draft.gates_status["P1-G1"] = {
+        draft.gates_status["G1-P1"] = {
             "passed": g1_result.passed,
             "score": g1_result.score,
             "required": g1_result.required_score,
             "warnings": g1_result.warnings,
         }
 
-        # P1-G2: Plot Standards
+        # G2-P1: Plot Standards
         g2_result = Phase1Gates.p1_g2_plot_standards(draft)
-        draft.gates_status["P1-G2"] = {
+        draft.gates_status["G2-P1"] = {
             "passed": g2_result.passed,
             "score": g2_result.score,
             "required": g2_result.required_score,

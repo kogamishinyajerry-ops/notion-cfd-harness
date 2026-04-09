@@ -86,6 +86,7 @@ python3 .claude/notion/sync.py create-task --task-id "TEST-001" --task-type "Tes
 | #81 | **completed** | **Phase 2c T1: Correction Recorder** ✅ 23/23 测试 (2026-04-08) |
 | #82 | **completed** | **Phase 2c T2: Benchmark Replay Engine** ✅ 30/30 测试 (2026-04-08) |
 | #83 | **completed** | **Phase 2c T3: Knowledge Compiler** ✅ 27/27 测试 (2026-04-08) |
+| #84 | **completed** | **Phase 2d: Pipeline Assembly - E2E Orchestrator** ✅ 35/35 测试 (2026-04-08) |
 
 ---
 

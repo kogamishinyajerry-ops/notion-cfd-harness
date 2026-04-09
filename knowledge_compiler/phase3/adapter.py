@@ -103,7 +103,7 @@ _PROBLEM_TYPE_MAP: Dict[str, P2ProblemType] = {
     "heat_transfer": P2ProblemType.HEAT_TRANSFER,
     "multiphase": P2ProblemType.MULTIPHASE,
     "fsi": P2ProblemType.FSI,
-    "compressible": P2ProblemType.INTERNAL_FLOW,  # closest match
+    "compressible": P2ProblemType.EXTERNAL_FLOW,  # 可压缩外流更常见（翼型等）
 }
 
 _SOLVER_TYPE_P3_TO_P2: Dict[P3SolverType, P2SolverType] = {
@@ -163,7 +163,16 @@ def bc_type_to_p2(bc_type: str) -> BCType:
 
 
 def solver_type_p3_to_p2(st: P3SolverType) -> P2SolverType:
-    """Phase 3 SolverType (category) → Phase 2 SolverType (specific)"""
+    """Phase 3 SolverType (category) → Phase 2 SolverType (specific)
+
+    注意：STAR-CCM+ 和 Fluent 没有 Phase 2 对应类型，
+    调用方应自行处理这些商业求解器。
+    """
+    if st in (P3SolverType.STARCCM, P3SolverType.FLUENT):
+        logger.warning(
+            "%s 无 Phase 2 对应求解器，返回 SIMPLE_FOAM 作为占位",
+            st.value,
+        )
     return _SOLVER_TYPE_P3_TO_P2.get(st, P2SolverType.SIMPLE_FOAM)
 
 

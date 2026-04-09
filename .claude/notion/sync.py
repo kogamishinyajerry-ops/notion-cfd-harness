@@ -238,13 +238,10 @@ class ReviewSync:
                 "title": [{"text": {"content": review_id}}]
             },
             self.field_map.get("status", "Review Status"): {
-                "select": {"name": "Pending"}
+                "status": {"name": "Requested"}
             },
             self.field_map.get("type", "Review Type"): {
                 "select": {"name": review_type}
-            },
-            self.field_map.get("decision", "Decision"): {
-                "select": {"name": "Pending"}
             },
         }
 
@@ -260,7 +257,7 @@ class ReviewSync:
 
         if reviewer:
             properties[self.field_map.get("reviewer", "Reviewer Model")] = {
-                "rich_text": [{"text": {"content": reviewer}}]
+                "select": {"name": reviewer}
             }
 
         page = self.api.create_page(self.config.reviews_db_id, properties)

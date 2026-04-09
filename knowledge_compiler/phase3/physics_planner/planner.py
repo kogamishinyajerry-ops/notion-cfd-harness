@@ -285,7 +285,7 @@ class PhysicsPlanner:
                 BoundaryCondition(
                     name="adiabatic_walls",
                     type="zeroGradient",
-                    values={"T": ""},
+                    values={},
                 ),
             ]
         else:

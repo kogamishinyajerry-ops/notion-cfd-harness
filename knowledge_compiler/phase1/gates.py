@@ -24,6 +24,8 @@ from knowledge_compiler.phase1.schema import (
     TeachRecord,
     TeachOperation,
     ProblemType,
+    ResultManifest,
+    ResultAsset,
 )
 
 
@@ -115,6 +117,277 @@ class GateResult:
 
 
 # ============================================================================
+# P1-G1: ActionPlan Executability Gate
+# ============================================================================
+
+from knowledge_compiler.phase1.nl_postprocess import ActionPlan, Action
+
+
+class ActionPlanExecutabilityGate:
+    """
+    P1-G1: 动作可执行性 Gate
+
+    验证 ActionPlan 是否可以执行：
+    1. 所需资源是否都存在
+    2. 动作参数是否完整
+    3. 是否有冲突或错误配置
+
+    这是 NL 指令转换为动作后的第一道检查，确保系统不会尝试
+    执行无法完成的后处理操作。
+    """
+
+    GATE_ID = "G1-P1"
+    GATE_NAME = "ActionPlan Executability Gate"
+
+    def __init__(self):
+        # 资源类型到逻辑名称的映射
+        self._asset_type_requirements = {
+            "field_data": ["field"],
+            "plot_data": ["contour_plot", "line_plot", "vector_plot"],
+            "line_data": ["line_plot", "field"],
+            "vector_data": ["vector_plot", "field"],
+            "metric_data": ["metric"],
+        }
+
+    def check_action_plan(
+        self,
+        action_plan: ActionPlan,
+        manifest: ResultManifest,
+    ) -> GateResult:
+        """
+        检查 ActionPlan 是否可执行
+
+        Args:
+            action_plan: 从 NL 指令解析得到的 ActionPlan
+            manifest: 结果目录的 ResultManifest
+
+        Returns:
+            Gate 检查结果
+        """
+        checklist = []
+        errors = []
+        warnings = []
+        score = 100.0
+
+        # Check 1: 使用 ActionPlan.is_executable() 做基础检查
+        if not action_plan.is_executable():
+            errors.append(
+                f"ActionPlan has missing assets: {action_plan.missing_assets}"
+            )
+            score -= 40.0
+
+            checklist.append(GateCheckItem(
+                item="missing_assets",
+                description="All required assets are available",
+                result=GateStatus.FAIL,
+                message=f"Missing: {action_plan.missing_assets}",
+            ))
+        else:
+            checklist.append(GateCheckItem(
+                item="missing_assets",
+                description="All required assets are available",
+                result=GateStatus.PASS,
+                message="No missing assets",
+            ))
+
+        # Check 2: 验证每个 action 的参数完整性
+        param_issues = self._validate_action_parameters(action_plan)
+        if param_issues:
+            warnings.extend(param_issues)
+            score -= 10.0 * len(param_issues)
+
+            checklist.append(GateCheckItem(
+                item="parameter_completeness",
+                description="Action parameters are complete",
+                result=GateStatus.WARN,
+                message=f"Parameter issues: {param_issues}",
+            ))
+        else:
+            checklist.append(GateCheckItem(
+                item="parameter_completeness",
+                description="Action parameters are complete",
+                result=GateStatus.PASS,
+                message="All action parameters complete",
+            ))
+
+        # Check 3: 验证资源映射（逻辑名称 -> 实际 asset）
+        mapping_issues = self._validate_asset_mapping(action_plan, manifest)
+        if mapping_issues:
+            errors.extend(mapping_issues)
+            score -= 20.0 * len(mapping_issues)
+
+            checklist.append(GateCheckItem(
+                item="asset_mapping",
+                description="Asset references map to actual files",
+                result=GateStatus.FAIL,
+                message=f"Mapping issues: {mapping_issues}",
+            ))
+        else:
+            checklist.append(GateCheckItem(
+                item="asset_mapping",
+                description="Asset references map to actual files",
+                result=GateStatus.PASS,
+                message="All assets properly mapped",
+            ))
+
+        # Check 4: 检测动作冲突
+        conflicts = self._detect_action_conflicts(action_plan)
+        if conflicts:
+            warnings.extend(conflicts)
+            score -= 10.0 * len(conflicts)
+
+            checklist.append(GateCheckItem(
+                item="action_conflicts",
+                description="No conflicting actions in plan",
+                result=GateStatus.WARN,
+                message=f"Conflicts detected: {conflicts}",
+            ))
+        else:
+            checklist.append(GateCheckItem(
+                item="action_conflicts",
+                description="No conflicting actions in plan",
+                result=GateStatus.PASS,
+                message="No action conflicts",
+            ))
+
+        # Check 5: 检查置信度
+        if action_plan.confidence < 0.5:
+            warnings.append(
+                f"Low confidence score: {action_plan.confidence:.2f} < 0.5"
+            )
+            score -= 15.0
+
+            checklist.append(GateCheckItem(
+                item="confidence_score",
+                description="ActionPlan has sufficient confidence",
+                result=GateStatus.WARN,
+                message=f"Low confidence: {action_plan.confidence:.2f}",
+            ))
+        else:
+            checklist.append(GateCheckItem(
+                item="confidence_score",
+                description="ActionPlan has sufficient confidence",
+                result=GateStatus.PASS,
+                message=f"Confidence: {action_plan.confidence:.2f}",
+            ))
+
+        # 确定最终状态
+        status = GateStatus.PASS
+        if score < 50.0 or errors:
+            status = GateStatus.FAIL
+        elif score < 70.0 or warnings:
+            status = GateStatus.WARN
+
+        return GateResult(
+            gate_id=self.GATE_ID,
+            gate_name=self.GATE_NAME,
+            status=status,
+            timestamp=time.time(),
+            score=max(0.0, score),
+            checklist=checklist,
+            errors=errors,
+            warnings=warnings,
+            metadata={
+                "intent": action_plan.detected_intent,
+                "num_actions": len(action_plan.actions),
+                "raw_instruction": action_plan.raw_instruction,
+            },
+            severity="BLOCK",  # P1-G1 是 BLOCK 级别
+        )
+
+    def _validate_action_parameters(self, action_plan: ActionPlan) -> List[str]:
+        """验证每个 action 的参数完整性"""
+        issues = []
+
+        for i, action in enumerate(action_plan.actions):
+            # 每个 action_type 有必需的参数
+            required_params = {
+                "generate_plot": ["field", "plot_type"],
+                "extract_section": ["plane", "field"],
+                "calculate_metric": ["metric_type"],
+                "compare_data": ["items", "field"],
+                "reorder_content": ["sequence"],
+            }
+
+            action_type = action.action_type.value
+            required = required_params.get(action_type, [])
+
+            missing = [p for p in required if p not in action.parameters]
+            if missing:
+                issues.append(
+                    f"Action {i}: Missing required parameters: {missing}"
+                )
+
+        return issues
+
+    def _validate_asset_mapping(
+        self,
+        action_plan: ActionPlan,
+        manifest: ResultManifest,
+    ) -> List[str]:
+        """验证资源引用是否映射到实际文件"""
+        issues = []
+
+        # 获取所有实际可用的 asset_type
+        available_types = {asset.asset_type for asset in manifest.assets}
+
+        # 检查每个 action 的 requires_assets
+        for i, action in enumerate(action_plan.actions):
+            for required in action.requires_assets:
+                # 检查是否有对应的实际 asset
+                # 例如：requires="field_data" 对应 asset_type="field"
+                mapped = False
+                if required == "field_data" and "field" in available_types:
+                    mapped = True
+                elif required in available_types:
+                    mapped = True
+
+                if not mapped:
+                    issues.append(
+                        f"Action {i}: Required asset '{required}' not found in manifest"
+                    )
+
+        return issues
+
+    def _detect_action_conflicts(self, action_plan: ActionPlan) -> List[str]:
+        """检测动作冲突"""
+        conflicts = []
+
+        # 检测重复的动作（例如：多次生成同一个 plot）
+        seen_actions = {}  # (action_type, key_params) -> count
+
+        for i, action in enumerate(action_plan.actions):
+            action_type = action.action_type.value
+
+            # 为每个 action 生成一个 key
+            if action_type == "generate_plot":
+                key = (
+                    action_type,
+                    action.parameters.get("field"),
+                    action.parameters.get("plot_type"),
+                    action.parameters.get("plane"),
+                )
+            elif action_type == "extract_section":
+                key = (
+                    action_type,
+                    action.parameters.get("plane"),
+                    action.parameters.get("field"),
+                )
+            else:
+                key = (action_type, str(sorted(action.parameters.items())))
+
+            count = seen_actions.get(key, 0) + 1
+            seen_actions[key] = count
+
+            if count > 1:
+                conflicts.append(
+                    f"Duplicate action {i}: {action_type} with {action.parameters}"
+                )
+
+        return conflicts
+
+
+# ============================================================================
 # P1-G3: Evidence Binding Gate
 # ============================================================================
 
@@ -135,7 +408,7 @@ class EvidenceBindingGate:
     这是确保知识可追溯性的关键Gate。
     """
 
-    GATE_ID = "P1-G3"
+    GATE_ID = "G3-P1"
     GATE_NAME = "Evidence Binding Gate"
 
     def __init__(self):
@@ -446,7 +719,7 @@ class TemplateGeneralizationGate:
     这是区分"个例处理"与"通用标准"的关键Gate。
     """
 
-    GATE_ID = "P1-G4"
+    GATE_ID = "G4-P1"
     GATE_NAME = "Template Generalization Gate"
 
     # 泛化性阈值
@@ -707,6 +980,305 @@ class TemplateGeneralizationGate:
 
 
 # ============================================================================
+# P1-2: CorrectionSpec Completeness Gate
+# ============================================================================
+
+from knowledge_compiler.phase1.schema import ErrorType, ImpactScope
+
+
+class CorrectionSpecCompletenessGate:
+    """
+    P1-2: CorrectionSpec 完整性 Gate
+
+    验证 CorrectionSpec 的 9 个必填字段，确保学习主通道的数据质量。
+
+    根据 Opus 4.6 审查建议（P1-2）：
+    - 检查 9 个必填字段是否完整
+    - BLOCK 级别：任一必填字段缺失或无效即 FAIL
+    - 支持单个检查和批量检查
+    """
+    GATE_ID = "G2-P1"
+    GATE_NAME = "CorrectionSpec Completeness Gate"
+
+    # 9 个必填字段定义
+    REQUIRED_FIELDS = [
+        "correction_id",
+        "error_type",
+        "wrong_output",
+        "correct_output",
+        "human_reason",
+        "impact_scope",
+        "source_case_id",
+        "timestamp",
+        "replay_status",
+    ]
+
+    # 有效的 replay_status 值
+    VALID_REPLAY_STATUSES = {"pending", "in_progress", "passed", "failed", "skipped"}
+
+    # 有效的 error_type 值（同时支持 enum name 和 value）
+    VALID_ERROR_TYPES = {et.value for et in ErrorType} | {et.name for et in ErrorType}
+
+    # 有效的 impact_scope 值（同时支持 enum name 和 value）
+    VALID_IMPACT_SCOPES = {scope.value for scope in ImpactScope} | {scope.name for scope in ImpactScope}
+
+    def __init__(self, strict_mode: bool = True):
+        """
+        Initialize the gate
+
+        Args:
+            strict_mode: 如果为 True，所有字段必须完整；False 则允许警告模式
+        """
+        self.strict_mode = strict_mode
+
+    def check(self, correction_spec) -> GateResult:
+        """
+        检查单个 CorrectionSpec
+
+        Args:
+            correction_spec: CorrectionSpec 实例或字典
+
+        Returns:
+            GateResult 检查结果
+        """
+        checklist = []
+        errors = []
+        warnings = []
+        score = 100.0
+
+        # 提取数据为字典格式
+        if isinstance(correction_spec, dict):
+            data = correction_spec
+            spec_id = data.get("correction_id", "unknown")
+        else:
+            data = self._spec_to_dict(correction_spec)
+            spec_id = getattr(correction_spec, "correction_id", "unknown")
+
+        # 检查 9 个必填字段
+        for field in self.REQUIRED_FIELDS:
+            result, message = self._check_field(data, field)
+            checklist.append(GateCheckItem(
+                item=field,
+                description=f"Required field: {field}",
+                result=result,
+                message=message,
+            ))
+
+            if result == GateStatus.FAIL:
+                errors.append(message)
+                score -= 10.0
+            elif result == GateStatus.WARN:
+                warnings.append(message)
+                score -= 5.0
+
+        # 验证字段值的合法性
+        validation_result, validation_errors, validation_warnings = self._validate_values(data)
+        checklist.extend(validation_result)
+
+        for error in validation_errors:
+            errors.append(error)
+            score -= 10.0
+
+        for warning in validation_warnings:
+            warnings.append(warning)
+            score -= 5.0
+
+        # 确定最终状态
+        status = GateStatus.PASS
+        if score < 50.0 or (self.strict_mode and errors):
+            status = GateStatus.FAIL
+        elif score < 70.0:
+            status = GateStatus.WARN
+
+        return GateResult(
+            gate_id=self.GATE_ID,
+            gate_name=self.GATE_NAME,
+            status=status,
+            timestamp=time.time(),
+            score=max(0.0, score),
+            checklist=checklist,
+            errors=errors,
+            warnings=warnings,
+            metadata={
+                "correction_id": spec_id,
+                "strict_mode": self.strict_mode,
+                "fields_checked": len(self.REQUIRED_FIELDS),
+            },
+            severity="BLOCK",  # BLOCK 级别：阻止低质量学习数据进入系统
+        )
+
+    def check_batch(self, correction_specs: List) -> GateResult:
+        """
+        批量检查多个 CorrectionSpec
+
+        Args:
+            correction_specs: CorrectionSpec 列表
+
+        Returns:
+            汇总的 GateResult
+        """
+        # 空列表视为通过（100% pass rate）
+        if not correction_specs:
+            return GateResult(
+                gate_id=self.GATE_ID,
+                gate_name=f"{self.GATE_NAME} (Batch)",
+                status=GateStatus.PASS,
+                timestamp=time.time(),
+                score=100.0,
+                checklist=[],
+                errors=[],
+                warnings=[],
+                metadata={
+                    "total_checked": 0,
+                    "pass_count": 0,
+                    "fail_count": 0,
+                    "pass_rate": 100.0,
+                },
+                severity="BLOCK",
+            )
+
+        all_checklist = []
+        all_errors = []
+        all_warnings = []
+        total_score = 0.0
+
+        pass_count = 0
+        fail_count = 0
+
+        for spec in correction_specs:
+            result = self.check(spec)
+            all_checklist.extend(result.checklist)
+            all_errors.extend(result.errors)
+            all_warnings.extend(result.warnings)
+            total_score += result.score
+
+            if result.is_pass():
+                pass_count += 1
+            else:
+                fail_count += 1
+
+        # 计算平均分数
+        avg_score = total_score / len(correction_specs)
+
+        # 确定整体状态
+        status = GateStatus.PASS
+        if fail_count > 0:
+            status = GateStatus.FAIL
+        elif avg_score < 70.0:
+            status = GateStatus.WARN
+
+        return GateResult(
+            gate_id=self.GATE_ID,
+            gate_name=f"{self.GATE_NAME} (Batch)",
+            status=status,
+            timestamp=time.time(),
+            score=avg_score,
+            checklist=all_checklist,
+            errors=all_errors,
+            warnings=all_warnings,
+            metadata={
+                "total_checked": len(correction_specs),
+                "pass_count": pass_count,
+                "fail_count": fail_count,
+                "pass_rate": (pass_count / len(correction_specs) * 100),
+            },
+            severity="BLOCK",
+        )
+
+    def _check_field(self, data: Dict, field: str) -> Tuple[GateStatus, str]:
+        """检查单个字段"""
+        value = data.get(field)
+
+        # 检查字段是否存在
+        if value is None:
+            if field == "source_case_id":
+                # source_case_id 可能在 metadata 中
+                if data.get("metadata", {}).get("source_case_id"):
+                    return GateStatus.PASS, "Found in metadata"
+                # 或在动态属性中（如 correction_spec.source_case_id）
+                if hasattr(data, "__dict__") and "source_case_id" in data.__dict__:
+                    return GateStatus.PASS, "Found as attribute"
+            return GateStatus.FAIL, f"Missing required field: {field}"
+
+        # 检查字段值是否有效
+        if field == "correction_id":
+            if not value or not isinstance(value, str):
+                return GateStatus.FAIL, f"Invalid correction_id: {value}"
+
+        elif field == "error_type":
+            if isinstance(value, ErrorType):
+                value = value.value
+            if value not in self.VALID_ERROR_TYPES:
+                return GateStatus.FAIL, f"Invalid error_type: {value}"
+
+        elif field == "wrong_output":
+            if not isinstance(value, dict) or not value:
+                return GateStatus.FAIL, "wrong_output must be a non-empty dict"
+
+        elif field == "correct_output":
+            if not isinstance(value, dict) or not value:
+                return GateStatus.FAIL, "correct_output must be a non-empty dict"
+
+        elif field == "human_reason":
+            if not value or not isinstance(value, str):
+                return GateStatus.WARN, "human_reason should be a non-empty string"
+
+        elif field == "impact_scope":
+            if isinstance(value, ImpactScope):
+                value = value.value
+            if value not in self.VALID_IMPACT_SCOPES:
+                return GateStatus.WARN, f"Unusual impact_scope: {value}"
+
+        elif field == "timestamp":
+            if not isinstance(value, (int, float)):
+                return GateStatus.WARN, f"timestamp should be numeric: {type(value).__name__}"
+
+        elif field == "replay_status":
+            if value not in self.VALID_REPLAY_STATUSES:
+                return GateStatus.WARN, f"Invalid replay_status: {value}"
+
+        return GateStatus.PASS, f"Field {field} is valid"
+
+    def _validate_values(self, data: Dict) -> Tuple[List[GateCheckItem], List[str], List[str]]:
+        """验证字段值的合法性"""
+        checklist = []
+        errors = []
+        warnings = []
+
+        # 检查 wrong_output 和 correct_output 是否真的不同
+        wrong = data.get("wrong_output", {})
+        correct = data.get("correct_output", {})
+
+        if isinstance(wrong, dict) and isinstance(correct, dict):
+            if wrong == correct:
+                msg = "wrong_output and correct_output are identical"
+                checklist.append(GateCheckItem(
+                    item="output_difference",
+                    description="wrong_output differs from correct_output",
+                    result=GateStatus.WARN,
+                    message=msg,
+                ))
+                warnings.append(msg)
+            elif wrong.keys() == correct.keys():
+                # 检查值是否真的不同
+                same_values = sum(1 for k in wrong if wrong.get(k) == correct.get(k))
+                if same_values == len(wrong):
+                    msg = "wrong_output and correct_output have identical values"
+                    errors.append(msg)
+
+        return checklist, errors, warnings
+
+    def _spec_to_dict(self, spec) -> Dict:
+        """将 CorrectionSpec 转换为字典"""
+        if hasattr(spec, "to_dict"):
+            return spec.to_dict()
+        elif hasattr(spec, "__dict__"):
+            return spec.__dict__
+        else:
+            return dict(spec)
+
+
+# ============================================================================
 # Combined Gate Executor
 # ============================================================================
 
@@ -714,22 +1286,46 @@ class Phase1GateExecutor:
     """
     Phase 1 Gate执行器
 
-    统一执行P1-G1/G2/G3/G4四个Gate
+    统一执行P1-G1/G2/G3/G4四个Gate（聚焦版：G1-P1 ~ G4-P1）
     """
 
     def __init__(self):
+        self.g1_gate = ActionPlanExecutabilityGate()
+        self.g2_gate = CorrectionSpecCompletenessGate()
         self.g3_gate = EvidenceBindingGate()
         self.g4_gate = TemplateGeneralizationGate()
+
+    def run_g1_gate(
+        self,
+        action_plan: ActionPlan,
+        manifest: ResultManifest,
+    ) -> GateResult:
+        """执行G1-P1 Gate (ActionPlan Executability)"""
+        return self.g1_gate.check_action_plan(action_plan, manifest)
+
+    def run_g2_gate(
+        self,
+        correction_spec,
+    ) -> GateResult:
+        """执行G2-P1 Gate (CorrectionSpec Completeness)"""
+        return self.g2_gate.check(correction_spec)
+
+    def run_g2_gate_batch(
+        self,
+        correction_specs: List,
+    ) -> GateResult:
+        """执行G2-P1 Gate (批量检查)"""
+        return self.g2_gate.check_batch(correction_specs)
 
     def run_g3_gate(
         self,
         teach_records: List[TeachRecord],
         available_assets: Optional[List[str]] = None,
     ) -> GateResult:
-        """执行P1-G3 Gate"""
+        """执行G3-P1 Gate (Evidence Binding)"""
         if not teach_records:
             return GateResult(
-                gate_id="P1-G3",
+                gate_id="G3-P1",
                 gate_name="Evidence Binding Gate",
                 status=GateStatus.PASS,
                 timestamp=time.time(),
@@ -747,7 +1343,7 @@ class Phase1GateExecutor:
         source_cases: List[str],
         teach_records: List[TeachRecord],
     ) -> GateResult:
-        """执行P1-G4 Gate"""
+        """执行G4-P1 Gate (Template Generalization)"""
         return self.g4_gate.check_report_spec_candidate(
             report_spec,
             source_cases,
@@ -760,6 +1356,8 @@ class Phase1GateExecutor:
         source_cases: List[str],
         teach_records: List[TeachRecord],
         available_assets: Optional[List[str]] = None,
+        action_plan: Optional[ActionPlan] = None,
+        manifest: Optional[ResultManifest] = None,
     ) -> Dict[str, GateResult]:
         """
         执行所有Phase 1 Gates
@@ -769,17 +1367,23 @@ class Phase1GateExecutor:
             source_cases: 源case列表
             teach_records: TeachRecord列表
             available_assets: 可用资产列表
+            action_plan: 可选的 ActionPlan（用于 P1-G1）
+            manifest: 可选的 ResultManifest（用于 P1-G1）
 
         Returns:
             各Gate的结果字典
         """
         results = {}
 
-        # P1-G3: Evidence Binding
-        results["P1-G3"] = self.run_g3_gate(teach_records, available_assets)
+        # G1-P1: ActionPlan Executability (如果提供)
+        if action_plan and manifest:
+            results["G1-P1"] = self.run_g1_gate(action_plan, manifest)
 
-        # P1-G4: Template Generalization
-        results["P1-G4"] = self.run_g4_gate(
+        # G3-P1: Evidence Binding
+        results["G3-P1"] = self.run_g3_gate(teach_records, available_assets)
+
+        # G4-P1: Template Generalization
+        results["G4-P1"] = self.run_g4_gate(
             report_spec,
             source_cases,
             teach_records,
@@ -798,6 +1402,10 @@ __all__ = [
     # Gate components
     "GateCheckItem",
     "GateResult",
+    # P1-G1
+    "ActionPlanExecutabilityGate",
+    # P1-G2
+    "CorrectionSpecCompletenessGate",
     # P1-G3
     "ExplanationBinding",
     "EvidenceBindingGate",

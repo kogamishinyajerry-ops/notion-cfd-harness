@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 1 Gates: P1-G3 & P1-G4 Tests
+Phase 1 Gates: G3-P1 & G4-P1 Tests
 """
 
 from __future__ import annotations
@@ -52,20 +52,20 @@ class TestGateResult:
     def test_gate_result_creation(self):
         """GateResult should initialize"""
         result = GateResult(
-            gate_id="P1-G3",
+            gate_id="G3-P1",
             gate_name="Evidence Binding Gate",
             status=GateStatus.PASS,
             timestamp=time.time(),
             score=100.0,
         )
 
-        assert result.gate_id == "P1-G3"
+        assert result.gate_id == "G3-P1"
         assert result.is_pass() is True
 
     def test_gate_result_with_failures(self):
         """GateResult should handle failures"""
         result = GateResult(
-            gate_id="P1-G3",
+            gate_id="G3-P1",
             gate_name="Evidence Binding Gate",
             status=GateStatus.FAIL,
             timestamp=time.time(),
@@ -79,7 +79,7 @@ class TestGateResult:
     def test_get_pass_rate(self):
         """GateResult should calculate pass rate"""
         result = GateResult(
-            gate_id="P1-G3",
+            gate_id="G3-P1",
             gate_name="Test",
             status=GateStatus.PASS,
             timestamp=time.time(),
@@ -112,7 +112,7 @@ class TestGateResult:
     def test_to_dict(self):
         """GateResult should serialize to dict"""
         result = GateResult(
-            gate_id="P1-G3",
+            gate_id="G3-P1",
             gate_name="Test",
             status=GateStatus.PASS,
             timestamp=1234567890.0,
@@ -129,7 +129,7 @@ class TestGateResult:
         )
 
         d = result.to_dict()
-        assert d["gate_id"] == "P1-G3"
+        assert d["gate_id"] == "G3-P1"
         assert d["status"] == "PASS"
         assert d["score"] == 95.0
         assert len(d["checklist"]) == 1
@@ -137,7 +137,7 @@ class TestGateResult:
 
 
 # ============================================================================
-# Test P1-G3: EvidenceBindingGate
+# Test G3-P1: EvidenceBindingGate
 # ============================================================================
 
 class TestExplanationBinding:
@@ -378,7 +378,7 @@ class TestEvidenceBindingGate:
 
 
 # ============================================================================
-# Test P1-G4: TemplateGeneralizationGate
+# Test G4-P1: TemplateGeneralizationGate
 # ============================================================================
 
 class TestGeneralizationMetrics:
@@ -609,7 +609,7 @@ class TestPhase1GateExecutor:
         assert executor.g4_gate is not None
 
     def test_run_g3_gate_with_records(self):
-        """Should run P1-G3 gate"""
+        """Should run G3-P1 gate"""
         executor = Phase1GateExecutor()
 
         records = [
@@ -630,7 +630,7 @@ class TestPhase1GateExecutor:
 
         result = executor.run_g3_gate(records)
 
-        assert result.gate_id == "P1-G3"
+        assert result.gate_id == "G3-P1"
         assert result.is_pass() is True
 
     def test_run_g3_gate_empty_records(self):
@@ -643,7 +643,7 @@ class TestPhase1GateExecutor:
         assert len(result.warnings) > 0
 
     def test_run_g4_gate(self):
-        """Should run P1-G4 gate"""
+        """Should run G4-P1 gate"""
         executor = Phase1GateExecutor()
 
         spec = ReportSpec(
@@ -664,7 +664,7 @@ class TestPhase1GateExecutor:
         source_cases = ["CASE-001", "CASE-002", "CASE-003"]
         result = executor.run_g4_gate(spec, source_cases, [])
 
-        assert result.gate_id == "P1-G4"
+        assert result.gate_id == "G4-P1"
 
     def test_run_all_gates(self):
         """Should run all gates and return combined results"""
@@ -706,10 +706,10 @@ class TestPhase1GateExecutor:
 
         results = executor.run_all_gates(spec, source_cases, records)
 
-        assert "P1-G3" in results
-        assert "P1-G4" in results
-        assert results["P1-G3"].gate_id == "P1-G3"
-        assert results["P1-G4"].gate_id == "P1-G4"
+        assert "G3-P1" in results
+        assert "G4-P1" in results
+        assert results["G3-P1"].gate_id == "G3-P1"
+        assert results["G4-P1"].gate_id == "G4-P1"
 
 
 if __name__ == "__main__":
