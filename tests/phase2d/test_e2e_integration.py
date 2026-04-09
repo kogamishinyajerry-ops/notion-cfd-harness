@@ -39,6 +39,11 @@ from knowledge_compiler.phase2c.knowledge_compiler import (
     RuleKnowledge,
     KnowledgeValidator,
 )
+from knowledge_compiler.phase3.orchestrator.analogy_engine import (
+    AnalogyDecomposer,
+    CorrectionKnowledgeStore,
+    SimilarityEngine,
+)
 from knowledge_compiler.phase2d.pipeline_orchestrator import (
     PipelineOrchestrator,
     PipelineConfig,
@@ -135,6 +140,40 @@ class KnowledgeExtractionStageExecutor(StageExecutor):
             result.duration = result.end_time - result.start_time
 
         return result
+
+
+class StaticKnowledgeStore:
+    """Lightweight base store used to verify correction-backed Phase 3 retrieval."""
+
+    def __init__(self, cases=None, patterns=None, rules=None):
+        self._cases = cases or []
+        self._patterns = patterns or []
+        self._rules = rules or []
+
+    def list_cases(self):
+        return list(self._cases)
+
+    def get_case_features(self, case_id: str):
+        for case in self._cases:
+            if case.get("case_id") == case_id:
+                return case.get("features", {})
+        return {}
+
+    def get_patterns(self, tags=None):
+        if not tags:
+            return list(self._patterns)
+        return [
+            pattern for pattern in self._patterns
+            if any(tag in pattern.get("tags", []) for tag in tags)
+        ]
+
+    def get_rules(self, tags=None):
+        if not tags:
+            return list(self._rules)
+        return [
+            rule for rule in self._rules
+            if any(tag in rule.get("tags", []) for tag in tags)
+        ]
 
 
 # ============================================================================
@@ -282,6 +321,136 @@ class TestE2EPipelineIntegration:
         assert "report_spec_id" in input_data
         assert "plan_id" in input_data
         assert "execution_id" in input_data
+
+    def test_correction_feedback_loop(self):
+        """测试记录修正后，E1 能在下一次推理中读取修正并提升得分。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            corrections_dir = Path(temp_dir) / "corrections"
+            knowledge_dir = Path(temp_dir) / "knowledge"
+
+            base_store = StaticKnowledgeStore(
+                cases=[
+                    {
+                        "case_id": "SRC-CORR-001",
+                        "features": {
+                            "geometry": {"type": "pipe", "diameter": 0.12},
+                            "physics": {"model": "RANS", "turbulence": "kOmegaSST"},
+                            "boundary": {"inlet": "fixedValue", "outlet": "pressureOutlet"},
+                            "mesh": {"cells": 50000, "type": "hexahedral"},
+                            "flow_regime": {"Re": 50000, "regime": "turbulent"},
+                            "numerical": {"scheme": "secondOrder", "solver": "GAMG"},
+                            "report": {"format": "html", "sections": ["residuals", "forces"]},
+                        },
+                    }
+                ]
+            )
+            correction_store = CorrectionKnowledgeStore(
+                base_store=base_store,
+                corrections_path=str(corrections_dir),
+                knowledge_path=str(knowledge_dir),
+                correction_boost=0.08,
+            )
+            similarity_engine = SimilarityEngine(
+                correction_store,
+                similarity_threshold=0.0,
+            )
+
+            target_features = {
+                "case_id": "TARGET-CORR-001",
+                "geometry": {"type": "pipe", "diameter": 0.10},
+                "physics": {"model": "RANS", "turbulence": "kOmegaSST"},
+                "boundary": {"inlet": "fixedValue", "outlet": "zeroGradient"},
+                "mesh": {"cells": 50000, "type": "hexahedral"},
+                "flow_regime": {"Re": 50000, "regime": "turbulent"},
+                "numerical": {"scheme": "secondOrder", "solver": "GAMG"},
+                "report": {"format": "html", "sections": ["residuals", "forces"]},
+            }
+
+            first_run = similarity_engine.find_similar_cases(target_features, top_k=1)
+            assert first_run
+            baseline_score = first_run[0].overall_similarity
+
+            config = PipelineConfig(
+                pipeline_id="E2E-CORR-LOOP",
+                name="Correction Feedback Loop",
+                description="Verify correction feedback closes the L2/L3 loop",
+                enabled_stages=[PipelineStage.CORRECTION_RECORDING],
+                max_retries=1,
+                retry_delay=0.01,
+                output_dir=temp_dir,
+            )
+            orchestrator = PipelineOrchestrator(
+                config,
+                correction_recorder=CorrectionRecorder(storage_path=str(corrections_dir)),
+            )
+
+            input_data = {
+                "case_id": "SRC-CORR-001",
+                "correction_knowledge_store": correction_store,
+                "correction_data": {
+                    "spec_id": "CORR-FEEDBACK-001",
+                    "anomaly_type": "divergence",
+                    "severity": "high",
+                    "error_type": ErrorType.INCORRECT_INFERENCE.value,
+                    "impact_scope": ImpactScope.SIMILAR_CASES.value,
+                    "root_cause": "数值稳定性问题导致求解发散，需要调整松弛因子",
+                    "fix_action": "修正数值松弛因子并检查求解器设置",
+                    "human_reason": "迭代过程中残差持续上升",
+                    "suggested_actions": ["修正数值松弛因子并检查求解器设置"],
+                    "retry_with": {
+                        "strategy": "reduce_relaxation",
+                        "reason": "数值稳定性不足",
+                    },
+                    "wrong_output": {"converged": False, "residual": 1e-2},
+                    "correct_output": {"converged": True, "residual": 1e-5},
+                    "needs_replay": True,
+                },
+            }
+
+            orchestrator.execute(
+                input_data,
+                stages=[PipelineStage.CORRECTION_RECORDING],
+            )
+
+            assert isinstance(input_data["correction_data"], CorrectionRecord)
+            assert input_data["analogy_trigger"]["trigger_type"] == "generator_correction"
+
+            validator = KnowledgeValidator(
+                min_confidence=0.0,
+                min_evidence=0,
+                min_success_rate=0.0,
+            )
+            manager = KnowledgeManager(
+                storage_path=str(knowledge_dir),
+                validator=validator,
+            )
+            extracted_patterns = manager.extract_knowledge(input_data["correction_data"])
+            assert extracted_patterns
+
+            for pattern in extracted_patterns:
+                success, violations = manager.add_pattern(pattern, validate=False)
+                assert success, violations
+                manager.save_pattern(pattern)
+
+            correction_store.refresh()
+
+            second_run = similarity_engine.find_similar_cases(target_features, top_k=1)
+            assert second_run
+
+            boosted_score = second_run[0].overall_similarity
+            assert boosted_score - baseline_score > 0.0
+            assert any(
+                "correction_feedback:" in evidence
+                for score in second_run[0].dimension_scores
+                for evidence in score.evidence
+            )
+
+            decomposed = AnalogyDecomposer(correction_store).decompose(second_run[0])
+            assert decomposed.matched_patterns
+
+            normalized_patterns = correction_store.get_patterns(tags=["dim:numerical"])
+            assert normalized_patterns
+            assert all(pattern.get("pattern_id") for pattern in normalized_patterns)
 
     def test_pipeline_failure_stops_at_critical_stage(self):
         """测试关键阶段失败时停止流程"""

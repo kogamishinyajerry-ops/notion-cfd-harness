@@ -25,6 +25,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Callable
 
 from knowledge_compiler.phase1.schema import (
+    ErrorType,
+    ImpactScope,
     Phase1Output,
     ReportSpec,
     TeachRecord,
@@ -35,6 +37,17 @@ from knowledge_compiler.phase1.schema import (
 from knowledge_compiler.phase2c.correction_recorder import (
     CorrectionRecorder,
     CorrectionRecord,
+)
+from knowledge_compiler.phase2.execution_layer.failure_handler import (
+    FailureAction,
+    FailureCategory,
+    FailureContext,
+    FailureHandlingResult,
+)
+from knowledge_compiler.phase2.execution_layer.result_validator import (
+    Anomaly,
+    AnomalyType,
+    ValidationResult,
 )
 from knowledge_compiler.phase2c.benchmark_replay import (
     BenchmarkReplayEngine,
@@ -149,6 +162,24 @@ class StageResult:
     def is_successful(self) -> bool:
         """是否成功"""
         return self.status == "success" and self.gate_passed
+
+
+@dataclass
+class AnalogyTrigger:
+    """用于将生成器修正上下文桥接到 Phase 3 的触发器"""
+
+    trigger_type: str
+    source_case_id: Optional[str] = None
+    context: Dict[str, Any] = field(default_factory=dict)
+    created_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "trigger_type": self.trigger_type,
+            "source_case_id": self.source_case_id,
+            "context": self.context,
+            "created_at": self.created_at,
+        }
 
 
 # ============================================================================
@@ -427,16 +458,61 @@ class CorrectionRecordingStageExecutor(StageExecutor):
         )
 
         try:
-            # 从上下文中获取验证结果
-            validation_result = context.get("validation_result")
+            generator_correction = context.get("correction_data") or {}
+            has_failure_signal = bool(generator_correction)
 
-            if validation_result:
-                # 创建修正记录
-                # 这里应该集成实际的 CorrectionRecorder
-                record_id = f"CORR-{int(time.time())}"
+            validation_result = context.get("validation_result")
+            if isinstance(validation_result, ValidationResult):
+                has_failure_signal = has_failure_signal or bool(
+                    validation_result.anomalies
+                )
+
+            failure_context = context.get("failure_context")
+            if isinstance(failure_context, FailureContext):
+                has_failure_signal = has_failure_signal or bool(
+                    failure_context.validation_result.anomalies
+                )
+
+            if has_failure_signal:
+                failure_context = self._build_failure_context(context)
+                analogy_trigger = AnalogyTrigger(
+                    trigger_type="generator_correction",
+                    source_case_id=failure_context.metadata.get("case_id"),
+                    context={
+                        "generator_correction": generator_correction,
+                        "validation_id": failure_context.validation_result.validation_id,
+                    },
+                )
+
+                spec_output = self._build_spec_output(
+                    generator_correction, failure_context, analogy_trigger
+                )
+                handling_result = self._build_handling_result(
+                    generator_correction, spec_output
+                )
+                record = self.recorder.record_from_generator(
+                    spec_output,
+                    failure_context,
+                    handling_result=handling_result,
+                    human_reason=generator_correction.get("human_reason"),
+                    engineer_id=context.get("engineer_id"),
+                )
+                self._apply_generator_overrides(record, generator_correction)
+                record_path = self.recorder.save(record)
+
+                self._refresh_correction_store(context)
                 result.data = {
                     "correction_records_created": 1,
-                    "record_ids": [record_id],
+                    "record_ids": [record.record_id],
+                    "record_paths": [record_path],
+                    "correction_record": record,
+                    "analogy_trigger": analogy_trigger.to_dict(),
+                }
+            else:
+                result.data = {
+                    "correction_records_created": 0,
+                    "record_ids": [],
+                    "record_paths": [],
                 }
 
             result.end_time = time.time()
@@ -449,6 +525,159 @@ class CorrectionRecordingStageExecutor(StageExecutor):
             result.duration = result.end_time - result.start_time
 
         return result
+
+    def _build_failure_context(self, context: Dict[str, Any]) -> FailureContext:
+        """从 pipeline 上下文构建 FailureContext。"""
+        existing = context.get("failure_context")
+        if isinstance(existing, FailureContext):
+            return existing
+
+        validation_result = context.get("validation_result")
+        if not isinstance(validation_result, ValidationResult):
+            validation_result = self._build_validation_result(context)
+
+        metadata = dict(context.get("metadata", {}))
+        case_id = context.get("case_id") or metadata.get("case_id")
+        if case_id:
+            metadata["case_id"] = case_id
+
+        return FailureContext(
+            validation_result=validation_result,
+            solver_result=context.get("execution_result"),
+            attempt_count=context.get("attempt_count", 0),
+            max_attempts=context.get("max_attempts", 3),
+            elapsed_time=context.get("elapsed_time", 0.0),
+            metadata=metadata,
+        )
+
+    def _build_validation_result(self, context: Dict[str, Any]) -> ValidationResult:
+        """从 correction_data 构造一个最小可用的 ValidationResult。"""
+        correction_data = context.get("correction_data") or {}
+        validation_result = ValidationResult()
+        if not correction_data:
+            return validation_result
+
+        anomaly = Anomaly(
+            anomaly_type=self._coerce_anomaly_type(
+                correction_data.get("anomaly_type"),
+                correction_data.get("error_type"),
+            ),
+            severity=correction_data.get("severity", "medium"),
+            location=correction_data.get("location", context.get("case_id", "generator")),
+            message=correction_data.get("root_cause")
+            or correction_data.get("fix_action")
+            or "generator_correction",
+        )
+        validation_result.add_anomaly(anomaly)
+        validation_result.metadata["generator_correction"] = True
+        return validation_result
+
+    def _coerce_anomaly_type(
+        self,
+        anomaly_type: Optional[str],
+        error_type: Optional[str],
+    ) -> AnomalyType:
+        """将外部输入规范化为 Phase 2 的 AnomalyType。"""
+        if anomaly_type:
+            try:
+                return anomaly_type if isinstance(anomaly_type, AnomalyType) else AnomalyType(anomaly_type)
+            except ValueError:
+                pass
+
+        error_type_value = (
+            error_type.value if isinstance(error_type, ErrorType) else error_type
+        )
+        fallback_map = {
+            ErrorType.INCORRECT_DATA.value: AnomalyType.NEGATIVE_PRESSURE,
+            ErrorType.MISSING_COMPONENT.value: AnomalyType.HIGH_ASPECT_RATIO,
+            ErrorType.INCORRECT_INFERENCE.value: AnomalyType.DIVERGENCE,
+            ErrorType.MISSING_EXPLANATION.value: AnomalyType.BLOW_UP_STAGNATION,
+            ErrorType.MISSING_DATA.value: AnomalyType.DIVERGENCE,
+        }
+        return fallback_map.get(error_type_value, AnomalyType.DIVERGENCE)
+
+    def _build_spec_output(
+        self,
+        correction_data: Dict[str, Any],
+        failure_context: FailureContext,
+        analogy_trigger: AnalogyTrigger,
+    ) -> Dict[str, Any]:
+        """构造供 CorrectionRecorder.record_from_generator 使用的输出。"""
+        suggested_actions = list(correction_data.get("suggested_actions", []))
+        if not suggested_actions and correction_data.get("fix_action"):
+            suggested_actions.append(correction_data["fix_action"])
+
+        return {
+            "spec_id": correction_data.get("spec_id", f"CORR-{int(time.time())}"),
+            "source": "generator_correction",
+            "timestamp": time.time(),
+            "suggested_actions": suggested_actions,
+            "retry_with": correction_data.get("retry_with", {}),
+            "validation_result": correction_data.get("wrong_output", {}),
+            "context": {
+                "generator_correction": correction_data,
+                "analogy_trigger": analogy_trigger.to_dict(),
+                "validation_id": failure_context.validation_result.validation_id,
+            },
+        }
+
+    def _build_handling_result(
+        self,
+        correction_data: Dict[str, Any],
+        spec_output: Dict[str, Any],
+    ) -> FailureHandlingResult:
+        """为 CorrectionRecorder 提供最小可用的 FailureHandlingResult。"""
+        return FailureHandlingResult(
+            action=FailureAction.GENERATE_CORRECTION,
+            category=FailureCategory.NUMERICAL,
+            retry_with=spec_output.get("retry_with"),
+            message=correction_data.get("root_cause", ""),
+            correction_spec=spec_output,
+        )
+
+    def _apply_generator_overrides(
+        self,
+        record: CorrectionRecord,
+        correction_data: Dict[str, Any],
+    ) -> None:
+        """保留生成器输出中的显式修正内容，避免被默认推断覆盖。"""
+        if not correction_data:
+            return
+
+        if correction_data.get("wrong_output"):
+            record.wrong_output = correction_data["wrong_output"]
+        if correction_data.get("correct_output"):
+            record.correct_output = correction_data["correct_output"]
+        if correction_data.get("root_cause"):
+            record.root_cause = correction_data["root_cause"]
+        if correction_data.get("fix_action"):
+            record.fix_action = correction_data["fix_action"]
+        if correction_data.get("human_reason"):
+            record.human_reason = correction_data["human_reason"]
+        if "needs_replay" in correction_data:
+            record.needs_replay = bool(correction_data["needs_replay"])
+
+        if correction_data.get("error_type"):
+            try:
+                record.error_type = ErrorType(correction_data["error_type"])
+            except ValueError:
+                pass
+
+        if correction_data.get("impact_scope"):
+            try:
+                record.impact_scope = ImpactScope(correction_data["impact_scope"])
+            except ValueError:
+                pass
+
+        if correction_data.get("source_case_id"):
+            record.source_case_id = correction_data["source_case_id"]
+
+    def _refresh_correction_store(self, context: Dict[str, Any]) -> None:
+        """在记录修正后刷新注入的知识存储。"""
+        store = context.get("correction_knowledge_store") or context.get("knowledge_store")
+        refresh = getattr(store, "refresh", None)
+        if callable(refresh):
+            refresh()
 
 
 # ============================================================================
@@ -712,6 +941,15 @@ class PipelineOrchestrator:
 
         elif stage == PipelineStage.EXECUTION:
             context["execution_id"] = result.data.get("execution_id")
+
+        elif stage == PipelineStage.CORRECTION_RECORDING:
+            correction_record = result.data.get("correction_record")
+            if correction_record:
+                context["correction_data"] = correction_record
+            if result.data.get("record_paths"):
+                context["correction_record_path"] = result.data["record_paths"][0]
+            if result.data.get("analogy_trigger"):
+                context["analogy_trigger"] = result.data["analogy_trigger"]
 
     def _aggregate_results(self) -> None:
         """聚合所有阶段结果"""

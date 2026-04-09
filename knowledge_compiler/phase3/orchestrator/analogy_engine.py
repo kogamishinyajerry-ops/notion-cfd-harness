@@ -16,10 +16,12 @@ Phase 3: Analogical Reasoning Engine (E层)
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Set
 
 from knowledge_compiler.phase2.execution_layer.failure_handler import (
@@ -63,6 +65,293 @@ class KnowledgeStore(Protocol):
     def get_rules(self, tags: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """获取已学规则知识"""
         ...
+
+
+# ============================================================================
+# Concrete Store: Phase 2c correction-backed knowledge
+# ============================================================================
+
+_CORRECTION_TAG_KEYWORDS: Dict[AnalogyDimension, Set[str]] = {
+    AnalogyDimension.GEOMETRY: {"geometry", "几何", "airfoil", "pipe", "duct"},
+    AnalogyDimension.PHYSICS: {"physics", "物理", "turbulence", "湍流", "rans", "energy"},
+    AnalogyDimension.BOUNDARY: {"boundary", "边界", "入口", "出口", "压力边界", "inlet", "outlet"},
+    AnalogyDimension.MESH: {"mesh", "网格", "宽长比", "aspect ratio", "non-orthogonality"},
+    AnalogyDimension.FLOW_REGIME: {"reynolds", "mach", "流态", "层流", "湍流", "regime"},
+    AnalogyDimension.NUMERICAL: {"numerical", "数值", "solver", "求解器", "松弛", "residual", "convergence"},
+    AnalogyDimension.REPORT: {"report", "报告", "postprocess", "residuals", "forces"},
+}
+
+_CORRECTION_CATEGORY_TAGS: Dict[str, str] = {
+    "boundary_condition": "dim:boundary",
+    "mesh_quality": "dim:mesh",
+    "numerical_stability": "dim:numerical",
+    "formula_error": "dim:numerical",
+    "configuration_error": "dim:physics",
+}
+
+
+class CorrectionKnowledgeStore:
+    """将 Phase 2c 的修正与知识产物桥接到 Phase 3 的 KnowledgeStore。"""
+
+    def __init__(
+        self,
+        base_store: Optional[KnowledgeStore] = None,
+        corrections_path: str = "data/corrections",
+        knowledge_path: str = ".knowledge",
+        correction_boost: float = 0.08,
+    ):
+        self._base_store = base_store
+        self._corrections_path = Path(corrections_path)
+        self._knowledge_path = Path(knowledge_path)
+        self._correction_boost = correction_boost
+        self._case_corrections: Dict[str, Dict[str, Any]] = {}
+        self._synthetic_cases: Dict[str, Dict[str, Any]] = {}
+        self._patterns: List[Dict[str, Any]] = []
+        self._rules: List[Dict[str, Any]] = []
+        self.refresh()
+
+    def refresh(self) -> None:
+        """刷新缓存，使新写入的修正/知识在下一次推理时可见。"""
+        base_case_ids = {
+            case.get("case_id")
+            for case in (self._base_store.list_cases() if self._base_store else [])
+            if case.get("case_id")
+        }
+
+        self._case_corrections = {}
+        for record in self._load_json_files(self._corrections_path):
+            case_id = record.get("source_case_id") or record.get("record_id")
+            if not case_id:
+                continue
+
+            bucket = self._case_corrections.setdefault(
+                case_id,
+                {"records": [], "tags": set()},
+            )
+            bucket["records"].append(record)
+            bucket["tags"].update(self._derive_correction_tags(record))
+
+        self._synthetic_cases = {}
+        for case_id, bucket in self._case_corrections.items():
+            if case_id in base_case_ids:
+                continue
+
+            latest_record = bucket["records"][-1]
+            self._synthetic_cases[case_id] = {
+                "case_id": case_id,
+                "has_corrections": True,
+                "correction_count": len(bucket["records"]),
+                "correction_boost": self._score_boost(len(bucket["records"])),
+                "correction_tags": sorted(bucket["tags"]),
+                "features": self._build_synthetic_features(latest_record, bucket["tags"]),
+            }
+
+        self._patterns = [
+            self._normalize_pattern(data)
+            for data in self._load_json_files(self._knowledge_path / "patterns")
+        ]
+        self._rules = [
+            self._normalize_rule(data)
+            for data in self._load_json_files(self._knowledge_path / "rules")
+        ]
+
+    def list_cases(self) -> List[Dict[str, Any]]:
+        self.refresh()
+
+        cases: List[Dict[str, Any]] = []
+        seen_case_ids: Set[str] = set()
+        for case in self._base_store.list_cases() if self._base_store else []:
+            case_meta = dict(case)
+            case_id = case_meta.get("case_id")
+            if case_id:
+                correction_meta = self._case_corrections.get(case_id)
+                if correction_meta:
+                    case_meta["has_corrections"] = True
+                    case_meta["correction_count"] = len(correction_meta["records"])
+                    case_meta["correction_boost"] = self._score_boost(
+                        len(correction_meta["records"])
+                    )
+                    case_meta["correction_tags"] = sorted(correction_meta["tags"])
+                seen_case_ids.add(case_id)
+            cases.append(case_meta)
+
+        for case_id, synthetic_case in self._synthetic_cases.items():
+            if case_id not in seen_case_ids:
+                cases.append(dict(synthetic_case))
+
+        return cases
+
+    def get_case_features(self, case_id: str) -> Dict[str, Any]:
+        self.refresh()
+
+        if self._base_store:
+            base_features = self._base_store.get_case_features(case_id)
+            if base_features:
+                return base_features
+
+        synthetic_case = self._synthetic_cases.get(case_id, {})
+        return dict(synthetic_case.get("features", {}))
+
+    def get_patterns(self, tags: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        self.refresh()
+        base_patterns = self._base_store.get_patterns(tags=tags) if self._base_store else []
+        return list(base_patterns) + self._filter_by_tags(self._patterns, tags)
+
+    def get_rules(self, tags: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        self.refresh()
+        base_rules = self._base_store.get_rules(tags=tags) if self._base_store else []
+        return list(base_rules) + self._filter_by_tags(self._rules, tags)
+
+    def _load_json_files(self, path: Path) -> List[Dict[str, Any]]:
+        if not path.exists():
+            return []
+
+        loaded: List[Dict[str, Any]] = []
+        for json_file in sorted(path.rglob("*.json")):
+            try:
+                with open(json_file) as f:
+                    loaded.append(json.load(f))
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Failed to load correction knowledge %s: %s", json_file, exc)
+        return loaded
+
+    def _score_boost(self, correction_count: int) -> float:
+        return min(0.2, self._correction_boost * max(1, correction_count))
+
+    def _normalize_pattern(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = dict(data)
+        normalized["pattern_id"] = data.get("pattern_id") or data.get("knowledge_id", "")
+        normalized["tags"] = sorted(
+            set(data.get("tags", [])) | self._derive_pattern_tags(data)
+        )
+        return normalized
+
+    def _normalize_rule(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = dict(data)
+        normalized["rule_id"] = data.get("rule_id") or data.get("knowledge_id", "")
+        normalized["tags"] = sorted(
+            set(data.get("tags", [])) | self._derive_rule_tags(data)
+        )
+        return normalized
+
+    def _derive_correction_tags(self, record: Dict[str, Any]) -> Set[str]:
+        tags = {
+            f"error:{record.get('error_type', 'unknown')}",
+            f"scope:{record.get('impact_scope', 'unknown')}",
+            "source:correction",
+        }
+        tags |= self._infer_dimension_tags(
+            [
+                record.get("root_cause", ""),
+                record.get("fix_action", ""),
+                json.dumps(record.get("wrong_output", {}), ensure_ascii=False),
+                json.dumps(record.get("correct_output", {}), ensure_ascii=False),
+            ]
+        )
+        return tags
+
+    def _derive_pattern_tags(self, data: Dict[str, Any]) -> Set[str]:
+        pattern_signature = data.get("pattern_signature", {})
+        trigger_conditions = data.get("trigger_conditions", {})
+        tags = {
+            f"error:{error_type}"
+            for error_type in trigger_conditions.get("error_types", [])
+        }
+        tags |= {
+            f"scope:{scope}" for scope in trigger_conditions.get("impact_scopes", [])
+        }
+
+        category_tag = _CORRECTION_CATEGORY_TAGS.get(
+            pattern_signature.get("root_cause_category", "")
+        )
+        if category_tag:
+            tags.add(category_tag)
+
+        tags |= self._infer_dimension_tags(
+            [
+                data.get("name", ""),
+                data.get("description", ""),
+                data.get("pattern_type", ""),
+                pattern_signature.get("root_cause_category", ""),
+                pattern_signature.get("fix_action_type", ""),
+                " ".join(data.get("recommended_actions", [])),
+            ]
+        )
+        return tags
+
+    def _derive_rule_tags(self, data: Dict[str, Any]) -> Set[str]:
+        rule_expression = data.get("rule_expression", {})
+        tags = set()
+        if data.get("scope"):
+            tags.add(f"scope:{data['scope']}")
+
+        tags |= self._infer_dimension_tags(
+            [
+                data.get("name", ""),
+                data.get("description", ""),
+                data.get("rule_type", ""),
+                json.dumps(rule_expression, ensure_ascii=False),
+            ]
+        )
+        return tags
+
+    def _infer_dimension_tags(self, texts: List[str]) -> Set[str]:
+        haystack = " ".join(text for text in texts if text).lower()
+        tags: Set[str] = set()
+
+        for dimension, keywords in _CORRECTION_TAG_KEYWORDS.items():
+            if any(keyword in haystack for keyword in keywords):
+                tags.add(f"dim:{dimension.value}")
+
+        return tags
+
+    def _build_synthetic_features(
+        self,
+        record: Dict[str, Any],
+        tags: Set[str],
+    ) -> Dict[str, Any]:
+        features: Dict[str, Any] = {}
+
+        if "dim:numerical" in tags:
+            features["numerical"] = {
+                "error_type": record.get("error_type", ""),
+                "needs_replay": 1.0 if record.get("needs_replay") else 0.0,
+            }
+        if "dim:boundary" in tags:
+            features["boundary"] = {
+                "impact_scope": record.get("impact_scope", ""),
+                "error_type": record.get("error_type", ""),
+            }
+        if "dim:mesh" in tags:
+            features["mesh"] = {
+                "impact_scope": record.get("impact_scope", ""),
+                "needs_replay": 1.0 if record.get("needs_replay") else 0.0,
+            }
+        if "dim:physics" in tags:
+            features["physics"] = {"error_type": record.get("error_type", "")}
+        if "dim:flow_regime" in tags:
+            features["flow_regime"] = {"impact_scope": record.get("impact_scope", "")}
+        if "dim:geometry" in tags:
+            features["geometry"] = {"impact_scope": record.get("impact_scope", "")}
+        if "dim:report" in tags:
+            features["report"] = {"impact_scope": record.get("impact_scope", "")}
+
+        return features
+
+    def _filter_by_tags(
+        self,
+        records: List[Dict[str, Any]],
+        tags: Optional[List[str]],
+    ) -> List[Dict[str, Any]]:
+        if not tags:
+            return list(records)
+
+        required_tags = set(tags)
+        return [
+            dict(record)
+            for record in records
+            if required_tags & set(record.get("tags", []))
+        ]
 
 
 # ============================================================================
@@ -216,6 +505,7 @@ class SimilarityEngine:
                 dimension_scores=scores,
             )
             result.calculate_overall_similarity()
+            self._apply_correction_boost(result, case_meta)
 
             # 根据综合相似度确定可信度
             result.confidence = self._score_to_confidence(result.overall_similarity)
@@ -226,6 +516,26 @@ class SimilarityEngine:
         # 按综合相似度降序排列
         results.sort(key=lambda r: r.overall_similarity, reverse=True)
         return results[:top_k]
+
+    def _apply_correction_boost(
+        self,
+        result: AnalogyResult,
+        case_meta: Dict[str, Any],
+    ) -> None:
+        """对有修正反馈的案例施加轻量分数加成。"""
+        if not case_meta.get("has_corrections"):
+            return
+
+        boost = float(case_meta.get("correction_boost", 0.0))
+        if boost <= 0:
+            return
+
+        result.overall_similarity = min(1.0, result.overall_similarity + boost)
+        correction_count = case_meta.get("correction_count", 0)
+        if result.dimension_scores:
+            result.dimension_scores[0].evidence.append(
+                f"correction_feedback:{correction_count} boost:+{boost:.2f}"
+            )
 
     def _compute_dimension_scores(
         self,
