@@ -141,7 +141,7 @@ E2E 验证失败时的处理规则：
 | M5 SSOT 核对与修复 | MiniMax-M2.7 | ✅ 部分完成 (API限制) |
 | M4 白名单扩展 (30→50+) | MiniMax-M2.7 | ✅ 55条完成 |
 | M1 E2E Mock 演示 | Codex | ✅ 3/3 PASS |
-| M2 案例替换 | Codex | 待确认 |
+| M2 案例替换 | Codex | ✅ VAWT→Cylinder Wake |
 | M3 Correction 反馈闭环 | Codex | 待确认 |
 | M6 PermissionLevel L3 | Codex | 待确认 |
 | M7 Phase 6 条目 | ✅ 已创建 | ✅ |
