@@ -1,0 +1,7 @@
+solver:
+  executor: "openfoam-docker"
+  docker:
+    image: "openfoam/openfoam13-default"
+    timeout: 600
+    memory_limit: "4g"
+  fallback: "mock"

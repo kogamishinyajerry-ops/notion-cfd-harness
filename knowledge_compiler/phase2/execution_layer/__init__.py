@@ -100,6 +100,19 @@ from knowledge_compiler.phase2.execution_layer.postprocess_adapter import (
     apply_template,
 )
 
+# Solver Execution
+from knowledge_compiler.phase2.execution_layer.solver_protocol import (
+    SolverExecutor,
+    SolverResult,
+)
+from knowledge_compiler.phase2.execution_layer.mock_solver import (
+    MockSolverExecutor,
+    simulate_benchmark_output,
+)
+from knowledge_compiler.phase2.execution_layer.executor_factory import (
+    ExecutorFactory,
+)
+
 __all__ = [
     # Schema
     "FlowType",
@@ -172,4 +185,10 @@ __all__ = [
     "TemplatePostprocessAdapter",
     "adapt_for_nl_postprocess",
     "apply_template",
+    # Solver Execution
+    "SolverExecutor",
+    "SolverResult",
+    "MockSolverExecutor",
+    "simulate_benchmark_output",
+    "ExecutorFactory",
 ]

@@ -20,6 +20,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from knowledge_compiler.phase2.execution_layer.mock_solver import (
+    simulate_benchmark_output,
+)
 from knowledge_compiler.phase2c.correction_recorder import (
     CorrectionRecord,
     ImpactScope,
@@ -403,34 +406,10 @@ class BenchmarkReplayEngine:
 
         根据修正类型和影响范围模拟修正效果
         """
-        # 模拟输出 - 基于 fix_action 生成
-        simulated_output = {}
-
-        # 根据修正类型模拟
-        if "数据" in correction.fix_action or "值" in correction.fix_action:
-            # 数据修正：模拟数据修正后的输出
-            for field_name, expected_value in benchmark_case.expected_output.items():
-                if isinstance(expected_value, (int, float)):
-                    # 添加小扰动模拟真实情况
-                    import random
-                    perturbation = random.uniform(-0.01, 0.01)  # ±1% 扰动
-                    simulated_output[field_name] = expected_value * (1 + perturbation)
-                else:
-                    simulated_output[field_name] = expected_value
-
-        elif "公式" in correction.fix_action or "算法" in correction.fix_action:
-            # 算法修正：直接使用预期值
-            simulated_output = benchmark_case.expected_output.copy()
-
-        elif "缺失" in correction.fix_action or "添加" in correction.fix_action:
-            # 添加缺失组件：使用预期值
-            simulated_output = benchmark_case.expected_output.copy()
-
-        else:
-            # 默认情况
-            simulated_output = benchmark_case.expected_output.copy()
-
-        return simulated_output
+        return simulate_benchmark_output(
+            expected_output=benchmark_case.expected_output,
+            fix_action=correction.fix_action,
+        )
 
     def _execute_correction_real(
         self,
