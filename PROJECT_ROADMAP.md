@@ -1,9 +1,10 @@
-# Well-Harness 项目整体规划
+# AI-CFD Knowledge Harness 项目规划
 **AI-Driven CFD Knowledge System**
 
-**版本**: 1.0
-**日期**: 2026-04-08
-**状态**: Phase 1 完成，Phase 2 规划中
+**版本**: 2.0
+**日期**: 2026-04-09
+**状态**: Project Accepted (v1.0.0 released)
+**审查**: REV-PROJECT-001 Approved by Opus 4.6
 
 ---
 
@@ -15,19 +16,21 @@
 
 - **知识捕获**: 自动从工程师操作中提取知识
 - **知识积累**: 建立可复用的 CFD 知识库
-- **知识应用**: 新案例自动应用历史知识
+- **知识应用**: 新案例自动应用历史知识（类比推理）
 - **质量保证**: Gate 机制确保 AI 输出质量
-- **持续演化**: 知识库随使用不断优化
+- **持续演化**: 知识库随使用不断优化（版本追踪 + 治理）
 
 ### 1.2 核心价值
 
 | 痛点 | 解决方案 |
 |------|----------|
 | 每次案例重复设置后处理 | ReportSpec 模板复用 |
-| AI 输出不可靠 | Gate 质量验证 |
+| AI 输出不可靠 | Gate 质量验证 (G1-G6) |
 | 知识散落在个人经验中 | Teach Mode 知识捕获 |
 | 难以验证 AI 结果 | Gold Standards 基准 |
 | 无法追踪知识演化 | Memory Network 版本控制 |
+| 新案例无法利用已有知识 | E1-E6 类比推理引擎 |
+| 生产环境安全不可控 | PermissionLevel L0-L3 + RBAC |
 
 ---
 
@@ -37,32 +40,30 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         Well-Harness Platform                       │
+│                    AI-CFD Knowledge Harness v1.0                     │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                    Phase 5: Performance & Security            │   │
-│  │  (连接池 / 缓存 / 认证 / 备份)                                │   │
+│  │              Phase 5: Production Readiness & Operations  ✅  │   │
+│  │  Cache Layer | Connection Pool | Metrics | Auth | Backup     │   │
 │  └─────────────────────────────────────────────────────────────┘   │
-│                                │                                   │
 │  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                    Phase 4: Memory Network                   │   │
-│  │  (版本控制 / 传播追踪 / 治理策略 / 代码映射)                   │   │
+│  │              Phase 4: Governed Memory Network             ✅  │   │
+│  │  Versioned Registry | Propagation | Governance | Code Map   │   │
 │  └─────────────────────────────────────────────────────────────┘   │
-│                                │                                   │
 │  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                    Phase 3: Orchestrator                     │   │
-│  │  (求解器调度 / 网格生成 / 物理规划 / CAD 解析)                │   │
+│  │              Phase 3: Analogical Orchestrator              ✅  │   │
+│  │  E1 Similarity | E2 Decompose | E3 Plan | E4 Trial         │   │
+│  │  E5 Evaluate | E6 Failure Handler                           │   │
 │  └─────────────────────────────────────────────────────────────┘   │
-│                                │                                   │
 │  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                    Phase 2: Knowledge Compiler               │   │
-│  │  (编译核心 / 归一化 / 差分检测 / 发布合约)                    │   │
+│  │              Phase 2: Execution + Governance               ✅  │   │
+│  │  Physics Planner | Result Validator | Failure Handler       │   │
+│  │  Postprocess Runner | Pipeline | Benchmark Replay           │   │
 │  └─────────────────────────────────────────────────────────────┘   │
-│                                │                                   │
 │  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                    Phase 1: Knowledge Collector  ✅          │   │
-│  │  (ReportSpec / Teach Mode / Gates / NL / 可视化)            │   │
+│  │              Phase 1: Knowledge Compiler                   ✅  │   │
+│  │  NL Parser | Gates (G1/G2) | Gold Standards | Teach Mode    │   │
 │  └─────────────────────────────────────────────────────────────┘   │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
@@ -71,31 +72,13 @@
 ### 2.2 数据流向
 
 ```
-工程师操作
-    │
-    ▼
-┌─────────────┐
-│ Phase 1     │ → ReportSpec (知识载体)
-│ 捕获知识    │ → CorrectionSpec (修正记录)
-└─────────────┘
-    │
-    ▼
-┌─────────────┐
-│ Phase 2     │ → NormalizedSpec (标准化规范)
-│ 编译知识    │ → Diff (变更检测)
-└─────────────┘
-    │
-    ▼
-┌─────────────┐
-│ Phase 3     │ → Workflow (可执行工作流)
-│ 应用知识    │ → JobConfig (求解配置)
-└─────────────┘
-    │
-    ▼
-┌─────────────┐
-│ Phase 4     │ → VersionedNode (版本化节点)
-│ 追踪演化    │ → PropagationEvent (传播事件)
-└─────────────┘
+NL Input → Phase 1 (解析) → Phase 2 (执行 + 治理)
+                              ↓
+         Phase 3 (类比推理 ← E1→E6 pipeline)
+                              ↓
+         Phase 4 (知识版本化 + 治理策略)
+                              ↓
+         Phase 5 (生产就绪 + 运维保障)
 ```
 
 ---
@@ -104,15 +87,16 @@
 
 ### 3.1 Phase 总览
 
-| Phase | 名称 | 核心目标 | 状态 | 预计工期 |
-|-------|------|----------|------|----------|
-| **Phase 1** | Knowledge Collector | 知识捕获 | ✅ 完成 | 2 周 |
-| **Phase 2** | Knowledge Compiler | 知识编译 | 🔄 规划中 | 2 周 |
-| **Phase 3** | Orchestrator | 知识应用 | ⏳ 待开始 | 3 周 |
-| **Phase 4** | Memory Network | 知识演化 | ⏳ 待开始 | 2 周 |
-| **Phase 5** | Performance & Security | 生产就绪 | ⏳ 待开始 | 1 周 |
+| Phase | 名称 | 核心目标 | 状态 | LOC | Tests |
+|-------|------|----------|------|-----|-------|
+| **Phase 1** | Knowledge Compiler | NL 解析、Gate 验证、黄金样板 | ✅ Pass | ~2,000 | ~200 |
+| **Phase 2** | Execution + Governance | 执行层、治理、Pipeline | ✅ Pass (8.5/10) | ~3,500 | ~500 |
+| **Phase 3** | Analogical Orchestrator | E1-E6 类比推理引擎 | ✅ Pass (8.5/10) | 5,561 | 352 |
+| **Phase 4** | Governed Memory Network | 版本追踪、治理、代码映射 | ✅ Pass | 3,613 | 116 |
+| **Phase 5** | Production Readiness | 性能、安全、运维 | ✅ Pass | 5,211 | 301 |
+| **总计** | | | ✅ Accepted | **~19,885** | **1,619** |
 
-### 3.2 Phase 1: Knowledge Collector ✅
+### 3.2 Phase 1: Knowledge Compiler ✅
 
 **目标**: 建立知识捕获基础设施
 
@@ -121,7 +105,7 @@
 | Schema | ✅ | 25 | 数据模型 |
 | Manager | ✅ | 28 | ReportSpec 管理 |
 | Teach Mode | ✅ | 43 | 教学捕获 |
-| Gates (P1-G1/P3/P4) | ✅ | 13 | 质量门 |
+| Gates (G1/G2) | ✅ | 13 | 质量门 |
 | NL Postprocess | ✅ | 53 | 自然语言 |
 | Visualization | ✅ | 17 | 可视化 |
 | Gold Standards | ✅ | 21 | 黄金样板 |
@@ -129,272 +113,158 @@
 | **总计** | ✅ | **321** | |
 
 **完成日期**: 2026-04-08
-**签署**: 待 Opus 4.6 审查
 
-### 3.3 Phase 2: Knowledge Compiler 🔄
+### 3.3 Phase 2: Execution + Governance ✅
 
-**目标**: 建立知识编译与标准化能力
+**目标**: 建立执行层和治理能力
 
-| 组件 | 优先级 | 负责模型 | 说明 |
-|------|--------|----------|------|
-| Compiler Core | P0 | Codex | 核心编译逻辑 |
-| Normalization | P1 | GLM-5.1 | 规范标准化 |
-| Diff Engine | P0 | Codex | 变更检测 |
-| Publish Contract | P0 | Codex | 发布流程 |
-| Version Manager | P1 | GLM-5.1 | 版本管理 |
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| Physics Planner | ✅ | 求解器选择矩阵 (53/53 测试) |
+| Result Validator | ✅ | 异常检测 |
+| Failure Handler | ✅ | PermissionLevel L0-L3 |
+| Postprocess Runner + Adapter | ✅ | 数据流适配 |
+| Correction Recorder | ✅ | 学习闭环 |
+| Benchmark Replay Engine | ✅ | 基准复现 |
+| Pipeline Orchestrator | ✅ | E2E 编排 |
 
-**依赖**: Phase 1 完成签署
-**预计开始**: Phase 1 审查通过后
-**预计完成**: 2 周
+**审查评分**: 8.5/10 (REV-97A27E R1-R5)
 
-### 3.4 Phase 3: Orchestrator ⏳
+### 3.4 Phase 3: Analogical Orchestrator ✅
 
-**目标**: 实现端到端 CFD 工作流自动化
+**目标**: 实现类比推理引擎
 
-| 组件 | 优先级 | 负责模型 | 说明 |
-|------|--------|----------|------|
-| Solver Runner | P0 | Codex | 求解器调度 |
-| Mesh Builder | P0 | Codex | 网格生成 |
-| Physics Planner | P0 | Opus 4.6 | 物理规划 |
-| CAD Parser | P1 | Codex | CAD 几何解析 |
-| Job Scheduler | P1 | GLM-5.1 | 作业调度 |
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| E1 SimilarityEngine | ✅ | 对数归一化 + 硬约束 |
+| E2 AnalogyDecomposer | ✅ | 维度分解 |
+| E3 CandidatePlanGenerator | ✅ | A/B/C 方案 |
+| E4 TrialRunner | ✅ | PermissionLevel L0-L3 集成 |
+| E5 TrialEvaluator | ✅ | Gate + Mock 防护 |
+| E6 AnalogyFailureHandler | ✅ | 四层安全防护 |
+| Cold Start Whitelist | ✅ | 30 cases |
 
-**依赖**: Phase 2 完成
-**预计完成**: 3 周
+**审查评分**: 8.5/10 (REV-P3-001~003, 三轮审查)
 
-### 3.5 Phase 4: Memory Network ⏳
+### 3.5 Phase 4: Governed Memory Network ✅
 
 **目标**: 建立知识演化追踪系统
 
-| 组件 | 优先级 | 负责模型 | 说明 |
-|------|--------|----------|------|
-| Versioned Registry | P0 | Codex | 版本化注册表 |
-| Memory Node | P1 | GLM-5.1 | 记忆节点 |
-| Propagation Engine | P0 | Codex | 传播引擎 |
-| Governance Engine | P0 | Codex + Opus | 治理执行 |
-| Code Mapping | P1 | GLM-5.1 | 代码映射 |
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| VersionedKnowledgeRegistry | ✅ | 版本化注册表 |
+| MemoryNode 数据模型 | ✅ | 记忆节点 |
+| PropagationEngine | ✅ | 传播引擎 |
+| GovernanceEngine | ✅ | 治理执行 |
+| CodeMappingRegistry | ✅ | 代码映射 |
+| MemoryNetwork 主编排器 | ✅ | 编排 |
+| Gate 层 (G3-G6) | ✅ | 质量门 |
+| Notion Memory Events | ✅ | Notion 集成 |
 
-**依赖**: Phase 3 完成
-**预计完成**: 2 周
-
-### 3.6 Phase 5: Performance & Security ⏳
+### 3.6 Phase 5: Production Readiness ✅
 
 **目标**: 生产环境就绪
 
-| 组件 | 优先级 | 负责模型 | 说明 |
-|------|--------|----------|------|
-| Connection Pool | P0 | Codex | 连接池 |
-| Caching Layer | P1 | GLM-5.1 | 缓存 |
-| Auth System | P0 | GLM-5.1 + Opus | 认证 |
-| Backup & Recovery | P1 | GLM-5.1 | 备份恢复 |
-| Monitoring | P1 | GLM-5.1 | 监控 |
-
-**依赖**: Phase 4 完成
-**预计完成**: 1 周
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| Cache Layer (L1 TTLCache + L2 Redis) | ✅ | 缓存 |
+| Index Manager | ✅ | 版本历史索引 |
+| Connection Pool | ✅ | Notion API 连接池 |
+| Metrics Collection | ✅ | 指标采集 |
+| Structured Logging | ✅ | JSON + correlation_id |
+| Request Tracing | ✅ | structlog |
+| Access Control (AuthN + RBAC) | ✅ | 认证授权 |
+| Audit Logging | ✅ | 审计日志 |
+| Backup & Recovery | ✅ | 备份恢复 |
 
 ---
 
-## 四、开发节点
+## 四、项目指标
 
 ### 4.1 关键里程碑
 
-```
-现在 (2026-04-08)
-    │
-    ▼
-┌─────────────────────────────────────┐
-│ M1: Phase 1 完成                    │ ✅
-│ - 321 测试通过                      │
-│ - 文档完善                          │
-│ - 待 Opus 审查                      │
-└─────────────────────────────────────┘
-    │
-    ▼ 约 1 天
-┌─────────────────────────────────────┐
-│ M2: Phase 1 审查通过                │ ⏳
-│ - Opus 4.6 签署                     │
-│ - 进入 Phase 2                      │
-└─────────────────────────────────────┘
-    │
-    ▼ 约 2 周
-┌─────────────────────────────────────┐
-│ M3: Phase 2 完成                    │ ⏳
-│ - Knowledge Compiler 就绪           │
-│ - 差分检测可用                      │
-└─────────────────────────────────────┘
-    │
-    ▼ 约 5 周 (Phase 3)
-┌─────────────────────────────────────┐
-│ M4: Phase 3 完成                    │ ⏳
-│ - Orchestrator 可运行               │
-│ - 端到端工作流打通                  │
-└─────────────────────────────────────┘
-    │
-    ▼ 约 7 周 (Phase 4)
-┌─────────────────────────────────────┐
-│ M5: Phase 4 完成                    │ ⏳
-│ - Memory Network 就绪               │
-│ - 知识演化可追踪                    │
-└─────────────────────────────────────┘
-    │
-    ▼ 约 8 周 (Phase 5)
-┌─────────────────────────────────────┐
-│ M6: 生产就绪                        │ ⏳
-│ - 所有 Phase 完成                   │
-│ - 可投入生产使用                    │
-└─────────────────────────────────────┘
-```
+| 里程碑 | 日期 | 状态 |
+|--------|------|------|
+| M1: Phase 1 完成 | 2026-04-08 | ✅ |
+| M2: Phase 1 审查通过 | 2026-04-08 | ✅ |
+| M3: Phase 2 完成 | 2026-04-09 | ✅ |
+| M4: Phase 3 完成 | 2026-04-09 | ✅ |
+| M5: Phase 4 完成 | 2026-04-09 | ✅ |
+| M6: Phase 5 完成 | 2026-04-09 | ✅ |
+| **M7: 项目整体验收** | **2026-04-09** | **✅ REV-PROJECT-001 Approved** |
+| **v1.0.0 Release** | **2026-04-09** | **✅ Tagged** |
 
-### 4.2 当前节点
+### 4.2 开发历程
 
-**位置**: M2 ✅
-**状态**: Phase 1 完成，Opus 审查通过
-**阻塞**: 无
-**下一步**: 开始 Phase 2 规划与实现
+| 指标 | 值 |
+|------|-----|
+| 分析会话数 | 21 |
+| 关键决策 | 18 |
+| 失败尝试 | 8 |
+| 审查轮次 | 8 |
+| Opus 审查 | 4 次 |
+| 全量回归 | 1,619 passed, 0 failed |
+| 测试密度 | 1 test / 12.3 LOC |
+
+### 4.3 评分演进
+
+| Phase | 初审评分 | 最终评分 |
+|-------|----------|----------|
+| Phase 2a | 6.5 | 8.5 |
+| Phase 2b | 7.5 | 8.5 |
+| Phase 2c | 8.0 | 8.5 |
+| Phase 3 | 8.0 | 8.5 |
 
 ---
 
-## 五、依赖关系
+## 五、安全措施
 
-### 5.1 Phase 依赖图
+| 措施 | Phase | 状态 |
+|------|-------|------|
+| No Data Fabrication (mock 防护) | Phase 3 E5 | ✅ |
+| PermissionLevel (L0-L3) | Phase 2/3 | ✅ |
+| RBAC 权限系统 | Phase 5 | ✅ |
+| 审计日志 | Phase 5 | ✅ |
+| Secret 管理 | Phase 5 | ✅ |
+| RelaxationBoundary | Phase 3 E6 | ✅ |
 
-```
-Phase 1 (知识捕获)
-    │
-    ├─────────────────────────────────────┐
-    ▼                                     ▼
-Phase 2 (知识编译)                   Phase 4 (记忆网络)
-    │                                     │
-    ▼                                     ▼
-Phase 3 (编排器) ────────────────────────┘
-    │
-    ▼
-Phase 5 (性能安全)
-```
+### 待关注项 (Phase 6+)
 
-### 5.2 关键依赖
-
-| 依赖项 | 被依赖 | 说明 |
-|--------|--------|------|
-| ReportSpec | Phase 2-5 | 核心数据结构 |
-| CorrectionSpec | Phase 2-5 | 修正记录 |
-| Gate 机制 | Phase 2-5 | 质量保证 |
-| Diff Engine | Phase 3-4 | 变更检测 |
-| VersionedNode | Phase 5 | 版本控制 |
+| 项目 | 优先级 | 说明 |
+|------|--------|------|
+| Notion API Token 轮换 | P2 | 当前为长期集成 token |
+| HTTP API 认证 | Phase 6 | 当前仅 CLI 模式 |
+| 数据加密 | Phase 6 | 知识库未加密 |
 
 ---
 
-## 六、风险与缓解
+## 六、交付物
 
-### 6.1 技术风险
+### 6.1 代码交付物
 
-| 风险 | 影响 | 概率 | 缓解措施 |
-|------|------|------|----------|
-| Opus 审查不通过 | 高 | 中 | 预留重构时间 |
-| Phase 2 架构变更 | 高 | 中 | Phase 1 保持接口稳定 |
-| 性能瓶颈 | 中 | 低 | Phase 5 专项优化 |
-| Gate 漏洞 | 高 | 低 | 持续完善 Gate |
+| Phase | LOC | Tests | 文件 |
+|-------|-----|-------|------|
+| Phase 1 | ~2,000 | ~200 | knowledge_compiler/ |
+| Phase 2 | ~3,500 | ~500 | knowledge_compiler/phase2/ |
+| Phase 3 | 5,561 | 352 | knowledge_compiler/phase3/ |
+| Phase 4 | 3,613 | 116 | knowledge_compiler/memory_network/ |
+| Phase 5 | 5,211 | 301 | knowledge_compiler/performance+observability+security+operations/ |
+| **总计** | **~19,885** | **1,619** | **66 test files** |
 
-### 6.2 进度风险
+### 6.2 文档交付物
 
-| 风险 | 影响 | 概率 | 缓解措施 |
-|------|------|------|----------|
-| Opus 审排期延迟 | 中 | 中 | 并行准备 Phase 2 设计 |
-| Codex 额度不足 | 高 | 低 | GLM-5.1 Fallback |
-| 需求变更 | 中 | 中 | 保持模块解耦 |
-
----
-
-## 七、交付物
-
-### 7.1 代码交付物
-
-| Phase | 交付物 | 验收标准 |
-|-------|--------|----------|
-| Phase 1 | 9 个核心模块 | 321 测试通过 |
-| Phase 2 | Compiler + Diff | 变更检测可用 |
-| Phase 3 | Orchestrator | 端到端工作流 |
-| Phase 4 | Memory Network | 版本追踪可用 |
-| Phase 5 | 生产就绪 | 性能达标 |
-
-### 7.2 文档交付物
-
-| 文档 | 状态 | 更新频率 |
-|------|------|----------|
-| 架构文档 | ✅ Phase 1 | 每个 Phase |
-| 用户指南 | ✅ Phase 1 | 每个 Phase |
-| 开发者指南 | ✅ Phase 1 | 每个 Phase |
-| API 文档 | 🔄 | 自动生成 |
-| 发布说明 | ⏳ | 每次发布 |
+| 文档 | 说明 |
+|------|------|
+| PHASE1_ARCHITECTURE_OVERVIEW.md | Phase 1 架构 |
+| PHASE4_ARCHITECTURE.md | Phase 4 架构 |
+| Phase4_PLAN.md / Phase5_PLAN.md | Phase 4/5 规划 |
+| OPUS_REVIEW_PHASE3_ACCEPTANCE.md | Phase 3 验收 |
+| OPUS_REVIEW_PROJECT_ACCEPTANCE.md | 项目整体验收 |
+| PROJECT_ROADMAP.md | 本文件 |
+| Phase4_BASELINE_MANIFEST.json | Phase 4 基线 |
 
 ---
 
-## 八、团队协作
-
-### 8.1 模型分工
-
-| 任务 | 主要模型 | 辅助模型 | 审查 |
-|------|---------|---------|------|
-| Schema 定义 | GLM-5.1 | - | 跳过 |
-| 核心算法 | Codex | GLM-5.1 | Codex CR |
-| Gate 实现 | Codex | GLM-5.1 | **Opus 4.6** |
-| 测试编写 | GLM-5.1 | MiniMax | 跳过 |
-| 文档更新 | GLM-5.1 | - | 跳过 |
-| 架构审查 | - | - | **Opus 4.6** |
-
-### 8.2 工作流
-
-```
-用户需求
-    │
-    ▼
-GLM-5.1: 任务分解
-    │
-    ├─→ Schema/测试 → GLM-5.1 直接实现
-    │
-    └─→ 核心逻辑 → Codex 实现 → GLM-5.1 整合 → 测试
-         │
-         └─→ Gate/架构 → Opus 4.6 手动审查
-```
-
----
-
-## 九、当前行动项
-
-### 9.1 立即执行
-
-- [ ] 执行 Opus 4.6 Phase 1 架构审查
-- [ ] 处理审查反馈
-- [ ] 获取 Phase 1 完成签署
-
-### 9.2 准备工作
-
-- [ ] Phase 2 详细设计
-- [ ] Phase 2 任务拆解
-- [ ] Diff Engine 技术调研
-
----
-
-## 十、成功标准
-
-### 10.1 Phase 1 成功标准 ✅
-
-- [x] 300+ 测试通过 (357 tests)
-- [x] E2E Demo 可运行
-- [x] 文档完善
-- [x] Opus 4.6 审查通过
-- [x] 所有 P0/P1 项目完成
-
-### 10.2 整体成功标准
-
-- [ ] 所有 Phase 完成
-- [ ] 端到端工作流可运行
-- [ ] 至少 3 个真实案例验证
-- [ ] 性能满足生产要求
-- [ ] 文档完整
-
----
-
-**维护者**: Well-Harness Team
-**最后更新**: 2026-04-08
-**下次审查**: Phase 1 完成后
+**维护者**: AI-CFD Knowledge Harness Team
+**最后更新**: 2026-04-09
+**版本**: v1.0.0 (Released)

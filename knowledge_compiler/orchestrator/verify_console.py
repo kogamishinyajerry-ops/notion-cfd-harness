@@ -225,15 +225,23 @@ def main():
 
     args = parser.parse_args()
 
+    import json
+
     console = VerifyConsole()
 
-    # TODO: Load results_data from args.results
+    # Load results_data from file or use empty dict
     results_data = {}
+    if args.results:
+        results_path = Path(args.results)
+        if not results_path.exists():
+            print(f"Warning: results file not found: {args.results}")
+        else:
+            with open(results_path, "r") as f:
+                results_data = json.load(f)
 
     report = console.run_full_verification(args.case, results_data)
 
     # Save report
-    import json
     with open(args.output, "w") as f:
         json.dump(report, f, default=str, indent=2)
 

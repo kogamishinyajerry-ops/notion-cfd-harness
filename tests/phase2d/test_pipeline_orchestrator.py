@@ -285,7 +285,7 @@ class TestStageExecutors:
     def test_report_spec_executor_success(self):
         """测试 ReportSpec 执行器成功"""
         executor = ReportSpecStageExecutor()
-        context = {"problem_type": "fluid_flow"}
+        context = {"problem_type": "external_flow"}
         config = create_default_config("PIPE-001", "Test")
 
         result = executor.execute(context, config)
@@ -300,6 +300,7 @@ class TestStageExecutors:
         """测试 Physics 规划执行器成功"""
         executor = PhysicsPlanningStageExecutor()
         context = {
+            "problem_description": "turbulent flow over airfoil at Re=500000",
             "physics_models": ["RANS", "k-epsilon"],
             "boundary_conditions": {"inlet": "velocity"},
         }
@@ -314,7 +315,7 @@ class TestStageExecutors:
         assert len(result.artifacts) > 0
 
     def test_execution_executor_success(self):
-        """测试执行执行器成功"""
+        """测试执行执行器成功（mock 模式无 case 目录）"""
         executor = ExecutionStageExecutor()
         context = {}
         config = create_default_config("PIPE-001", "Test")

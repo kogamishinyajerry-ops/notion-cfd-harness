@@ -940,14 +940,22 @@ class TemplateGeneralizationGate:
         - 权重分配应可配置（不同问题类型的关键维度不同）
         - 区分'结构泛化'（图表组成一致）和'内容泛化'（数值范围可复用）
         """
-        # 简化实现：基于TeachRecord的多样性
-        diversity_score = 0.5  # TODO: 实际计算
-
         # 一致性：检查TeachRecord是否指向相同类型的操作
         operation_types = set()
         for record in teach_records:
             for op in record.operations:
                 operation_types.add(op.operation_type)
+
+        # 基于 TeachRecord 操作类型多样性和数值范围覆盖度
+        if teach_records:
+            # 操作多样性：不同操作类型的占比
+            operation_diversity = min(1.0, len(operation_types) / 5.0)
+            # 案例覆盖：不同 source_case_id 的数量
+            case_ids = {r.case_id for r in teach_records if r.case_id}
+            case_diversity = min(1.0, len(case_ids) / 3.0)
+            diversity_score = 0.6 * operation_diversity + 0.4 * case_diversity
+        else:
+            diversity_score = 0.0
 
         consistency_score = len(operation_types) / 9.0  # 9种操作类型
 
