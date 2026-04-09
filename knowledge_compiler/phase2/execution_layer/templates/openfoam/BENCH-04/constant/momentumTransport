@@ -1,0 +1,11 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      momentumTransport;
+}
+
+// For Re=100, the flow is fundamentally laminar
+// Use laminar simulationType (no turbulence modeling)
+simulationType  laminar;

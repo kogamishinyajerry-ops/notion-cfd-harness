@@ -8,7 +8,10 @@ import shutil
 import subprocess
 from typing import Any, Optional
 
+from knowledge_compiler.phase2.execution_layer.case_generator import OpenFOAMCaseGenerator
 from knowledge_compiler.phase2.execution_layer.mock_solver import MockSolverExecutor
+from knowledge_compiler.phase2.execution_layer.openfoam_docker import DEFAULT_CASE_ROOT
+from knowledge_compiler.phase2.execution_layer.openfoam_docker import DEFAULT_IMAGE
 from knowledge_compiler.phase2.execution_layer.solver_protocol import SolverExecutor
 
 
@@ -91,6 +94,22 @@ class ExecutorFactory:
         executor_class = self._load_executor_class(name)
         if executor_class is None:
             return None
+
+        if name == "openfoam-docker":
+            docker_config = self._solver_config.get("docker", {}) or self.config.get("docker", {})
+            case_root = docker_config.get("case_root", DEFAULT_CASE_ROOT)
+            case_generator = OpenFOAMCaseGenerator(str(case_root))
+
+            try:
+                return executor_class(
+                    case_generator=case_generator,
+                    image=docker_config.get("image", DEFAULT_IMAGE),
+                    timeout=docker_config.get("timeout", 600),
+                    memory_limit=docker_config.get("memory_limit", "4g"),
+                    config=self.config,
+                )
+            except TypeError:
+                pass
 
         try:
             return executor_class(self.config)

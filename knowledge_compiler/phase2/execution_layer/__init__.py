@@ -112,6 +112,12 @@ from knowledge_compiler.phase2.execution_layer.mock_solver import (
 from knowledge_compiler.phase2.execution_layer.executor_factory import (
     ExecutorFactory,
 )
+from knowledge_compiler.phase2.execution_layer.case_generator import (
+    OpenFOAMCaseGenerator,
+)
+from knowledge_compiler.phase2.execution_layer.openfoam_docker import (
+    OpenFOAMDockerExecutor,
+)
 
 __all__ = [
     # Schema
@@ -191,4 +197,6 @@ __all__ = [
     "MockSolverExecutor",
     "simulate_benchmark_output",
     "ExecutorFactory",
+    "OpenFOAMCaseGenerator",
+    "OpenFOAMDockerExecutor",
 ]

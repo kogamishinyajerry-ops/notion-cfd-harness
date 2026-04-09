@@ -37,14 +37,14 @@ def test_generate_bench01_substitutes_key_values(tmp_path: Path) -> None:
 
     case_dir = generator.generate("BENCH-01")
 
-    transport_properties = (
-        case_dir / "constant" / "transportProperties"
+    physical_properties = (
+        case_dir / "constant" / "physicalProperties"
     ).read_text(encoding="utf-8")
     velocity_field = (case_dir / "0" / "U").read_text(encoding="utf-8")
 
-    assert "0.01" in transport_properties
+    assert "0.01" in physical_properties
     assert "uniform (1.0 0 0)" in velocity_field
-    assert "{{" not in transport_properties
+    assert "{{" not in physical_properties
     assert "{{" not in velocity_field
 
 

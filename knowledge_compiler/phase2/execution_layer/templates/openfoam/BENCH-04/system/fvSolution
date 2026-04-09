@@ -29,6 +29,12 @@ solvers
         tolerance       1e-06;
         relTol          0;
     }
+
+    UFinal
+    {
+        $U;
+        relTol          0;
+    }
 }
 
 PIMPLE
