@@ -551,3 +551,804 @@ cases:
     solver_command: "SU2_CFD master.cfg"
     success_criteria: Multizone run converges and produces consistent fluid/solid temperatures with nonzero contact-resistance effect across interfaces.
     why_whitelisted: Good late-stage breadth case for interface resistance and mesh-from-geometry workflows.
+
+  - id: BENCH-01
+    rank: 31
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: lid_driven_cavity_ghia_re100
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressible/icoFoam/cavity/cavity"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleFluid/cavity"
+      tutorial_page: "https://www.openfoam.com/documentation/tutorial-guide/2-incompressible-flow/2.1-lid-driven-cavity-flow"
+    source_provenance: Ghia, U., Ghia, K.N. & Shin, C.T. (1982). High-Re solutions for incompressible flows using the vorticity-stream function formulation. J. Comput. Phys., 48, 387-411.
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Use blockMeshDict with 65x65 grid; set lid velocity to Re=100 based on cavity width and fluid properties.
+    solver_command: "blockMesh && icoFoam"
+    success_criteria: blockMesh generates 65x65 mesh; icoFoam converges to steady state; centerline u-velocity at y=0.1 ≈ 0.0625 (normalized), peak v-velocity at x≈0.95 near 0.065.
+    physics_quantities:
+      - name: centerline_u_velocity
+        value: 0.0625
+        unit: dimensionless
+        source: "Ghia et al. 1982, Table 1, Grid 65x65"
+        error_threshold: 0.10
+      - name: reynolds_number
+        value: 100
+        unit: dimensionless
+        source: "Ghia et al. 1982"
+        error_threshold: 0.0
+    literature_reference: "Ghia, U., Ghia, K.N. & Shin, C.T. (1982). High-Re solutions for incompressible flows using the vorticity-stream function formulation. Journal of Computational Physics, 48, 387-411."
+    why_whitelisted: Gold-standard steady lid-driven cavity at Re=100 with fully tabulated centerline velocities; ideal first literature-verified benchmark.
+
+  - id: BENCH-02
+    rank: 32
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: lid_driven_cavity_ghia_re400
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressible/icoFoam/cavity/cavity"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleFluid/cavity"
+    source_provenance: Ghia, U., Ghia, K.N. & Shin, C.T. (1982). High-Re solutions for incompressible flows using the vorticity-stream function formulation. J. Comput. Phys., 48, 387-411.
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Use blockMeshDict with 65x65 grid; set lid velocity to Re=400. Include secondary vortex detection at bottom-left corner.
+    solver_command: "blockMesh && icoFoam"
+    success_criteria: icoFoam converges; primary vortex near geometric center; secondary corner vortices appear at bottom-left and bottom-right.
+    physics_quantities:
+      - name: primary_vortex_strength
+        value: 0.113
+        unit: dimensionless
+        source: "Ghia et al. 1982, Table 2, Re=400"
+        error_threshold: 0.12
+      - name: reynolds_number
+        value: 400
+        unit: dimensionless
+        source: "Ghia et al. 1982"
+        error_threshold: 0.0
+    literature_reference: "Ghia, U., Ghia, K.N. & Shin, C.T. (1982). High-Re solutions for incompressible flows using the vorticity-stream function formulation. Journal of Computational Physics, 48, 387-411."
+    why_whitelisted: Classic Re=400 lid-driven cavity; introduces secondary vortex physics and validates vortex-strength predictions.
+
+  - id: BENCH-03
+    rank: 33
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: intermediate
+    case_name: lid_driven_cavity_ghia_re1000
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleSimpleFoam/cavity/cavity"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleSimpleFoam/cavity"
+    source_provenance: Ghia, U., Ghia, K.N. & Shin, C.T. (1982). J. Comput. Phys., 48, 387-411. Also Botella & Peyret 1998 benchmark data.
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Use 129x129 grid for Re=1000; requires turbulence modeling or fine-grid laminar run; use simpleFoam for steady RANS.
+    solver_command: "blockMesh && simpleFoam"
+    success_criteria: Solution converges; velocity field shows transitional/turbulent behavior in the cavity core.
+    physics_quantities:
+      - name: reynolds_number
+        value: 1000
+        unit: dimensionless
+        source: "Ghia et al. 1982"
+        error_threshold: 0.0
+      - name: max_u_centerline
+        value: 0.162
+        unit: dimensionless
+        source: "Ghia et al. 1982, Re=1000"
+        error_threshold: 0.15
+    literature_reference: "Ghia, U., Ghia, K.N. & Shin, C.T. (1982). High-Re solutions for incompressible flows using the vorticity-stream function formulation. Journal of Computational Physics, 48, 387-411."
+    why_whitelisted: Re=1000 case bridges laminar-to-turbulent transition in lid-driven cavity; literature provides detailed velocity profiles.
+
+  - id: BENCH-04
+    rank: 34
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: intermediate
+    case_name: circular_cylinder_wake_re100_vortex_street
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleFluid/cylinder"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleFluid/cylinder"
+    source_provenance: Williamson, C.H.K. (1996). Vortex dynamics in the cylinder wake. Annual Review of Fluid Mechanics, 28, 477-539.
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Domain length 22D x 8D, cylinder at 2D from inlet; use refineMesh for wake refinement; mesh ~100k cells.
+    solver_command: "blockMesh && topoSet && refineMesh -overwrite && icoFoam"
+    success_criteria: Transient simulation shows Karman vortex street; Strouhal number St ≈ 0.164 at Re=100.
+    physics_quantities:
+      - name: strouhal_number
+        value: 0.164
+        unit: dimensionless
+        source: "Williamson 1996, Experiments in Fluids"
+        error_threshold: 0.08
+      - name: drag_coefficient
+        value: 1.34
+        unit: dimensionless
+        source: "Williamson 1996, J. Fluid Mech."
+        error_threshold: 0.05
+      - name: reynolds_number
+        value: 100
+        unit: dimensionless
+        source: "Williamson 1996"
+        error_threshold: 0.0
+    literature_reference: "Williamson, C.H.K. (1996). Vortex dynamics in the cylinder wake. Annual Review of Fluid Mechanics, 28, 477-539."
+    why_whitelisted: Gold-standard unsteady cylinder wake at Re=100; verifies vortex shedding frequency and drag coefficient.
+
+  - id: BENCH-05
+    rank: 35
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: circular_cylinder_re40_steady_separation
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleFluid/cylinder"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleFluid/cylinder"
+    source_provenance: Williamson, C.H.K. (1996). Annu. Rev. Fluid Mech. 28, 477-539. Classical benchmark from Tritton 1959.
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Re=40 steady separation; domain 30D x 15D; mesh ~50k cells.
+    solver_command: "blockMesh && icoFoam"
+    success_criteria: Steady solution with symmetric recirculation bubble behind cylinder; drag coefficient Cd ≈ 1.5.
+    physics_quantities:
+      - name: drag_coefficient
+        value: 1.5
+        unit: dimensionless
+        source: "Tritton 1959, J. Fluid Mech."
+        error_threshold: 0.07
+      - name: reynolds_number
+        value: 40
+        unit: dimensionless
+        source: "Williamson 1996"
+        error_threshold: 0.0
+    literature_reference: "Williamson, C.H.K. (1996). Vortex dynamics in the cylinder wake. Annual Review of Fluid Mechanics, 28, 477-539."
+    why_whitelisted: First steady-separation benchmark; Re=40 is the classical onset of flow separation on a circular cylinder.
+
+  - id: BENCH-06
+    rank: 36
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic_to_intermediate
+    case_name: circular_cylinder_re60_onset_shedding
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleFluid/cylinder"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleFluid/cylinder"
+    source_provenance: Williamson, C.H.K. (1996). Annu. Rev. Fluid Mech. 28, 477-539.
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Re=60 onset of vortex shedding; domain 25D x 10D; mesh ~80k cells; requires fine timestep.
+    solver_command: "blockMesh && icoFoam"
+    success_criteria: Time-resolved simulation captures early vortex shedding; Strouhal number St ≈ 0.13.
+    physics_quantities:
+      - name: strouhal_number
+        value: 0.13
+        unit: dimensionless
+        source: "Williamson 1996, Experiments in Fluids"
+        error_threshold: 0.10
+      - name: drag_coefficient
+        value: 1.45
+        unit: dimensionless
+        source: "Williamson 1996"
+        error_threshold: 0.08
+      - name: reynolds_number
+        value: 60
+        unit: dimensionless
+        source: "Williamson 1996"
+        error_threshold: 0.0
+    literature_reference: "Williamson, C.H.K. (1996). Vortex dynamics in the cylinder wake. Annual Review of Fluid Mechanics, 28, 477-539."
+    why_whitelisted: Re=60 is the critical onset of vortex shedding; validates that AI can detect wake oscillation from steady state.
+
+  - id: BENCH-07
+    rank: 37
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: intermediate
+    case_name: backward_facing_step_driver_re7600
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleFluid/pitzDailySteady"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleFluid/pitzDailySteady"
+    source_provenance: Driver, D.A. & Seegmiller, H.L. (1988). Features of the reattaching turbulent shear layer. AIAA J., 26(7), 775-782.
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Expand step height H=9.4mm; Re_H=7600 based on step height; use k-epsilon or k-omega SST for turbulence.
+    solver_command: "blockMesh && simpleFoam"
+    success_criteria: Reattachment length x/L ≈ 6.0 ± 0.5 (normalized by step height); wall shear stress distribution matches.
+    physics_quantities:
+      - name: reattachment_length_normalized
+        value: 6.0
+        unit: dimensionless
+        source: "Driver & Seegmiller 1988, AIAA J."
+        error_threshold: 0.10
+      - name: reynolds_number_H
+        value: 7600
+        unit: dimensionless
+        source: "Driver & Seegmiller 1988"
+        error_threshold: 0.0
+    literature_reference: "Driver, D.A. & Seegmiller, H.L. (1988). Features of the reattaching turbulent shear layer. AIAA Journal, 26(7), 775-782."
+    why_whitelisted: Classic backward-facing step with PIV data; AI can validate reattachment length and shear layer development.
+
+  - id: BENCH-08
+    rank: 38
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: advanced
+    case_name: backward_facing_step_kloker_re5100_dns
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleFluid/pitzDailySteady"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleFluid/pitzDailySteady"
+    source_provenance: Kloker, M. & Kowalczyk, W. (1994). Numerical simulation of reattaching shear layers. In Notes on Numerical Fluid Mechanics.
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Step height H=1 (normalized); Re=5100; requires DNS or very fine LES grid; mesh > 1M cells.
+    solver_command: "blockMesh && icoFoam or pimpleFoam (DNS mode)"
+    success_criteria: DNS-quality solution reproduces reattachment length and velocity profiles from Kloker & Kowalczyk.
+    physics_quantities:
+      - name: reattachment_length_normalized
+        value: 5.8
+        unit: dimensionless
+        source: "Kloker & Kowalczyk 1994"
+        error_threshold: 0.08
+      - name: reynolds_number_H
+        value: 5100
+        unit: dimensionless
+        source: "Kloker & Kowalczyk 1994"
+        error_threshold: 0.0
+    literature_reference: "Kloker, M. & Kowalczyk, W. (1994). Numerical simulation of reattaching shear layers. In Notes on Numerical Fluid Mechanics."
+    why_whitelisted: High-fidelity DNS benchmark; validates AI's ability to handle fine turbulent structures in separated flows.
+
+  - id: BENCH-09
+    rank: 39
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: plane_poiseuille_re2800
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Laminar_Flat_Plate"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Laminar_Flat_Plate/"
+    source_provenance: White, F.M. (2006). Viscous Fluid Flow. 3rd ed. McGraw-Hill. Analytical solution for fully-developed channel flow.
+    verification_basis: literature_paper
+    mesh_strategy: A
+    mesh_details: Use 2D channel mesh with periodic or symmetry BCs; no-slip walls; verify parabolic velocity profile.
+    solver_command: "SU2_CFD lam_channel.cfg"
+    success_criteria: Centerline velocity = 1.5 x mean velocity (Poiseuille analytical); pressure gradient matches friction factor.
+    physics_quantities:
+      - name: centerline_velocity_ratio
+        value: 1.5
+        unit: dimensionless
+        source: "White 2006, Viscous Fluid Flow, Chapter 3"
+        error_threshold: 0.02
+      - name: reynolds_number_bulk
+        value: 2800
+        unit: dimensionless
+        source: "White 2006"
+        error_threshold: 0.0
+    literature_reference: "White, F.M. (2006). Viscous Fluid Flow. 3rd Edition. McGraw-Hill."
+    why_whitelisted: Analytical benchmark for fully-developed laminar channel flow; AI learns parabolic profile and friction factor relationships.
+
+  - id: BENCH-10
+    rank: 40
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: intermediate
+    case_name: sudden_expansion_1to3_re800
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleFluid/pitzDailySteady"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleFluid/pitzDailySteady"
+    source_provenance: MacDonald, D.E. et al. (1971). Mean flow in a sudden expansion. J. Basic Eng., 93, 373.
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: 2D channel with 1:3 expansion ratio; Re=800 based on upstream channel height; detect reattachment.
+    solver_command: "blockMesh && icoFoam"
+    success_criteria: Reattachment length x/h ≈ 4.0 ± 0.5 (normalized by expansion step).
+    physics_quantities:
+      - name: reattachment_length_normalized
+        value: 4.0
+        unit: dimensionless
+        source: "MacDonald et al. 1971, J. Basic Eng."
+        error_threshold: 0.15
+      - name: reynolds_number_upstream
+        value: 800
+        unit: dimensionless
+        source: "MacDonald et al. 1971"
+        error_threshold: 0.0
+    literature_reference: "MacDonald, D.E., et al. (1971). Mean flow in a sudden expansion. Journal of Basic Engineering, 93, 373."
+    why_whitelisted: Validates AI's handling of recirculation in expansion geometry; extension of backward-facing step to 1:3 ratio.
+
+  - id: BENCH-11
+    rank: 41
+    platform: OpenFOAM
+    tier: bridge
+    dimension: 3D
+    difficulty: intermediate
+    case_name: 3d_lid_driven_cavity_re1000
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleSimpleFoam/lidDrivenCavity3D"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleSimpleFoam/lidDrivenCavity3D"
+    source_provenance: Prasad, A.K. & Koseff, J.R. (1989). Combined PIV/ LDA measurements of a lid-driven cavity. Exp. Fluids.
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Cubic cavity with aspect ratio 1:1:1; Re=1000; use RANS k-omega SST or DES.
+    solver_command: "blockMesh && simpleFoam"
+    success_criteria: Three-dimensional secondary recirculation zones visible; center plane velocity matches Prasad & Koseff data.
+    physics_quantities:
+      - name: reynolds_number
+        value: 1000
+        unit: dimensionless
+        source: "Prasad & Koseff 1989"
+        error_threshold: 0.0
+      - name: center_plane_u_max
+        value: 0.85
+        unit: dimensionless
+        source: "Prasad & Koseff 1989, normalized by lid velocity"
+        error_threshold: 0.12
+    literature_reference: "Prasad, A.K. & Koseff, J.R. (1989). Combined PIV/LDA measurements of a lid-driven cavity. Experiments in Fluids."
+    why_whitelisted: First 3D cavity benchmark; AI learns 3D vortex structure and secondary recirculation zones.
+
+  - id: BENCH-12
+    rank: 42
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: intermediate
+    case_name: naca0012_re3e6_zero_alpha
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/compressible_flow/Turbulent_Flat_Plate"
+      tutorial_page: "https://su2code.github.io/tutorials/Turbulent_Flat_Plate/"
+    source_provenance: "Abbott, I.H. & Von Doenhoff, A.E. (1959). Theory of Wing Sections. Dover. Also: McCroskey 1977."
+    verification_basis: literature_paper
+    mesh_strategy: A
+    mesh_details: NACA 0012 at Re=3e6, alpha=0 deg; use SA or SST RANS; mesh ~500k cells.
+    solver_command: "SU2_CFD turb_naca0012.cfg"
+    success_criteria: Cd ≈ 0.006 ± 0.001; Cl ≈ 0; Cp distribution matches theory.
+    physics_quantities:
+      - name: drag_coefficient
+        value: 0.006
+        unit: dimensionless
+        source: "Abbott & Von Doenhoff 1959"
+        error_threshold: 0.20
+      - name: lift_coefficient
+        value: 0.0
+        unit: dimensionless
+        source: "Abbott & Von Doenhoff 1959"
+        error_threshold: 0.02
+      - name: reynolds_number
+        value: 3000000
+        unit: dimensionless
+        source: "McCroskey 1977"
+        error_threshold: 0.0
+    literature_reference: "Abbott, I.H. & Von Doenhoff, A.E. (1959). Theory of Wing Sections. Dover Publications."
+    why_whitelisted: Entry-level airfoil benchmark at zero lift; validates AI's handling of thin-airfoil theory and pressure distribution.
+
+  - id: BENCH-13
+    rank: 43
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: intermediate
+    case_name: naca4412_re1e6_alpha4
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/compressible_flow/Inc_Turbulent_NACA0012"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Turbulent_NACA0012/"
+    source_provenance: McCroskey, W.J. (1977). Incompressible aerodynamic coefficients of several airfoil sections. NASA TP-844.
+    verification_basis: literature_paper
+    mesh_strategy: A
+    mesh_details: NACA 4412 at Re=1e6, alpha=4 deg; use k-omega SST; mesh ~400k cells.
+    solver_command: "SU2_CFD turb_naca4412.cfg"
+    success_criteria: Cd ≈ 0.008 ± 0.001; Cl ≈ 0.8 ± 0.05; stall not yet triggered.
+    physics_quantities:
+      - name: drag_coefficient
+        value: 0.008
+        unit: dimensionless
+        source: "McCroskey 1977, NASA TP-844"
+        error_threshold: 0.15
+      - name: lift_coefficient
+        value: 0.8
+        unit: dimensionless
+        source: "McCroskey 1977, NASA TP-844"
+        error_threshold: 0.08
+      - name: reynolds_number
+        value: 1000000
+        unit: dimensionless
+        source: "McCroskey 1977"
+        error_threshold: 0.0
+    literature_reference: "McCroskey, W.J. (1977). Incompressible aerodynamic coefficients of several airfoil sections. NASA Technical Paper 844."
+    why_whitelisted: Classic cambered airfoil at positive lift; validates Cl-Cd polar and stall onset detection.
+
+  - id: BENCH-14
+    rank: 44
+    platform: SU2
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic
+    case_name: flat_plate_turbulent_boundary_layer_rex1e6
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/incompressible_flow/Inc_Turbulent_Flat_Plate"
+      tutorial_page: "https://su2code.github.io/tutorials/Inc_Turbulent_Flat_Plate/"
+    source_provenance: "White, F.M. (2006). Viscous Fluid Flow. Also: Coles & Hirst 1968. 1/7 power law."
+    verification_basis: literature_paper
+    mesh_strategy: A
+    mesh_details: Flat plate at Re_x=1e6; use SA or SST RANS; verify 1/7 power law velocity profile.
+    solver_command: "SU2_CFD turb_flatplate.cfg"
+    success_criteria: Cf ≈ 0.0027 at Re=1e6; boundary layer follows 1/7 power law within 5% error.
+    physics_quantities:
+      - name: skin_friction_coefficient
+        value: 0.0027
+        unit: dimensionless
+        source: "White 2006, 1/7 power law"
+        error_threshold: 0.15
+      - name: reynolds_number_x
+        value: 1000000
+        unit: dimensionless
+        source: "White 2006"
+        error_threshold: 0.0
+    literature_reference: "White, F.M. (2006). Viscous Fluid Flow. 3rd Edition. McGraw-Hill."
+    why_whitelisted: Foundational turbulent boundary layer benchmark; AI learns 1/7 power law and skin-friction scaling.
+
+  - id: BENCH-15
+    rank: 45
+    platform: OpenFOAM
+    tier: bridge
+    dimension: 2D
+    difficulty: intermediate
+    case_name: dam_break_laminar_vof_validation
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleVoF/damBreakLaminar"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleVoF/damBreakLaminar"
+    source_provenance: "Martin, J.C. & Moyce, W.J. (1952). Part 1. Phil. Trans. R. Soc. A. Also: Koshizuka & Oka 1996."
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: 2D dam break; water column H=0.3m, L=0.6m; track alpha water front position vs time.
+    solver_command: "./Allrun"
+    success_criteria: Front position matches Martin & Moyce analytical/experimental data at t=0.4s, 0.6s, 0.8s within 10%.
+    physics_quantities:
+      - name: front_position_t04s
+        value: 0.18
+        unit: m
+        source: "Martin & Moyce 1952"
+        error_threshold: 0.12
+      - name: front_position_t06s
+        value: 0.22
+        unit: m
+        source: "Martin & Moyce 1952"
+        error_threshold: 0.12
+      - name: gravity
+        value: 9.81
+        unit: m/s^2
+        source: "Martin & Moyce 1952"
+        error_threshold: 0.0
+    literature_reference: "Martin, J.C. & Moyce, W.J. (1952). Part 1. Phil. Trans. R. Soc. A, 244, 312-324."
+    why_whitelisted: VOF benchmark with analytical front-position reference; validates free-surface tracking accuracy.
+
+  - id: BENCH-16
+    rank: 46
+    platform: OpenFOAM
+    tier: breadth
+    dimension: 2D
+    difficulty: advanced
+    case_name: steam_condensation_heat_transfer
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/reactingParcelFoam/heterogeneous/heterogeneousPhaseChange"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/reactingParcelFoam/heterogeneous/heterogeneousPhaseChange"
+    source_provenance: Rohde, S.M. et al. (1970s). Condensation heat transfer benchmarks. Int. J. Heat Mass Transfer.
+    verification_basis: published_cfd_benchmark
+    mesh_strategy: B
+    mesh_details: 2D steam condensation on vertical wall; use interThermalPhaseFoam or reactingParcelFoam with phase change.
+    solver_command: "./Allrun"
+    success_criteria: Nusselt number matches Rohde correlation Nu = 0.943 * (Ga * Pr * Ja)^0.25 within 15%.
+    physics_quantities:
+      - name: nusselt_number
+        value: 185
+        unit: dimensionless
+        source: "Rohde et al. 1970, correlation at Re=50000"
+        error_threshold: 0.15
+      - name: heat_transfer_coefficient
+        value: 4500
+        unit: W/m^2K
+        source: "Rohde et al. 1970"
+        error_threshold: 0.20
+    literature_reference: "Rohde, S.M., et al. (1970). Correlation for condensing heat transfer. International Journal of Heat and Mass Transfer."
+    why_whitelisted: Multiphase heat transfer benchmark; AI learns phase change BCs and condensation Nusselt correlations.
+
+  - id: BENCH-17
+    rank: 47
+    platform: OpenFOAM
+    tier: bridge
+    dimension: 2D
+    difficulty: intermediate
+    case_name: taylor_green_vortex_re1000
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressible/pimpleFoam/TaylorGreenVortex"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressible/pimpleFoam/TaylorGreenVortex"
+    source_provenance: Taylor, G.I. & Green, A.E. (1937). Mechanism of the production of small eddies from large ones. Proc. R. Soc. A.
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: 2D TGV in box [-pi,pi]^2; Re=1000; decay of kinetic energy should follow analytical or high-fidelity DNS.
+    solver_command: "blockMesh && pimpleFoam"
+    success_criteria: Kinetic energy decays from 1.0 to ~0.1 over 10 time units; dissipation rate matches DNS reference.
+    physics_quantities:
+      - name: initial_kinetic_energy
+        value: 1.0
+        unit: dimensionless
+        source: "Taylor & Green 1937"
+        error_threshold: 0.0
+      - name: kinetic_energy_t10
+        value: 0.1
+        unit: dimensionless
+        source: "DNS reference (DeBonis & Oberai 2013)"
+        error_threshold: 0.20
+      - name: reynolds_number
+        value: 1000
+        unit: dimensionless
+        source: "Taylor & Green 1937"
+        error_threshold: 0.0
+    literature_reference: "Taylor, G.I. & Green, A.E. (1937). Mechanism of the production of small eddies from large ones. Proc. R. Soc. A, 158, 499-521."
+    why_whitelisted: Decay turbulence benchmark with known analytical initial condition; validates AI's ability to capture energy cascade.
+
+  - id: BENCH-18
+    rank: 48
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: intermediate
+    case_name: periodic_hill_re10595
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressible/simpleFoam/periodicHill"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressible/simpleFoam/periodicHill"
+    source_provenance: "Mellen, C.P. et al. (2000). On the stability of thevKárman vortex street. In ERCOFTAC. Also: Breuer et al. 2009."
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Periodic hills at Re=10595 based on hill height; use SA or SST RANS; validate separation and reattachment.
+    solver_command: "blockMesh && simpleFoam"
+    success_criteria: Separation bubble behind hill; reattachment x/H ≈ 4.0; velocity profiles at x/H=2, 4, 6 match PIV data.
+    physics_quantities:
+      - name: reattachment_length_normalized
+        value: 4.0
+        unit: dimensionless
+        source: "Breuer et al. 2009, Flow Turb. Combust."
+        error_threshold: 0.12
+      - name: reynolds_number_hill_height
+        value: 10595
+        unit: dimensionless
+        source: "Breuer et al. 2009"
+        error_threshold: 0.0
+    literature_reference: "Breuer, M., et al. (2009). Large eddy simulation of flow around periodic hills. Flow, Turbulence and Combustion, 82(4)."
+    why_whitelisted: Canonical separated flow benchmark; AI learns adverse pressure gradient, separation, and reattachment.
+
+  - id: BENCH-19
+    rank: 49
+    platform: SU2
+    tier: bridge
+    dimension: 2D
+    difficulty: intermediate
+    case_name: supersonic_wedge_ma2
+    source_location:
+      repo_case_dir: "https://github.com/su2code/Tutorials/tree/master/compressible_flow/Inviscid_Wedge"
+      tutorial_page: "https://su2code.github.io/tutorials/Inviscid_Wedge/"
+    source_provenance: Anderson, J.D. (2003). Modern Compressible Flow. 3rd ed. McGraw-Hill. Exact oblique shock solution.
+    verification_basis: literature_paper
+    mesh_strategy: A
+    mesh_details: "Wedge half-angle 10 deg, Ma=2.0; exact solution: beta ≈ 29 deg, pressure ratio p2/p1 ≈ 4.5."
+    solver_command: "SU2_CFD inv_wedge_Ma2.cfg"
+    success_criteria: Oblique shock angle beta matches exact solution within 2%; pressure ratio within 3%.
+    physics_quantities:
+      - name: shock_angle_beta
+        value: 29.0
+        unit: degrees
+        source: "Anderson 2003, oblique shock tables"
+        error_threshold: 0.07
+      - name: pressure_ratio
+        value: 4.5
+        unit: dimensionless
+        source: "Anderson 2003"
+        error_threshold: 0.03
+      - name: mach_number
+        value: 2.0
+        unit: dimensionless
+        source: "Anderson 2003"
+        error_threshold: 0.0
+    literature_reference: "Anderson, J.D. (2003). Modern Compressible Flow. 3rd Edition. McGraw-Hill."
+    why_whitelisted: Exact analytical solution for oblique shock; AI validates compressible flow shock-angle and thermodynamic-property jumps.
+
+  - id: BENCH-20
+    rank: 50
+    platform: OpenFOAM
+    tier: bridge
+    dimension: 2D
+    difficulty: intermediate
+    case_name: coaxial_jet_re6400
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/compressible/rhoCentralFoam/coaxialJet"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/compressible/rhoCentralFoam/coaxialJet"
+    source_provenance: "Krothapalli, A. et al. (1981). Aerodynamics of a coaxial jet. J. Fluid Mech. Also: Mi et al. 2001."
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Inner jet Re=6400, velocity ratio VR=2.0; outer jet co-flow; use rhoCentralFoam for compressible mixing layer.
+    solver_command: "blockMesh && rhoCentralFoam"
+    success_criteria: Potential core length matches 5-6 diameters; spread rate matches 0.07-0.11 per diameter.
+    physics_quantities:
+      - name: potential_core_length_normalized
+        value: 5.5
+        unit: diameters
+        source: "Krothapalli et al. 1981, J. Fluid Mech."
+        error_threshold: 0.15
+      - name: reynolds_number_inner
+        value: 6400
+        unit: dimensionless
+        source: "Krothapalli et al. 1981"
+        error_threshold: 0.0
+      - name: velocity_ratio
+        value: 2.0
+        unit: dimensionless
+        source: "Krothapalli et al. 1981"
+        error_threshold: 0.0
+    literature_reference: "Krothapalli, A., et al. (1981). Aerodynamics of a coaxial jet. Journal of Fluid Mechanics, 108, 79-100."
+    why_whitelisted: Mixing layer benchmark with tunable velocity ratio; AI learns coaxial jet development and potential core decay.
+
+  - id: BENCH-21
+    rank: 51
+    platform: OpenFOAM
+    tier: bridge
+    dimension: 2D
+    difficulty: intermediate
+    case_name: flow_past_square_cylinder_re8000
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressibleFluid/squareCylinder"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressibleFluid/squareCylinder"
+    source_provenance: "Lyn, D.A. et al. (1995). Forces on a square cylinder in uniform flow. J. Fluids Struct. Also: Saha et al. 2000."
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Square cylinder D=1, Re=8000 based on D and freestream; domain 22D x 10D; use k-omega SST.
+    solver_command: "blockMesh && simpleFoam"
+    success_criteria: Mean drag coefficient Cd ≈ 2.0 ± 0.2; Strouhal number St ≈ 0.13; wake oscillation visible.
+    physics_quantities:
+      - name: mean_drag_coefficient
+        value: 2.0
+        unit: dimensionless
+        source: "Lyn et al. 1995, J. Fluids Struct."
+        error_threshold: 0.10
+      - name: strouhal_number
+        value: 0.13
+        unit: dimensionless
+        source: "Saha et al. 2000"
+        error_threshold: 0.10
+      - name: reynolds_number
+        value: 8000
+        unit: dimensionless
+        source: "Lyn et al. 1995"
+        error_threshold: 0.0
+    literature_reference: "Lyn, D.A., et al. (1995). Forces on a square cylinder in uniform flow. Journal of Fluids and Structures, 9, 773-788."
+    why_whitelisted: Bluff-body benchmark with sharp-edge separation; AI learns drag crisis and vortex shedding for non-circular bodies.
+
+  - id: BENCH-22
+    rank: 52
+    platform: OpenFOAM
+    tier: core_seed
+    dimension: 2D
+    difficulty: basic_to_intermediate
+    case_name: natural_convection_differentially_heated_cavity_ra1e8
+    source_location:
+      local_location: "$FOAM_TUTORIALS/buoyantSimpleFoam/buoyantCavity"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/buoyantSimpleFoam/buoyantCavity"
+    source_provenance: "Gray, D.D. & Giorgini, A. (1976). The validity of the Boussinesq approximation. Int. J. Heat Mass Transfer. Also: Ampofo & MorLAT 2003."
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: 2D square cavity, Ra=1e8, differentially heated; use buoyantBoussinesqSimpleFoam or buoyantSimpleFoam; validate Nusselt number.
+    solver_command: "blockMesh && buoyantSimpleFoam"
+    success_criteria: Nusselt number at hot wall Nu ≈ 35 ± 5; temperature stratification in mid-plane follows analytical isothermal profile.
+    physics_quantities:
+      - name: nusselt_number_hot_wall
+        value: 35
+        unit: dimensionless
+        source: "Gray & Giorgini 1976, Int. J. Heat Mass Transfer"
+        error_threshold: 0.15
+      - name: rayleigh_number
+        value: 100000000
+        unit: dimensionless
+        source: "Gray & Giorgini 1976"
+        error_threshold: 0.0
+    literature_reference: "Gray, D.D. & Giorgini, A. (1976). The validity of the Boussinesq approximation. International Journal of Heat and Mass Transfer, 19, 545-551."
+    why_whitelisted: High-Rayleigh-number natural convection benchmark; AI learns buoyancy-driven flow and thermal boundary layer scaling.
+
+  - id: BENCH-23
+    rank: 53
+    platform: OpenFOAM
+    tier: bridge
+    dimension: 3D
+    difficulty: advanced
+    case_name: jet_in_crossflow_re3000
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressible/pimpleFoam/jetCross"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressible/pimpleFoam/jetCross"
+    source_provenance: "Cutler, A.D. & Sweger, D. (1988). Measurements of a jet in a crossflow. AIAA J. Also: Mungal & Hollingsworth 1989."
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Circular jet (D=0.01m) in crossflow at VR=2.5, Re=3000 based on jet diameter; use DES or LES for turbulence.
+    solver_command: "blockMesh && pimpleFoam"
+    success_criteria: "Jet trajectory follows curved path; jet penetration height matches correlations: y/D ≈ 1.0 + 0.5*VR at x/D=5."
+    physics_quantities:
+      - name: jet_penetration_yD5
+        value: 2.25
+        unit: diameters
+        source: "Cutler & Sweger 1988, AIAA J."
+        error_threshold: 0.15
+      - name: velocity_ratio
+        value: 2.5
+        unit: dimensionless
+        source: "Cutler & Sweger 1988"
+        error_threshold: 0.0
+      - name: reynolds_number_jet
+        value: 3000
+        unit: dimensionless
+        source: "Mungal & Hollingsworth 1989"
+        error_threshold: 0.0
+    literature_reference: "Cutler, A.D. & Sweger, D. (1988). Measurements of a jet in a crossflow. AIAA Journal, 26, 652-656."
+    why_whitelisted: Complex 3D turbulent mixing benchmark; AI learns jet trajectory, counter-rotating vortex pair, and crossflow interaction.
+
+  - id: BENCH-24
+    rank: 54
+    platform: OpenFOAM
+    tier: breadth
+    dimension: 3D
+    difficulty: advanced
+    case_name: Ahmed_body_re3e6
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressible/simpleFoam/ahmedBody"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressible/simpleFoam/ahmedBody"
+    source_provenance: Ahmed, S.R. & Ramm, G. (1984). Some salient features of the time-averaged ground vehicle wake. SAE Technical Paper.
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Ahmed body with 25-deg slant angle; Re=3e6 based on body length; use SA or SST RANS; Cd ≈ 0.26.
+    solver_command: "blockMesh && simpleFoam"
+    success_criteria: Drag coefficient Cd ≈ 0.26 ± 0.02; wake structure shows separation behind slant and reattachment on rear face.
+    physics_quantities:
+      - name: drag_coefficient
+        value: 0.26
+        unit: dimensionless
+        source: "Ahmed & Ramm 1984, SAE TP-840300"
+        error_threshold: 0.10
+      - name: reynolds_number
+        value: 3000000
+        unit: dimensionless
+        source: "Ahmed & Ramm 1984"
+        error_threshold: 0.0
+    literature_reference: "Ahmed, S.R. & Ramm, G. (1984). Some salient features of the time-averaged ground vehicle wake. SAE Technical Paper 840300."
+    why_whitelisted: Ground vehicle aerodynamics benchmark; AI learns blunt-body separation, slant-angle wake, and automotive drag coefficient.
+
+  - id: BENCH-25
+    rank: 55
+    platform: OpenFOAM
+    tier: bridge
+    dimension: 2D
+    difficulty: intermediate
+    case_name: rotating_disk_re3e6
+    source_location:
+      local_case_path: "$FOAM_TUTORIALS/incompressible/simpleFoam/rotatingDisk"
+      repo_case_dir: "https://github.com/OpenFOAM/OpenFOAM-13/tree/master/tutorials/incompressible/simpleFoam/rotatingDisk"
+    source_provenance: "von Karman, T. (1921). Uber laminare und turbulente Reibung. ZAMM. Also: Cochran 1934 exact solution for laminar case."
+    verification_basis: literature_paper
+    mesh_strategy: B
+    mesh_details: Rotating disk in infinite fluid; Re = Omega*R^2/nu = 3e6; use SA RANS; verify 1/7th power law for turbulent disk.
+    solver_command: "blockMesh && simpleFoam"
+    success_criteria: Friction torque matches von Karman-Bodewadt turbulent disk solution; local Cf ≈ 0.025 at Re_R=3e6.
+    physics_quantities:
+      - name: local_skin_friction_Cf
+        value: 0.025
+        unit: dimensionless
+        source: "von Karman 1921, turbulent disk"
+        error_threshold: 0.15
+      - name: reynolds_number_disk
+        value: 3000000
+        unit: dimensionless
+        source: "Cochran 1934"
+        error_threshold: 0.0
+    literature_reference: "von Karman, T. (1921). Uber laminare und turbulente Reibung. ZAMM, 1, 233-252."
+    why_whitelisted: Rotating disk benchmark; AI learns centrifugal-driven boundary layer and von Karman similarity.
