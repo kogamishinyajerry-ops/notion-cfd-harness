@@ -1,0 +1,27 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+
+application     {{APPLICATION}};
+
+// Phase 7 preset: BENCH-01 lid-driven cavity, Re=100
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         {{END_TIME}};
+deltaT          {{DELTA_T}};
+
+writeControl    runTime;
+writeInterval   {{WRITE_INTERVAL}};
+purgeWrite      0;
+writeFormat     ascii;
+writePrecision  6;
+writeCompression off;
+
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable yes;

@@ -1,0 +1,95 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+convertToMeters 1;
+
+vertices
+(
+    ({{X_INLET}} {{Y_BOTTOM}} 0)
+    ({{X_STEP}} {{Y_BOTTOM}} 0)
+    ({{X_OUTLET}} {{Y_BOTTOM}} 0)
+    ({{X_INLET}} {{Y_STEP}} 0)
+    ({{X_STEP}} {{Y_STEP}} 0)
+    ({{X_OUTLET}} {{Y_STEP}} 0)
+    ({{X_INLET}} {{Y_TOP}} 0)
+    ({{X_STEP}} {{Y_TOP}} 0)
+    ({{X_OUTLET}} {{Y_TOP}} 0)
+    ({{X_INLET}} {{Y_BOTTOM}} {{THICKNESS}})
+    ({{X_STEP}} {{Y_BOTTOM}} {{THICKNESS}})
+    ({{X_OUTLET}} {{Y_BOTTOM}} {{THICKNESS}})
+    ({{X_INLET}} {{Y_STEP}} {{THICKNESS}})
+    ({{X_STEP}} {{Y_STEP}} {{THICKNESS}})
+    ({{X_OUTLET}} {{Y_STEP}} {{THICKNESS}})
+    ({{X_INLET}} {{Y_TOP}} {{THICKNESS}})
+    ({{X_STEP}} {{Y_TOP}} {{THICKNESS}})
+    ({{X_OUTLET}} {{Y_TOP}} {{THICKNESS}})
+);
+
+blocks
+(
+    hex (3 4 7 6 12 13 16 15) ({{NX_INLET}} {{NY_UPPER}} 1) simpleGrading (1 1 1)
+    hex (1 2 5 4 10 11 14 13) ({{NX_OUTLET}} {{NY_LOWER}} 1) simpleGrading (1 1 1)
+    hex (4 5 8 7 13 14 17 16) ({{NX_OUTLET}} {{NY_UPPER}} 1) simpleGrading (1 1 1)
+);
+
+edges
+(
+);
+
+boundary
+(
+    inlet
+    {
+        type patch;
+        faces
+        (
+            (3 6 15 12)
+        );
+    }
+
+    outlet
+    {
+        type patch;
+        faces
+        (
+            (2 5 14 11)
+            (5 8 17 14)
+        );
+    }
+
+    walls
+    {
+        type wall;
+        faces
+        (
+            (3 4 13 12)
+            (1 2 11 10)
+            (1 4 13 10)
+            (6 7 16 15)
+            (7 8 17 16)
+        );
+    }
+
+    frontAndBack
+    {
+        type empty;
+        faces
+        (
+            (3 6 7 4)
+            (12 13 16 15)
+            (1 4 5 2)
+            (10 11 14 13)
+            (4 7 8 5)
+            (13 14 17 16)
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
