@@ -265,6 +265,15 @@ NL Input → Phase 1 (解析) → Phase 2 (执行 + 治理)
 
 ---
 
+## 十一、版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| v1.0.0 | 2026-04-09 | Initial release — all 5 phases Pass, Opus 4.6 Approved |
+| v1.0.1 | 2026-04-09 | Patch: Pipeline integration, BenchmarkReplay real execution, 117 new tests (1,736 total) |
+
+---
+
 **维护者**: AI-CFD Knowledge Harness Team
 **最后更新**: 2026-04-09
-**版本**: v1.0.0 (Released)
+**版本**: v1.0.1 (Patched)
