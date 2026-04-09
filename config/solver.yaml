@@ -1,7 +1,7 @@
 solver:
   executor: "openfoam-docker"
   docker:
-    image: "openfoam/openfoam13-default"
+    image: "openfoam/openfoam10-paraview510"
     timeout: 600
     memory_limit: "4g"
   fallback: "mock"
