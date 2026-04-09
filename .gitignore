@@ -34,3 +34,11 @@ htmlcov/
 tmp/
 temp/
 *.tmp
+
+# Notion API credentials
+.claude/notion/config.json
+.claude/notion/PROJECT_ID.txt
+
+# Files with hardcoded credentials
+.claude/notion/cad_parser_review.py
+.claude/notion/create_project.py

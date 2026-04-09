@@ -28,9 +28,9 @@ from knowledge_compiler.performance.connection_pool import (
 from knowledge_compiler.performance import PerformanceManager, create_performance_manager
 
 
-def run_async_test(coro):
+def run_async(coro):
     """Helper to run async tests without pytest-asyncio"""
-    return asyncio.run(coro())
+    return asyncio.run(coro)
 
 
 class TestRateLimiter:
@@ -68,17 +68,20 @@ class TestRateLimiter:
         # Should wait for token refill
         assert elapsed >= 0.01  # At least 10ms for 1 token at 100/sec
 
-    async def test_rate_limiter_acquire_async(self):
+    def test_rate_limiter_acquire_async(self):
         """RateLimiter should acquire tokens asynchronously"""
-        limiter = RateLimiter(rate=10.0, burst=5)
+        async def _test():
+            limiter = RateLimiter(rate=10.0, burst=5)
 
-        start = time.time()
-        for _ in range(3):
-            await limiter.acquire(1)
-        elapsed = time.time() - start
+            start = time.time()
+            for _ in range(3):
+                await limiter.acquire(1)
+            elapsed = time.time() - start
 
-        # Should be very fast (no waiting needed)
-        assert elapsed < 0.1
+            # Should be very fast (no waiting needed)
+            assert elapsed < 0.1
+
+        run_async(_test())
 
 
 class TestRequestResult:
@@ -159,22 +162,24 @@ class TestNotionConnectionPool:
 
 
 class TestPerformanceManagerAsync:
-    async def test_performance_manager_has_connection_pool(self):
+    def test_performance_manager_has_connection_pool(self):
         """PerformanceManager should have connection pool when API key available"""
-        # Skip if NOTION_API_KEY is set (real API)
         import os
         if os.environ.get("NOTION_API_KEY"):
             return
 
-        pm = PerformanceManager(
-            enable_connection_pool=True,
-            notion_api_key="test_key",
-        )
+        async def _test():
+            pm = PerformanceManager(
+                enable_connection_pool=True,
+                notion_api_key="test_key",
+            )
 
-        # Should have connection pool even with test key
-        assert pm.connection_pool is not None
+            # Should have connection pool even with test key
+            assert pm.connection_pool is not None
 
-        await pm.close()
+            await pm.close()
+
+        run_async(_test())
 
     def test_performance_manager_connection_pool_disabled(self):
         """PerformanceManager should work without connection pool"""
@@ -184,191 +189,218 @@ class TestPerformanceManagerAsync:
 
         assert pm.connection_pool is None
 
-    async def test_get_cached_node_async(self):
+    def test_get_cached_node_async(self):
         """PerformanceManager should get cached node asynchronously"""
-        pm = PerformanceManager()
+        async def _test():
+            pm = PerformanceManager()
 
-        test_node = {
-            "unit_id": "FORM-009",
-            "version": "v1.0",
-            "data": "test",
-        }
+            test_node = {
+                "unit_id": "FORM-009",
+                "version": "v1.0",
+                "data": "test",
+            }
 
-        await pm.set_cached_node_async("FORM-009", "v1.0", test_node)
+            await pm.set_cached_node_async("FORM-009", "v1.0", test_node)
 
-        result = await pm.get_cached_node_async("FORM-009", "v1.0")
-        assert result is not None
-        assert result["unit_id"] == "FORM-009"
+            result = await pm.get_cached_node_async("FORM-009", "v1.0")
+            assert result is not None
+            assert result["unit_id"] == "FORM-009"
 
-    async def test_warm_up_cache_async(self):
+        run_async(_test())
+
+    def test_warm_up_cache_async(self):
         """PerformanceManager should warm up cache asynchronously"""
-        pm = PerformanceManager()
+        async def _test():
+            pm = PerformanceManager()
 
-        entries = [
-            ("FORM-009", "v1.0", {"data": "value1"}),
-            ("FORM-010", "v1.0", {"data": "value2"}),
-            ("FORM-011", "v1.0", {"data": "value3"}),
-        ]
+            entries = [
+                ("FORM-009", "v1.0", {"data": "value1"}),
+                ("FORM-010", "v1.0", {"data": "value2"}),
+                ("FORM-011", "v1.0", {"data": "value3"}),
+            ]
 
-        count = await pm.warm_up_cache_async(entries)
+            count = await pm.warm_up_cache_async(entries)
 
-        assert count == 3
+            assert count == 3
 
-        # Verify all cached
-        assert await pm.get_cached_node_async("FORM-009", "v1.0") is not None
-        assert await pm.get_cached_node_async("FORM-010", "v1.0") is not None
-        assert await pm.get_cached_node_async("FORM-011", "v1.0") is not None
+            # Verify all cached
+            assert await pm.get_cached_node_async("FORM-009", "v1.0") is not None
+            assert await pm.get_cached_node_async("FORM-010", "v1.0") is not None
+            assert await pm.get_cached_node_async("FORM-011", "v1.0") is not None
 
-    async def test_fetch_multiple_concurrent(self):
+        run_async(_test())
+
+    def test_fetch_multiple_concurrent(self):
         """PerformanceManager should fetch multiple nodes concurrently"""
-        pm = PerformanceManager()
+        async def _test():
+            pm = PerformanceManager()
 
-        # Pre-populate cache
-        entries = [
-            ("FORM-001", "v1.0", {"data": "value1"}),
-            ("FORM-002", "v1.0", {"data": "value2"}),
-            ("FORM-003", "v1.0", {"data": "value3"}),
-        ]
-        await pm.warm_up_cache_async(entries)
+            # Pre-populate cache
+            entries = [
+                ("FORM-001", "v1.0", {"data": "value1"}),
+                ("FORM-002", "v1.0", {"data": "value2"}),
+                ("FORM-003", "v1.0", {"data": "value3"}),
+            ]
+            await pm.warm_up_cache_async(entries)
 
-        # Fetch concurrently
-        queries = [
-            ("FORM-001", "v1.0"),
-            ("FORM-002", "v1.0"),
-            ("FORM-003", "v1.0"),
-        ]
+            # Fetch concurrently
+            queries = [
+                ("FORM-001", "v1.0"),
+                ("FORM-002", "v1.0"),
+                ("FORM-003", "v1.0"),
+            ]
 
-        start = time.time()
-        results = await pm.fetch_multiple_concurrent(queries)
-        elapsed = time.time() - start
+            start = time.time()
+            results = await pm.fetch_multiple_concurrent(queries)
+            elapsed = time.time() - start
 
-        assert len(results) == 3
-        assert all(r is not None for r in results)
-        # Should be fast (concurrent)
-        assert elapsed < 0.1
+            assert len(results) == 3
+            assert all(r is not None for r in results)
+            # Should be fast (concurrent)
+            assert elapsed < 0.1
 
-    async def test_get_version_chain_async(self):
+        run_async(_test())
+
+    def test_get_version_chain_async(self):
         """PerformanceManager should get version chain asynchronously"""
-        pm = PerformanceManager()
+        async def _test():
+            pm = PerformanceManager()
 
-        version_dicts = [
-            {
-                "unit_id": "FORM-009",
-                "version": "v1.0",
-                "parent_hash": None,
-                "content_hash": "hash1",
-                "lineage_hash": "lineage1",
-                "timestamp": "2026-04-08T10:00:00",
-                "metadata": {},
-            },
-            {
-                "unit_id": "FORM-009",
-                "version": "v1.1",
-                "parent_hash": "hash1",
-                "content_hash": "hash2",
-                "lineage_hash": "lineage1",
-                "timestamp": "2026-04-08T11:00:00",
-                "metadata": {},
-            },
-        ]
+            version_dicts = [
+                {
+                    "unit_id": "FORM-009",
+                    "version": "v1.0",
+                    "parent_hash": None,
+                    "content_hash": "hash1",
+                    "lineage_hash": "lineage1",
+                    "timestamp": "2026-04-08T10:00:00",
+                    "metadata": {},
+                },
+                {
+                    "unit_id": "FORM-009",
+                    "version": "v1.1",
+                    "parent_hash": "hash1",
+                    "content_hash": "hash2",
+                    "lineage_hash": "lineage1",
+                    "timestamp": "2026-04-08T11:00:00",
+                    "metadata": {},
+                },
+            ]
 
-        for v in version_dicts:
-            pm.index_version(v)
+            for v in version_dicts:
+                pm.index_version(v)
 
-        chain = await pm.get_version_chain_async("FORM-009")
-        assert len(chain) == 2
+            chain = await pm.get_version_chain_async("FORM-009")
+            assert len(chain) == 2
 
-    async def test_get_latest_version_async(self):
+        run_async(_test())
+
+    def test_get_latest_version_async(self):
         """PerformanceManager should get latest version asynchronously"""
-        pm = PerformanceManager()
+        async def _test():
+            pm = PerformanceManager()
 
-        version_dicts = [
-            {
-                "unit_id": "FORM-009",
-                "version": "v1.0",
-                "parent_hash": None,
-                "content_hash": "hash1",
-                "lineage_hash": "lineage1",
-                "timestamp": "2026-04-08T10:00:00",
-                "metadata": {},
-            },
-            {
-                "unit_id": "FORM-009",
-                "version": "v1.1",
-                "parent_hash": "hash1",
-                "content_hash": "hash2",
-                "lineage_hash": "lineage1",
-                "timestamp": "2026-04-08T11:00:00",
-                "metadata": {},
-            },
-        ]
+            version_dicts = [
+                {
+                    "unit_id": "FORM-009",
+                    "version": "v1.0",
+                    "parent_hash": None,
+                    "content_hash": "hash1",
+                    "lineage_hash": "lineage1",
+                    "timestamp": "2026-04-08T10:00:00",
+                    "metadata": {},
+                },
+                {
+                    "unit_id": "FORM-009",
+                    "version": "v1.1",
+                    "parent_hash": "hash1",
+                    "content_hash": "hash2",
+                    "lineage_hash": "lineage1",
+                    "timestamp": "2026-04-08T11:00:00",
+                    "metadata": {},
+                },
+            ]
 
-        for v in version_dicts:
-            pm.index_version(v)
+            for v in version_dicts:
+                pm.index_version(v)
 
-        latest = await pm.get_latest_version_async("FORM-009")
-        assert latest is not None
-        assert latest["version"] == "v1.1"
+            latest = await pm.get_latest_version_async("FORM-009")
+            assert latest is not None
+            assert latest["version"] == "v1.1"
 
-    async def test_async_context_manager(self):
+        run_async(_test())
+
+    def test_async_context_manager(self):
         """PerformanceManager should work as async context manager"""
-        async with PerformanceManager(
-            enable_connection_pool=False,
-        ) as pm:
-            assert pm is not None
-            await pm.set_cached_node_async("TEST", "v1.0", {"data": "test"})
+        async def _test():
+            async with PerformanceManager(
+                enable_connection_pool=False,
+            ) as pm:
+                assert pm is not None
+                await pm.set_cached_node_async("TEST", "v1.0", {"data": "test"})
+
+        run_async(_test())
 
 
 class TestConcurrencyPerformance:
-    async def test_concurrent_fetch_multiple(self):
+    def test_concurrent_fetch_multiple(self):
         """Test that concurrent fetches work correctly"""
-        pm = PerformanceManager()
+        async def _test():
+            pm = PerformanceManager()
 
-        # Pre-populate cache
-        entries = [(f"FORM-{i:03d}", "v1.0", {"data": f"value{i}"}) for i in range(50)]
-        await pm.warm_up_cache_async(entries)
+            # Pre-populate cache
+            entries = [(f"FORM-{i:03d}", "v1.0", {"data": f"value{i}"}) for i in range(50)]
+            await pm.warm_up_cache_async(entries)
 
-        queries = [(f"FORM-{i:03d}", "v1.0") for i in range(50)]
+            queries = [(f"FORM-{i:03d}", "v1.0") for i in range(50)]
 
-        # Fetch concurrently
-        results = await pm.fetch_multiple_concurrent(queries)
+            # Fetch concurrently
+            results = await pm.fetch_multiple_concurrent(queries)
 
-        assert len(results) == 50
-        assert all(r is not None for r in results)
+            assert len(results) == 50
+            assert all(r is not None for r in results)
 
-    async def test_100_qps_target(self):
+        run_async(_test())
+
+    def test_100_qps_target(self):
         """Test that we can handle 100+ QPS"""
-        pm = PerformanceManager()
+        async def _test():
+            pm = PerformanceManager()
 
-        # Pre-populate cache
-        entries = [(f"UNIT-{i:04d}", "v1.0", {"data": f"value{i}"}) for i in range(100)]
-        await pm.warm_up_cache_async(entries)
+            # Pre-populate cache
+            entries = [(f"UNIT-{i:04d}", "v1.0", {"data": f"value{i}"}) for i in range(100)]
+            await pm.warm_up_cache_async(entries)
 
-        queries = [(f"UNIT-{i % 100:04d}", "v1.0") for i in range(100)]
+            queries = [(f"UNIT-{i % 100:04d}", "v1.0") for i in range(100)]
 
-        # Measure 100 queries
-        start = time.time()
-        results = await pm.fetch_multiple_concurrent(queries)
-        elapsed = time.time() - start
+            # Measure 100 queries
+            start = time.time()
+            results = await pm.fetch_multiple_concurrent(queries)
+            elapsed = time.time() - start
 
-        assert len(results) == 100
+            assert len(results) == 100
 
-        # Calculate QPS
-        qps = 100 / elapsed
+            # Calculate QPS
+            qps = 100 / elapsed
 
-        # Should achieve >100 QPS for cached data
-        assert qps > 100, f"QPS: {qps:.1f}, expected >100"
+            # Should achieve >100 QPS for cached data
+            assert qps > 100, f"QPS: {qps:.1f}, expected >100"
 
-    async def test_close_cleanup(self):
+        run_async(_test())
+
+    def test_close_cleanup(self):
         """Close should cleanup resources"""
-        pm = PerformanceManager(
-            enable_connection_pool=False,
-        )
+        async def _test():
+            pm = PerformanceManager(
+                enable_connection_pool=False,
+            )
 
-        await pm.close()
+            await pm.close()
 
-        # Should not raise error
-        await pm.close()
+            # Should not raise error
+            await pm.close()
+
+        run_async(_test())
 
 
 class TestCreateFunctions:
@@ -380,11 +412,14 @@ class TestCreateFunctions:
         assert pm is not None
         assert pm.connection_pool is None
 
-    async def test_create_notion_pool(self):
+    def test_create_notion_pool(self):
         """create_notion_pool factory should work"""
-        pool = await create_notion_pool(api_key="test_key")
-        assert pool is not None
-        await pool.close()
+        async def _test():
+            pool = await create_notion_pool(api_key="test_key")
+            assert pool is not None
+            await pool.close()
+
+        run_async(_test())
 
     def test_create_performance_manager_with_pool(self):
         """create_performance_manager should support connection pool"""

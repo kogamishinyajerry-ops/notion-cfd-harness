@@ -18,6 +18,8 @@ from knowledge_compiler.phase1.schema import (
     KnowledgeLayer,
     KnowledgeStatus,
     ComparisonType,
+    ErrorType,
+    ImpactScope,
     # Specs
     PlotSpec,
     MetricSpec,
@@ -28,12 +30,26 @@ from knowledge_compiler.phase1.schema import (
     TeachRecord,
     TeachOperation,
     KnowledgeVersion,
+    CorrectionSpec,
     ResultManifest,
     ResultAsset,
     ReportDraft,
+    # Phase 1 → Phase 2 Interface
+    Phase1Output,
+    # Phase 3 Reserved
+    AnalogySpec,
     # Factory functions
     create_report_spec_id,
     create_teach_record_id,
+    create_correction_id,
+    create_phase1_output_id,
+)
+
+# Import CorrectionRecorder components for re-export
+from knowledge_compiler.phase1.teach import (
+    CorrectionDetection,
+    CorrectionRecorder,
+    is_generalizable_correction,
 )
 
 from knowledge_compiler.phase1.skeleton import (
@@ -75,11 +91,32 @@ from knowledge_compiler.phase1.gates import (
     GateStatus,
     GateCheckItem,
     GateResult as GateResultV2,
+    ActionPlanExecutabilityGate,
+    CorrectionSpecCompletenessGate,
     ExplanationBinding,
     EvidenceBindingGate,
     GeneralizationMetrics,
     TemplateGeneralizationGate,
     Phase1GateExecutor,
+)
+
+# Module F2: NL Postprocess Executor
+from knowledge_compiler.phase1.nl_postprocess import (
+    ActionType,
+    Action,
+    ActionPlan,
+    ActionLog,
+    NLPostprocessExecutor,
+    create_action_plan,
+    execute_action_plan,
+)
+
+# Module F3: Visualization Engine
+from knowledge_compiler.phase1.visualization import (
+    OutputFormat,
+    VisualizationResult,
+    VisualizationEngine,
+    execute_visualization,
 )
 
 __all__ = [
@@ -88,6 +125,8 @@ __all__ = [
     "KnowledgeLayer",
     "KnowledgeStatus",
     "ComparisonType",
+    "ErrorType",
+    "ImpactScope",
     # Specs
     "PlotSpec",
     "MetricSpec",
@@ -98,12 +137,18 @@ __all__ = [
     "TeachRecord",
     "TeachOperation",
     "KnowledgeVersion",
+    "CorrectionSpec",
     "ResultManifest",
     "ResultAsset",
     "ReportDraft",
+    # Phase 1 → Phase 2 Interface
+    "Phase1Output",
+    "AnalogySpec",
     # Factory functions
     "create_report_spec_id",
     "create_teach_record_id",
+    "create_correction_id",
+    "create_phase1_output_id",
     # Module 2 exports
     "ChartStandard",
     "REPORT_STRUCTURE",
@@ -117,8 +162,11 @@ __all__ = [
     "TeachContext",
     "TeachResponse",
     "EvidenceReference",
+    "CorrectionDetection",
+    "CorrectionRecorder",
     "TeachModeEngine",
     "record_teach_operation",
+    "is_generalizable_correction",
     # Module 4 exports
     "ValidationResult",
     "PromotionResult",
@@ -131,13 +179,28 @@ __all__ = [
     "HistoricalReference",
     "ReplayEngine",
     "OpenFOAMReplayUtils",
-    # Module 6 exports (P1-G3/G4 Gates)
+    # Module 6 exports (P1-G1/G3/G4 Gates)
     "GateStatus",
     "GateCheckItem",
     "GateResultV2",
+    "ActionPlanExecutabilityGate",
+    "CorrectionSpecCompletenessGate",
     "ExplanationBinding",
     "EvidenceBindingGate",
     "GeneralizationMetrics",
     "TemplateGeneralizationGate",
     "Phase1GateExecutor",
+    # Module F2 exports (NL Postprocess Executor)
+    "ActionType",
+    "Action",
+    "ActionPlan",
+    "ActionLog",
+    "NLPostprocessExecutor",
+    "create_action_plan",
+    "execute_action_plan",
+    # Module F3 exports (Visualization Engine)
+    "OutputFormat",
+    "VisualizationResult",
+    "VisualizationEngine",
+    "execute_visualization",
 ]

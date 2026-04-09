@@ -1,0 +1,32 @@
+#!/bin/bash
+# .claude/hooks/pre-commit
+# Git pre-commit hook - 自动同步任务状态到 Notion
+
+# 获取暂存的 commit 消息（如果有的话）
+COMMIT_MSG_FILE=".git/COMMIT_EDITMSG"
+
+if [ -f "$COMMIT_MSG_FILE" ]; then
+    # 从 commit 消息解析任务 ID (支持 P2-79, TASK-123 等格式)
+    TASK_ID=$(grep -oE "#[A-Z0-9]+-[0-9]+" "$COMMIT_MSG_FILE" | head -1 | sed 's/#//')
+
+    if [ -n "$TASK_ID" ]; then
+        echo "🔄 Syncing task $TASK_ID to Notion..."
+        python3 .claude/notion/sync.py update-status --task-id "$TASK_ID" --status "Running" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "✓ Notion updated: $TASK_ID → Running"
+        fi
+    fi
+fi
+
+# 运行快速测试（可选，注释掉以跳过）
+# echo "🧪 Running quick tests..."
+# pytest tests/ -q --tb=no --maxfail=5
+# if [ $? -ne 0 ]; then
+#     echo "❌ Tests failed. Commit anyway? (no to abort)"
+#     read -r response
+#     if [[ ! "$response" =~ ^[Yy]$ ]]; then
+#         exit 1
+#     fi
+# fi
+
+exit 0

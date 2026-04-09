@@ -95,7 +95,7 @@ class TestProblemTypeDefaults:
 
 class TestPhase1Gates:
     def test_p1_g1_field_completeness_pass(self):
-        """P1-G1 should pass when all required assets are present"""
+        """G1-P1 should pass when all required assets are present"""
         manifest = ResultManifest(
             solver_type="openfoam",
             case_name="test",
@@ -111,12 +111,12 @@ class TestPhase1Gates:
             ProblemType.INTERNAL_FLOW,
         )
 
-        assert result.gate_id == "P1-G1"
+        assert result.gate_id == "G1-P1"
         assert result.passed is True
         assert result.score == 100.0
 
     def test_p1_g1_field_completeness_fail(self):
-        """P1-G1 should fail when required assets are missing"""
+        """G1-P1 should fail when required assets are missing"""
         manifest = ResultManifest(
             solver_type="openfoam",
             case_name="test",
@@ -136,7 +136,7 @@ class TestPhase1Gates:
         assert len(result.warnings) > 0
 
     def test_p1_g2_plot_standards_pass(self):
-        """P1-G2 should pass for standard-compliant plots"""
+        """G2-P1 should pass for standard-compliant plots"""
         from knowledge_compiler.phase1.schema import ReportDraft
 
         draft = ReportDraft(
@@ -161,11 +161,11 @@ class TestPhase1Gates:
 
         result = Phase1Gates.p1_g2_plot_standards(draft)
 
-        assert result.gate_id == "P1-G2"
+        assert result.gate_id == "G2-P1"
         assert result.passed is True
 
     def test_p1_g2_plot_standards_fail(self):
-        """P1-G2 should fail for non-compliant plots"""
+        """G2-P1 should fail for non-compliant plots"""
         from knowledge_compiler.phase1.schema import ReportDraft
 
         draft = ReportDraft(
@@ -326,10 +326,10 @@ class TestReportSkeletonGenerator:
         generator = ReportSkeletonGenerator()
         draft = generator.generate(task_spec, manifest)
 
-        assert "P1-G1" in draft.gates_status
-        assert "P1-G2" in draft.gates_status
-        assert "passed" in draft.gates_status["P1-G1"]
-        assert "score" in draft.gates_status["P1-G1"]
+        assert "G1-P1" in draft.gates_status
+        assert "G2-P1" in draft.gates_status
+        assert "passed" in draft.gates_status["G1-P1"]
+        assert "score" in draft.gates_status["G1-P1"]
 
     def test_create_report_spec_from_draft(self):
         """Generator should convert draft to ReportSpec"""

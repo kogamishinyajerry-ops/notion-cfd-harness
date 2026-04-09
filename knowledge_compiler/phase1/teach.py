@@ -23,7 +23,11 @@ from knowledge_compiler.phase1.schema import (
     ProblemType,
     KnowledgeLayer,
     KnowledgeStatus,
+    CorrectionSpec,
+    ErrorType,
+    ImpactScope,
     create_teach_record_id,
+    create_correction_id,
 )
 
 
@@ -93,6 +97,346 @@ class EvidenceReference:
 
 
 # ============================================================================
+# Correction Recorder
+# ============================================================================
+
+@dataclass
+class CorrectionDetection:
+    """
+    Result of correction detection analysis
+
+    Determines whether a teach operation should also generate a CorrectionSpec.
+    """
+    should_create_correction: bool
+    error_type: Optional[ErrorType] = None
+    impact_scope: Optional[ImpactScope] = None
+    root_cause_hint: Optional[str] = None
+    reason: str = ""  # Why/why not a correction is needed
+
+
+class CorrectionRecorder:
+    """
+    Correction Recorder - Learning Channel Integration
+
+    CRITICAL RULE: When an engineer modifies system output, a CorrectionSpec
+    MUST be generated in addition to TeachRecord. This ensures all corrections
+    are traceable, replayable, and can improve future system behavior.
+
+    Integration Point:
+    - Called by TeachModeEngine.record_operation()
+    - Analyzes each teach operation for correction eligibility
+    - Creates and stores CorrectionSpec when appropriate
+    """
+
+    def __init__(self, storage_path: Optional[Path] = None):
+        """
+        Initialize Correction Recorder
+
+        Args:
+            storage_path: Path to store correction specs (defaults to ./corrections/)
+        """
+        self.storage_path = storage_path or Path("./corrections")
+        self.storage_path.mkdir(parents=True, exist_ok=True)
+
+    def detect_correction(
+        self,
+        operation_type: OperationType,
+        previous_state: Dict[str, Any],
+        reason: str,
+        is_generalizable: bool,
+    ) -> CorrectionDetection:
+        """
+        Detect if a teach operation should generate a CorrectionSpec
+
+        Rules:
+        1. All generalizable operations should generate a CorrectionSpec
+        2. Operations that fix system errors should generate a CorrectionSpec
+        3. Structural changes should generate a CorrectionSpec
+
+        Args:
+            operation_type: Type of teach operation
+            previous_state: State before the change (wrong_output)
+            reason: Engineer's explanation
+            is_generalizable: Whether operation is generalizable
+
+        Returns:
+            CorrectionDetection with analysis result
+        """
+        # Rule 1: Generalizable operations always need CorrectionSpec
+        if is_generalizable:
+            error_type = self._infer_error_type(operation_type, reason)
+            impact_scope = self._infer_impact_scope(operation_type, is_generalizable)
+            return CorrectionDetection(
+                should_create_correction=True,
+                error_type=error_type,
+                impact_scope=impact_scope,
+                root_cause_hint="Generalizable pattern - should be template",
+                reason=f"Generalizable {operation_type} operation",
+            )
+
+        # Rule 2: Operations with error keywords
+        error_keywords = ["wrong", "incorrect", "missing", "error", "fix", "bug"]
+        if any(keyword in reason.lower() for keyword in error_keywords):
+            error_type = self._infer_error_type(operation_type, reason)
+            return CorrectionDetection(
+                should_create_correction=True,
+                error_type=error_type,
+                impact_scope=ImpactScope.SINGLE_CASE,
+                root_cause_hint="Error detected by engineer",
+                reason="Operation fixes an error",
+            )
+
+        # Rule 3: Structural changes (but not anomaly explanations)
+        if operation_type == "modify_structure":
+            return CorrectionDetection(
+                should_create_correction=True,
+                error_type=ErrorType.INVALID_ORDER,
+                impact_scope=ImpactScope.SIMILAR_CASES,
+                root_cause_hint="Structural improvement",
+                reason="Structural change detected",
+            )
+
+        if operation_type == "add_explanation":
+            # Only trigger if it's adding missing explanation, not just describing anomaly
+            if "missing" in reason.lower() or "should explain" in reason.lower():
+                return CorrectionDetection(
+                    should_create_correction=True,
+                    error_type=ErrorType.MISSING_EXPLANATION,
+                    impact_scope=ImpactScope.SIMILAR_CASES,
+                    root_cause_hint="Missing explanation",
+                    reason="Missing explanation detected",
+                )
+            # Adding explanation for anomaly is usually one-off
+            return CorrectionDetection(
+                should_create_correction=False,
+                reason="Anomaly explanation is usually one-off",
+            )
+
+        # Default: no correction needed for one-off non-fixing changes
+        return CorrectionDetection(
+            should_create_correction=False,
+            reason="One-off operation without system error",
+        )
+
+    def _infer_error_type(self, operation_type: OperationType, reason: str) -> ErrorType:
+        """Infer error type from operation and reason"""
+        reason_lower = reason.lower()
+
+        # Check for specific error keywords first (higher priority)
+        if "wrong" in reason_lower or "incorrect" in reason_lower:
+            if "plot" in reason_lower or operation_type in ["add_plot", "modify_plot", "remove_plot"]:
+                return ErrorType.WRONG_PLOT
+            if "metric" in reason_lower or operation_type in ["add_metric", "modify_metric", "remove_metric"]:
+                return ErrorType.WRONG_METRIC
+            if "section" in reason_lower:
+                return ErrorType.WRONG_SECTION
+            return ErrorType.INCORRECT_DATA
+
+        if "missing" in reason_lower:
+            if "component" in reason_lower or "plot" in reason_lower:
+                return ErrorType.MISSING_COMPONENT
+            if "metric" in reason_lower:
+                return ErrorType.MISSING_DATA
+            if "explanation" in reason_lower:
+                return ErrorType.MISSING_EXPLANATION
+            return ErrorType.MISSING_DATA
+
+        # Infer from operation type
+        if operation_type in ["add_plot", "remove_plot", "modify_plot"]:
+            return ErrorType.WRONG_PLOT
+
+        if operation_type in ["add_metric", "remove_metric", "modify_metric"]:
+            return ErrorType.WRONG_METRIC
+
+        if operation_type == "adjust_section":
+            return ErrorType.WRONG_SECTION
+
+        if operation_type == "add_explanation":
+            return ErrorType.MISSING_EXPLANATION
+
+        if operation_type == "modify_structure":
+            if "order" in reason_lower or "sequence" in reason_lower:
+                return ErrorType.INVALID_ORDER
+            if "duplicate" in reason_lower:
+                return ErrorType.DUPLICATE_CONTENT
+            return ErrorType.OTHER
+
+        return ErrorType.OTHER
+
+    def _infer_impact_scope(
+        self,
+        operation_type: OperationType,
+        is_generalizable: bool,
+    ) -> ImpactScope:
+        """Infer impact scope from operation"""
+        if is_generalizable:
+            if operation_type in ["modify_structure", "add_explanation"]:
+                return ImpactScope.ALL_CASES
+            return ImpactScope.SIMILAR_CASES
+        return ImpactScope.SINGLE_CASE
+
+    def create_correction(
+        self,
+        correction_id: str,
+        error_type: ErrorType,
+        wrong_output: Dict[str, Any],
+        correct_output: Dict[str, Any],
+        human_reason: str,
+        impact_scope: ImpactScope,
+        linked_teach_record_id: str,
+        root_cause: Optional[str] = None,
+        fix_action: Optional[str] = None,
+        affected_components: Optional[List[str]] = None,
+        evidence: Optional[List[str]] = None,
+    ) -> CorrectionSpec:
+        """
+        Create a CorrectionSpec
+
+        Args:
+            correction_id: Unique correction ID
+            error_type: Type of error
+            wrong_output: What the system produced
+            correct_output: What the engineer specified
+            human_reason: Why the correction was needed
+            impact_scope: Scope of impact
+            linked_teach_record_id: Related TeachRecord ID
+            root_cause: Optional root cause analysis
+            fix_action: Optional fix action
+            affected_components: Optional list of affected components
+            evidence: Optional evidence IDs
+
+        Returns:
+            CorrectionSpec
+        """
+        # Infer affected components if not provided
+        if affected_components is None:
+            affected_components = self._infer_affected_components(error_type)
+
+        # Infer fix action if not provided
+        if fix_action is None:
+            fix_action = self._infer_fix_action(error_type, wrong_output, correct_output)
+
+        return CorrectionSpec(
+            correction_id=correction_id,
+            error_type=error_type,
+            wrong_output=wrong_output,
+            correct_output=correct_output,
+            human_reason=human_reason,
+            impact_scope=impact_scope,
+            affected_components=affected_components,
+            evidence=evidence or [],
+            linked_teach_record_id=linked_teach_record_id,
+            root_cause=root_cause,
+            fix_action=fix_action,
+            needs_replay=is_generalizable_correction(impact_scope),
+        )
+
+    def _infer_affected_components(self, error_type: ErrorType) -> List[str]:
+        """Infer which components are affected by this error type"""
+        component_map = {
+            ErrorType.WRONG_PLOT: ["PlotSpec"],
+            ErrorType.WRONG_METRIC: ["MetricSpec"],
+            ErrorType.WRONG_SECTION: ["SectionSpec", "PlotSpec"],
+            ErrorType.MISSING_DATA: ["ReportSpec"],
+            ErrorType.INCORRECT_DATA: ["ReportSpec"],
+            ErrorType.MISSING_COMPONENT: ["ReportSpec"],
+            ErrorType.INVALID_ORDER: ["ReportSpec"],
+            ErrorType.MISINTERPRETATION: ["ReportSpec"],
+            ErrorType.MISSING_EXPLANATION: ["ReportSpec"],
+            ErrorType.DUPLICATE_CONTENT: ["ReportSpec"],
+            ErrorType.INCONSISTENT_DATA: ["ReportSpec"],
+            ErrorType.OTHER: ["ReportSpec"],
+        }
+        return component_map.get(error_type, ["ReportSpec"])
+
+    def _infer_fix_action(
+        self,
+        error_type: ErrorType,
+        wrong_output: Dict[str, Any],
+        correct_output: Dict[str, Any],
+    ) -> str:
+        """Generate a fix action description"""
+        return f"Change {wrong_output} to {correct_output} for {error_type.value}"
+
+    def save_correction(self, correction: CorrectionSpec) -> None:
+        """
+        Save CorrectionSpec to storage
+
+        Args:
+            correction: CorrectionSpec to save
+        """
+        file_path = self.storage_path / f"{correction.correction_id}.json"
+        correction.save(file_path)
+
+    def load_correction(self, correction_id: str) -> Optional[CorrectionSpec]:
+        """
+        Load CorrectionSpec from storage
+
+        Args:
+            correction_id: CorrectionSpec ID
+
+        Returns:
+            CorrectionSpec if found, None otherwise
+        """
+        file_path = self.storage_path / f"{correction_id}.json"
+        if file_path.exists():
+            return CorrectionSpec.load(file_path)
+        return None
+
+    def list_corrections(
+        self,
+        teach_record_id: Optional[str] = None,
+        replay_status: Optional[str] = None,
+    ) -> List[CorrectionSpec]:
+        """
+        List CorrectionSpec with optional filtering
+
+        Args:
+            teach_record_id: Filter by linked TeachRecord ID
+            replay_status: Filter by replay status
+
+        Returns:
+            List of matching CorrectionSpec
+        """
+        corrections = []
+
+        for file_path in self.storage_path.glob("CORRECT-*.json"):
+            try:
+                correction = CorrectionSpec.load(file_path)
+
+                # Apply filters
+                if teach_record_id and correction.linked_teach_record_id != teach_record_id:
+                    continue
+                if replay_status and correction.replay_status != replay_status:
+                    continue
+
+                corrections.append(correction)
+            except Exception:
+                continue
+
+        corrections.sort(key=lambda c: c.timestamp)
+        return corrections
+
+
+def is_generalizable_correction(impact_scope: ImpactScope) -> bool:
+    """
+    Determine if a correction requires replay validation
+
+    Args:
+        impact_scope: The impact scope of the correction
+
+    Returns:
+        True if replay is needed
+    """
+    return impact_scope in [
+        ImpactScope.SIMILAR_CASES,
+        ImpactScope.ALL_CASES,
+        ImpactScope.REPORT_SPEC,
+        ImpactScope.GATE_DEFINITION,
+    ]
+
+
+# ============================================================================
 # Teach Mode Engine (CORE)
 # ============================================================================
 
@@ -121,6 +465,11 @@ class TeachModeEngine:
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self._active_session: Optional[str] = None
         self._session_records: List[str] = []
+
+        # Initialize Correction Recorder
+        self.correction_recorder = CorrectionRecorder(
+            self.storage_path.parent / "corrections"
+        )
 
     def start_session(self, session_id: Optional[str] = None) -> str:
         """
@@ -234,6 +583,45 @@ class TeachModeEngine:
         # Track in session
         if self._active_session:
             self._session_records.append(record_id)
+
+        # ============================================================================
+        # CORRECTION SPEC INTEGRATION (CRITICAL RULE)
+        # When engineer modifies system output, CorrectionSpec MUST be generated
+        # ============================================================================
+        detection = self.correction_recorder.detect_correction(
+            operation_type=context.operation_type,
+            previous_state=context.previous_state,
+            reason=reason,
+            is_generalizable=is_generalizable,
+        )
+
+        correction_id = None
+        if detection.should_create_correction:
+            correction_id = create_correction_id()
+
+            # Build wrong_output from previous_state
+            wrong_output = context.previous_state.copy()
+
+            # Build correct_output from the operation
+            correct_output = {
+                "operation_type": context.operation_type,
+                "description": description,
+                "reason": reason,
+                "is_generalizable": is_generalizable,
+            }
+
+            correction = self.correction_recorder.create_correction(
+                correction_id=correction_id,
+                error_type=detection.error_type or ErrorType.OTHER,
+                wrong_output=wrong_output,
+                correct_output=correct_output,
+                human_reason=reason,
+                impact_scope=detection.impact_scope or ImpactScope.SINGLE_CASE,
+                linked_teach_record_id=record_id,
+                root_cause=detection.root_cause_hint,
+            )
+
+            self.correction_recorder.save_correction(correction)
 
         return TeachResponse(
             teach_record_id=record_id,
@@ -474,6 +862,81 @@ class TeachModeEngine:
 
         return spec
 
+    # ============================================================================
+    # Correction Management Methods
+    # ============================================================================
+
+    def list_corrections(
+        self,
+        teach_record_id: Optional[str] = None,
+        replay_status: Optional[str] = None,
+    ) -> List[CorrectionSpec]:
+        """
+        List CorrectionSpec with optional filtering
+
+        Args:
+            teach_record_id: Filter by linked TeachRecord ID
+            replay_status: Filter by replay status
+
+        Returns:
+            List of matching CorrectionSpec
+        """
+        return self.correction_recorder.list_corrections(
+            teach_record_id=teach_record_id,
+            replay_status=replay_status,
+        )
+
+    def get_correction(self, correction_id: str) -> Optional[CorrectionSpec]:
+        """
+        Get a specific CorrectionSpec
+
+        Args:
+            correction_id: CorrectionSpec ID
+
+        Returns:
+            CorrectionSpec if found, None otherwise
+        """
+        return self.correction_recorder.load_correction(correction_id)
+
+    def mark_correction_replay_passed(self, correction_id: str) -> bool:
+        """
+        Mark a correction as replay-passed
+
+        Args:
+            correction_id: CorrectionSpec ID
+
+        Returns:
+            True if successful, False otherwise
+        """
+        correction = self.get_correction(correction_id)
+        if correction:
+            correction.mark_replay_passed()
+            self.correction_recorder.save_correction(correction)
+            return True
+        return False
+
+    def mark_correction_replay_failed(
+        self,
+        correction_id: str,
+        failure_reason: str,
+    ) -> bool:
+        """
+        Mark a correction as replay-failed
+
+        Args:
+            correction_id: CorrectionSpec ID
+            failure_reason: Why replay failed
+
+        Returns:
+            True if successful, False otherwise
+        """
+        correction = self.get_correction(correction_id)
+        if correction:
+            correction.mark_replay_failed(failure_reason)
+            self.correction_recorder.save_correction(correction)
+            return True
+        return False
+
 
 # ============================================================================
 # Convenience Functions
@@ -533,6 +996,9 @@ __all__ = [
     "TeachContext",
     "TeachResponse",
     "EvidenceReference",
+    "CorrectionDetection",
+    "CorrectionRecorder",
     "TeachModeEngine",
     "record_teach_operation",
+    "is_generalizable_correction",
 ]
