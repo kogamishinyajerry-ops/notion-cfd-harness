@@ -368,6 +368,13 @@ class AnalogySpec:
     # 探索预算
     budget: ExplorationBudget = field(default_factory=ExplorationBudget)
 
+    # 权限级别（控制 E4 试探执行方式）
+    # L0 suggest_only: 仅建议方案，不执行试探
+    # L1 dry_run: 使用 mock 执行器，不调用真实 solver
+    # L2 execute: 完全执行（需人工授权）
+    # L3 explore: 允许低成本试探，自动执行但受 budget 约束
+    permission_level: str = "explore"  # PermissionLevel.value
+
     # 相似性阈值
     min_similarity_threshold: float = 0.5
     confidence_threshold: AnalogyConfidence = AnalogyConfidence.MEDIUM
@@ -382,6 +389,16 @@ class AnalogySpec:
     fallback_to_teach: bool = False
     failure_bundle: Optional[AnalogyFailureBundle] = None
 
+    @property
+    def allows_real_execution(self) -> bool:
+        """是否允许真实执行（L2 execute 或 L3 explore）"""
+        return self.permission_level in ("execute", "explore")
+
+    @property
+    def allows_trials(self) -> bool:
+        """是否允许试探（L1 dry_run 及以上）"""
+        return self.permission_level in ("dry_run", "execute", "explore")
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "spec_id": self.spec_id,
@@ -391,6 +408,7 @@ class AnalogySpec:
             "problem_type": self.problem_type,
             "constraints": self.constraints,
             "budget": self.budget.to_dict(),
+            "permission_level": self.permission_level,
             "min_similarity_threshold": self.min_similarity_threshold,
             "analogy_results": [r.to_dict() for r in self.analogy_results],
             "candidate_plans": [p.to_dict() for p in self.candidate_plans],

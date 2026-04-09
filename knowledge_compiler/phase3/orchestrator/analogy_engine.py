@@ -22,6 +22,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Protocol, Set
 
+from knowledge_compiler.phase2.execution_layer.failure_handler import (
+    PermissionLevel,
+)
 from knowledge_compiler.phase3.analogy_schema import (
     AnalogyConfidence,
     AnalogyDimension,
@@ -589,13 +592,21 @@ class TrialRunner:
 
     用粗网格 + 少步数执行候选方案，收集收敛数据和基础结果。
     支持自定义执行后端（如 OpenFOAM, SU2, 或 mock）。
+
+    权限级别控制：
+    - SUGGEST_ONLY (L0): 不执行试探，返回建议描述
+    - DRY_RUN (L1): 使用 mock 执行器（is_mock=True）
+    - EXECUTE (L2): 使用注入的 executor 执行
+    - EXPLORE (L3): 使用注入的 executor 执行，受 budget 约束
     """
 
     def __init__(
         self,
         executor: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+        permission_level: PermissionLevel = PermissionLevel.EXPLORE,
     ):
         self._executor = executor or self._default_executor
+        self._permission_level = permission_level
 
     def run_trial(
         self,
@@ -613,6 +624,18 @@ class TrialRunner:
         Returns:
             TrialResult 试探结果
         """
+        # L0: 仅建议，不执行
+        if self._permission_level == PermissionLevel.SUGGEST_ONLY:
+            return TrialResult(
+                plan_id=plan.plan_id,
+                status=TrialStatus.CANCELLED,
+                evaluation_notes=[
+                    "SUGGEST_ONLY: 试探未执行，仅生成方案描述",
+                    f"方案: {plan.description}",
+                    f"预估成本: {plan.estimated_cost:.2f}h",
+                ],
+            )
+
         if budget.is_exhausted:
             return TrialResult(
                 plan_id=plan.plan_id,
@@ -627,7 +650,13 @@ class TrialRunner:
 
         start = time.time()
         try:
-            output = self._executor(plan.execution_params)
+            # L1 (DRY_RUN): 强制使用 mock 执行器
+            if self._permission_level == PermissionLevel.DRY_RUN:
+                output = self._default_executor(plan.execution_params)
+            else:
+                # L2/L3: 使用注入的 executor（可能是真实 solver）
+                output = self._executor(plan.execution_params)
+
             elapsed = time.time() - start
 
             result.status = TrialStatus.COMPLETED
@@ -1038,13 +1067,18 @@ class AnalogicalOrchestrator:
         knowledge_store: KnowledgeStore,
         executor: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
         weights: Optional[Dict[AnalogyDimension, float]] = None,
+        permission_level: PermissionLevel = PermissionLevel.EXPLORE,
     ):
+        self._permission_level = permission_level
         self._similarity = SimilarityEngine(
             knowledge_store, weights=weights
         )
         self._decomposer = AnalogyDecomposer(knowledge_store)
         self._plan_generator = CandidatePlanGenerator()
-        self._trial_runner = TrialRunner(executor=executor)
+        self._trial_runner = TrialRunner(
+            executor=executor,
+            permission_level=permission_level,
+        )
         self._evaluator = TrialEvaluator()
         self._failure_handler = AnalogyFailureHandler()
 
@@ -1067,10 +1101,26 @@ class AnalogicalOrchestrator:
             更新后的 AnalogySpec
         """
         logger.info(
-            "开始类比推理: spec=%s target=%s",
+            "开始类比推理: spec=%s target=%s permission=%s",
             spec.spec_id,
             spec.target_case_id,
+            self._permission_level.value,
         )
+
+        # L0: 仅建议模式 — 跳过试探，直接返回方案列表
+        if self._permission_level == PermissionLevel.SUGGEST_ONLY:
+            spec.analogy_results = self._similarity.find_similar_cases(
+                target_features,
+                top_k=3,
+            )
+            if spec.analogy_results:
+                best = spec.analogy_results[0]
+                best = self._decomposer.decompose(best)
+                spec.candidate_plans = self._plan_generator.generate_plans(
+                    best, spec.budget, source_config=source_config,
+                )
+            logger.info("SUGGEST_ONLY: 已生成方案但跳过试探")
+            return spec
 
         # 获取目标特征
         if target_features is None:
