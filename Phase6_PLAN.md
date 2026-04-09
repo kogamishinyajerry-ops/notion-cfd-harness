@@ -37,13 +37,25 @@ Real solver E2E 留作 Phase 7 前置任务。
 
 ## M3: 6.2 Correction 反馈闭环 — 三层验证
 
-| 层次 | 验证内容 | 期望 |
-|------|---------|------|
-| **L1: 记录层** | CorrectionRecorder 是否完整记录失败 | 9 必填字段全填充 |
-| **L2: 消费层** | AnalogyEngine E1 是否读取 correction | KnowledgeStore 刷新机制验证 |
-| **L3: 改善层** | 第二次推理质量是否提升 | 类比得分可测量提升 |
+| 层次 | 验证内容 | 期望 | 状态 |
+|------|---------|------|------|
+| **L1: 记录层** | CorrectionRecorder 是否完整记录失败 | 9 必填字段全填充 | ✅ PASS |
+| **L2: 消费层** | AnalogyEngine E1 是否读取 correction | KnowledgeStore 刷新机制验证 | ❌ FAIL (修复中) |
+| **L3: 改善层** | 第二次推理质量是否提升 | 类比得分可测量提升 | ❌ FAIL (待修复) |
 
 **优先验证 L2**（消费层）—— L2 断裂则闭环无效。
+
+**L2 断裂根因** (Codex 调查):
+1. E1 SimilarityEngine 只用 `list_cases()` + `get_case_features()`，不读取 corrections
+2. Phase 2c 输出 `knowledge_id`，Phase 3 期望 `pattern_id`/`rule_id` + dimension tags
+3. 无 runtime `refresh()` 机制 — KnowledgeManager 只在 `__init__` 时加载
+4. Pipeline correction stage 是 stub（未调用 CorrectionRecorder）
+
+**修复计划** (Codex 执行中):
+- 实现 pipeline_orchestrator.py 真实 correction stage
+- 添加 CorrectionKnowledgeStore 适配 Phase 2c → Phase 3
+- 规范化 Phase 2c 输出格式以匹配 Phase 3 契约
+- 添加 correction-aware E1 scoring boost
 
 ---
 
@@ -142,7 +154,7 @@ E2E 验证失败时的处理规则：
 | M4 白名单扩展 (30→50+) | MiniMax-M2.7 | ✅ 55条完成 |
 | M1 E2E Mock 演示 | Codex | ✅ 3/3 PASS |
 | M2 案例替换 | Codex | ✅ VAWT→Cylinder Wake |
-| M3 Correction 反馈闭环 | Codex | 待确认 |
+| M3 Correction 反馈闭环 | Codex | 🔄 L2/L3 修复中 |
 | M6 PermissionLevel L3 | Codex | 待确认 |
 | M7 Phase 6 条目 | ✅ 已创建 | ✅ |
 
