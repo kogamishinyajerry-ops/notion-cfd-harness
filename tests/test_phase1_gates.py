@@ -299,7 +299,7 @@ class TestEvidenceBindingGate:
             ),
             TeachRecord(
                 teach_record_id="TR-002",
-                case_id="CASE-002",
+                case_id="BENCH-04",
                 timestamp=time_module.time(),
                 operations=[
                     TeachOperation(
@@ -434,7 +434,7 @@ class TestTemplateGeneralizationGate:
 
         result = gate.check_report_spec_candidate(
             spec,
-            source_cases=["CASE-001", "CASE-002"],  # Only 2 cases
+            source_cases=["CASE-001", "BENCH-04"],  # Only 2 cases
             teach_records=[],
         )
 
@@ -454,7 +454,7 @@ class TestTemplateGeneralizationGate:
             ],
         )
 
-        source_cases = ["CASE-001", "CASE-002", "CASE-003"]
+        source_cases = ["CASE-001", "BENCH-04", "CASE-003"]
         result = gate.check_report_spec_candidate(spec, source_cases, [])
 
         # InternalFlow expects velocity_magnitude, pressure_contour, streamlines
@@ -476,7 +476,7 @@ class TestTemplateGeneralizationGate:
             ],
         )
 
-        source_cases = ["CASE-001", "CASE-002", "CASE-003"]
+        source_cases = ["CASE-001", "BENCH-04", "CASE-003"]
         result = gate.check_report_spec_candidate(spec, source_cases, [])
 
         # ExternalFlow expects drag_coefficient, lift_coefficient
@@ -501,7 +501,7 @@ class TestTemplateGeneralizationGate:
             ],
         )
 
-        source_cases = ["CASE-001", "CASE-002", "CASE-003"]
+        source_cases = ["CASE-001", "BENCH-04", "CASE-003"]
         result = gate.check_report_spec_candidate(spec, source_cases, [])
 
         # Case count passes, required plots/metrics present
@@ -526,7 +526,7 @@ class TestTemplateGeneralizationGate:
             ],
         )
 
-        source_cases = ["CASE-001", "CASE-002", "CASE-003"]
+        source_cases = ["CASE-001", "BENCH-04", "CASE-003"]
         result = gate.check_report_spec_candidate(spec, source_cases, [])
 
         # Heat transfer requirements should pass
@@ -568,7 +568,7 @@ class TestTemplateGeneralizationGate:
             ),
         ]
 
-        source_cases = ["CASE-001", "CASE-002", "CASE-003"]
+        source_cases = ["CASE-001", "BENCH-04", "CASE-003"]
         result = gate.check_report_spec_candidate(spec, source_cases, teach_records)
 
         # Check that metrics are in checklist
@@ -590,7 +590,7 @@ class TestTemplateGeneralizationGate:
             ],
         )
 
-        source_cases = ["CASE-001", "CASE-002", "CASE-003", "CASE-004"]
+        source_cases = ["CASE-001", "BENCH-04", "CASE-003", "CASE-004"]
         result = gate.check_report_spec_candidate(spec, source_cases, [])
 
         assert result.metadata["case_count"] == 4
@@ -661,7 +661,7 @@ class TestPhase1GateExecutor:
             ],
         )
 
-        source_cases = ["CASE-001", "CASE-002", "CASE-003"]
+        source_cases = ["CASE-001", "BENCH-04", "CASE-003"]
         result = executor.run_g4_gate(spec, source_cases, [])
 
         assert result.gate_id == "G4-P1"
@@ -685,7 +685,7 @@ class TestPhase1GateExecutor:
             ],
         )
 
-        source_cases = ["CASE-001", "CASE-002", "CASE-003"]
+        source_cases = ["CASE-001", "BENCH-04", "CASE-003"]
 
         records = [
             TeachRecord(

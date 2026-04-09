@@ -199,12 +199,12 @@ class TestCanonicalSpec:
         )
 
         spec.add_source("TEACH-001", "case-001")
-        spec.add_source("TEACH-002", "case-002")
+        spec.add_source("TEACH-002", "bench-04")
 
         assert "TEACH-001" in spec.source_teach_ids
         assert "TEACH-002" in spec.source_teach_ids
         assert "case-001" in spec.source_case_ids
-        assert "case-002" in spec.source_case_ids
+        assert "bench-04" in spec.source_case_ids
 
     def test_to_dict(self):
         """Test CanonicalSpec to_dict conversion"""

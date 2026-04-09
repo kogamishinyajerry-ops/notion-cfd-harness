@@ -44,7 +44,7 @@ class TestProblemClassification:
         assert plan.problem_type == "internal_flow"
 
     def test_external_flow_airfoil(self):
-        plan = self.planner.plan(problem_description="NACA airfoil simulation")
+        plan = self.planner.plan(problem_description="circular cylinder external flow simulation")
         assert plan.problem_type == "external_flow"
 
     def test_external_flow_chinese(self):

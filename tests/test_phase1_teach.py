@@ -211,7 +211,7 @@ class TestTeachModeEngine:
             engine = TeachModeEngine(storage_path=Path(tmpdir))
 
             # Create records for different cases
-            for case_id in ["CASE-001", "CASE-002"]:
+            for case_id in ["CASE-001", "BENCH-04"]:
                 context = TeachContext(
                     draft_id="DRAFT-001",
                     case_id=case_id,

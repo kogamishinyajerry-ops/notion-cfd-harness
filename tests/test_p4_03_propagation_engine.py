@@ -374,13 +374,16 @@ class TestPropagationEngine:
             field="data",
             old_value="old",
             new_value="new",
-            impacted_executables=["EXEC-BENCH-GHIA-001", "EXEC-BENCH-NACA-001"]
+            impacted_executables=["EXEC-BENCH-GHIA-001", "EXEC-BENCH-CYLINDER-WAKE-001"]
         )
         
         decision = engine.analyze_impact(change)
         
         assert decision.should_propagate is True
-        assert set(decision.target_executables) == {"EXEC-BENCH-GHIA-001", "EXEC-BENCH-NACA-001"}
+        assert set(decision.target_executables) == {
+            "EXEC-BENCH-GHIA-001",
+            "EXEC-BENCH-CYLINDER-WAKE-001",
+        }
 
 
 if __name__ == "__main__":

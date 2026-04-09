@@ -36,7 +36,7 @@ EXECUTABLE_IDS = {
     "formula_validator": "EXEC-FORMULA-VALIDATOR-001",
     "chart_template": "EXEC-CHART-TEMPLATE-001",
     "bench_ghia": "EXEC-BENCH-GHIA-001",
-    "bench_naca": "EXEC-BENCH-NACA-001",
+    "bench_cylinder_wake": "EXEC-BENCH-CYLINDER-WAKE-001",
     "diff_engine": "EXEC-DIFF-ENGINE-001",
 }
 
@@ -503,15 +503,15 @@ def track_impact(change: DiffReport) -> list[str]:
     if change.change_type == ChangeType.EVIDENCE_EDIT:
         if "CASE-001" in unit_id or "EVID-CHAIN-001" in unit_id or "bench_ghia1982.py" in unit_id:
             return [EXECUTABLE_IDS["bench_ghia"]]
-        if "CASE-002" in unit_id or "EVID-CHAIN-002" in unit_id or "bench_naca.py" in unit_id:
-            return [EXECUTABLE_IDS["bench_naca"]]
-        return [EXECUTABLE_IDS["bench_ghia"], EXECUTABLE_IDS["bench_naca"]]
+        if "BENCH-04" in unit_id or "EVID-CHAIN-002" in unit_id or "bench_cylinder_wake.py" in unit_id:
+            return [EXECUTABLE_IDS["bench_cylinder_wake"]]
+        return [EXECUTABLE_IDS["bench_ghia"], EXECUTABLE_IDS["bench_cylinder_wake"]]
 
     if unit_id.startswith("FORM-") or "formulas.yaml" in unit_id or "formula_validator.py" in unit_id:
         return [
             EXECUTABLE_IDS["formula_validator"],
             EXECUTABLE_IDS["bench_ghia"],
-            EXECUTABLE_IDS["bench_naca"],
+            EXECUTABLE_IDS["bench_cylinder_wake"],
         ]
 
     if unit_id.startswith("CHART-") or "chart_template.py" in unit_id or "chart_rules.yaml" in unit_id:
@@ -520,15 +520,15 @@ def track_impact(change: DiffReport) -> list[str]:
     if unit_id.startswith("CASE-001") or "bench_ghia1982.py" in unit_id:
         return [EXECUTABLE_IDS["bench_ghia"]]
 
-    if unit_id.startswith("CASE-002") or "bench_naca.py" in unit_id:
-        return [EXECUTABLE_IDS["bench_naca"]]
+    if unit_id.startswith("BENCH-04") or "bench_cylinder_wake.py" in unit_id:
+        return [EXECUTABLE_IDS["bench_cylinder_wake"]]
 
     if "schema/" in unit_id:
         return [
             EXECUTABLE_IDS["formula_validator"],
             EXECUTABLE_IDS["chart_template"],
             EXECUTABLE_IDS["bench_ghia"],
-            EXECUTABLE_IDS["bench_naca"],
+            EXECUTABLE_IDS["bench_cylinder_wake"],
             EXECUTABLE_IDS["diff_engine"],
         ]
 
@@ -541,7 +541,7 @@ def track_impact(change: DiffReport) -> list[str]:
         return [
             EXECUTABLE_IDS["formula_validator"],
             EXECUTABLE_IDS["bench_ghia"],
-            EXECUTABLE_IDS["bench_naca"],
+            EXECUTABLE_IDS["bench_cylinder_wake"],
         ]
 
     return []

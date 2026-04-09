@@ -460,7 +460,7 @@ class TestParseTeachCapturesFunction:
                 raw_operations=[operation1],
             ),
             TeachCapture(
-                source_case_id="case-002",
+                source_case_id="bench-04",
                 context=context,
                 raw_operations=[operation2],
             ),

@@ -111,8 +111,8 @@ If optional field is missing:
 
 ### 5.3 Honesty Constraint
 > **CRITICAL**: Any data that does NOT exist in the source PDF/report must NOT be fabricated.
-> CL/CD polar data is NOT available in Thomas&Loutun 2021 PDF.
-> Any claim of extracting it is DATA FABRICATION and must be flagged.
+> BENCH-04 seed data includes Strouhal number, mean drag coefficient, and wake visualization only.
+> Any claim of extracting richer wake traces without provenance is DATA FABRICATION and must be flagged.
 
 ---
 

@@ -24,7 +24,7 @@ All downstream Phase2 tasks should inherit from this baseline.
 |-----------|-------|----------|
 | chapters | 6 | CH-001 → CH-005, CH-003-1 |
 | formulas | 10 | FORM-001 → FORM-010 |
-| data_points | 2 | CASE-001, CASE-002 |
+| data_points | 2 | CASE-001, BENCH-04 |
 | chart_rules | 3 | CHART-001, CHART-002, CHART-003 |
 | evidence | 2 | EVID-CHAIN-001, EVID-CHAIN-002 |
 
@@ -63,11 +63,11 @@ Executable    | knowledge_compiler/executables/*.py
 - **Acceptance**: max error < 5%
 - **Status**: ✅ Pass (canonical data)
 
-### 3.4 bench_naca.py
+### 3.4 bench_cylinder_wake.py
 - **Language**: Python
-- **Benchmark**: Thomas&Loutun 2021 NACA VAWT
-- **Acceptance**: mean error < 5%, peak error < 3%
-- **Honesty Check**: CL/CD NOT available — must not fabricate
+- **Benchmark**: Williamson 1996 Circular Cylinder Wake Re=100
+- **Acceptance**: Strouhal error <= 8%, drag error <= 5%
+- **Honesty Check**: BENCH-04 seeds only St and mean Cd
 - **Status**: ✅ Pass (canonical data)
 
 ---
@@ -80,14 +80,14 @@ Executable    | knowledge_compiler/executables/*.py
 - **Source**: ReportSpec v1.1 §2.2
 
 ### 4.2 Data Honesty Constraint
-- **Decision**: Thomas&Loutun 2021 PDF does NOT contain CL/CD polar
-- **Action**: Must NOT fabricate — document as data_gap
+- **Decision**: BENCH-04 seeds only Strouhal number, mean drag coefficient, and wake visualization
+- **Action**: Must NOT fabricate richer wake traces without provenance
 - **Source**: EVID-001 §B.6 Honesty Declaration
 
-### 4.3 Model Systematic Error Acknowledgment
-- **Decision**: TSR=5.25 dynamic stall >10% error is EXPECTED, not bug
-- **Action**: Explicit annotation in reports, not concealment
-- **Source**: ReportSpec v1.1 §4 Case2 note
+### 4.3 Canonical Unsteady Wake Target
+- **Decision**: Re=100 cylinder wake must show a Karman vortex street with St≈0.164
+- **Action**: Validate both St and mean drag against Williamson 1996
+- **Source**: ReportSpec v1.1 §4 BENCH-04 note
 
 ### 4.4 Chapter Extraction (F-001 Fix)
 - Boundary Conditions extracted as §1.3.1 (not merged into §1.3)
@@ -125,7 +125,7 @@ cd /Users/Zhuanz/Desktop/notion-cfd-harness/knowledge_compiler/executables
 python3 formula_validator.py        # Must show "✅ All tests passed"
 python3 chart_template.py          # Must show "✅ All tests passed"
 python3 bench_ghia1982.py           # Must show "✅ OVERALL PASS"
-python3 bench_naca.py               # Must show "✅ OVERALL PASS"
+python3 bench_cylinder_wake.py      # Must show "✅ OVERALL PASS"
 ```
 
 ---

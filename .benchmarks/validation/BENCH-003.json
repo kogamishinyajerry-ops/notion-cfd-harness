@@ -1,0 +1,33 @@
+{
+  "case_id": "BENCH-003",
+  "name": "NaN检测验证",
+  "description": "数值异常检测验证",
+  "input_data": {
+    "pressure_field": [
+      1.0,
+      2.0,
+      3.0
+    ]
+  },
+  "expected_output": {
+    "has_nan": false,
+    "min": 1.0,
+    "max": 3.0
+  },
+  "constraints": {
+    "required_fields": [
+      "pressure_field"
+    ]
+  },
+  "tags": [
+    "validation",
+    "nan"
+  ],
+  "difficulty": "easy",
+  "category": "validation",
+  "created_at": 1775719844.5593789,
+  "tolerance": {
+    "relative_error": 0.05,
+    "absolute_error": 1e-06
+  }
+}

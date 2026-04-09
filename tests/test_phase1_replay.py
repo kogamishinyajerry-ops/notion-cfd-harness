@@ -170,7 +170,7 @@ class TestBatchReplayResult:
         result1.overall_pass = True
 
         result2 = ReplayResult(
-            case_id="CASE-002",
+            case_id="BENCH-04",
             report_spec_id="RSPEC-001",
             success=True,
             timestamp=time.time(),

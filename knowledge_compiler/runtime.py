@@ -251,7 +251,7 @@ class KnowledgeRegistry:
         # Defaults from Phase2 evidence
         known_deps = {
             "CASE-001": ["FORM-006", "FORM-007", "FORM-008", "CHART-001"],
-            "CASE-002": ["FORM-006", "FORM-007", "FORM-008", "CHART-001"],
+            "BENCH-04": ["FORM-006", "FORM-007", "FORM-008", "CHART-001"],
         }
         return known_deps.get(unit_id, [])
 

@@ -29,7 +29,7 @@
     ],
     "executables": [
       "executables/bench_ghia1982.py",
-      "executables/bench_naca.py",
+      "executables/bench_cylinder_wake.py",
       "executables/chart_template.py",
       "executables/formula_validator.py"
     ]
@@ -75,9 +75,9 @@
       {
         "id": "F-P2-007",
         "severity": "Medium",
-        "description": "bench_naca排除动态失速点均值未纳入pass/fail",
-        "location": "bench_naca.py",
-        "mapped_to": "P3-10 (Verify Console - dual threshold)"
+        "description": "bench_cylinder_wake必须与BENCH-04的St/Cd阈值保持一致",
+        "location": "bench_cylinder_wake.py",
+        "mapped_to": "P3-10 (Verify Console - BENCH-04 metric routing)"
       },
       {
         "id": "F-P2-008",
@@ -93,7 +93,7 @@
     "formula_validator": "5/5 tests pass",
     "chart_template": "3/3 tests pass",
     "bench_ghia1982": "OVERALL PASS",
-    "bench_naca": "OVERALL PASS (mean 6.92%, excl DS 6.40%)"
+    "bench_cylinder_wake": "OVERALL PASS (St 0.00%, Cd 0.00%)"
   },
   "next_phase_dependencies": {
     "P3-01": "Knowledge Runtime Adapter - F-P2-001",

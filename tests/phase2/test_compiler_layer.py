@@ -204,7 +204,7 @@ class TestKnowledgePublisher:
         )
         # Add source tracking (3+ sources enables auto-approve in non-strict mode)
         spec.add_source("TEACH-001", "case-001")
-        spec.add_source("TEACH-002", "case-002")
+        spec.add_source("TEACH-002", "bench-04")
         spec.add_source("TEACH-003", "case-003")
 
         # Get the publisher's auth gate and approve the request
@@ -260,7 +260,7 @@ class TestKnowledgePublisher:
             },
         )
         spec.add_source("TEACH-001", "case-001")
-        spec.add_source("TEACH-002", "case-002")
+        spec.add_source("TEACH-002", "bench-04")
         spec.add_source("TEACH-003", "case-003")
 
         # Verify without strict auth (auto-approve)
@@ -286,7 +286,7 @@ class TestPublishConvenienceFunctions:
             },
         )
         spec.add_source("TEACH-001", "case-001")
-        spec.add_source("TEACH-002", "case-002")
+        spec.add_source("TEACH-002", "bench-04")
         spec.add_source("TEACH-003", "case-003")
 
         # Publish with auto-approve
@@ -307,7 +307,7 @@ class TestPublishConvenienceFunctions:
             },
         )
         spec.add_source("TEACH-001", "case-001")
-        spec.add_source("TEACH-002", "case-002")
+        spec.add_source("TEACH-002", "bench-04")
         spec.add_source("TEACH-003", "case-003")
 
         # Verify with non-strict mode
@@ -409,7 +409,7 @@ class TestEndToEndIntegration:
             },
         )
         spec.add_source("TEACH-001", "case-001")
-        spec.add_source("TEACH-002", "case-002")
+        spec.add_source("TEACH-002", "bench-04")
         spec.add_source("TEACH-003", "case-003")
 
         publisher = KnowledgePublisher()

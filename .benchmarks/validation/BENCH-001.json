@@ -1,0 +1,27 @@
+{
+  "case_id": "BENCH-001",
+  "name": "Basic数值验证",
+  "description": "基本数值计算验证",
+  "input_data": {
+    "value": 100.0
+  },
+  "expected_output": {
+    "result": 200.0
+  },
+  "constraints": {
+    "required_fields": [
+      "value"
+    ]
+  },
+  "tags": [
+    "basic",
+    "numeric"
+  ],
+  "difficulty": "easy",
+  "category": "validation",
+  "created_at": 1775719844.5593758,
+  "tolerance": {
+    "relative_error": 0.05,
+    "absolute_error": 1e-06
+  }
+}

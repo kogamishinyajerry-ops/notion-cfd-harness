@@ -19,12 +19,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "executables"))
 try:
     from formula_validator import L1, L2, relative_error, GCI
     from bench_ghia1982 import run_benchmark as ghia1982_bench
-    from bench_naca import run_benchmark as naca_bench
+    from bench_cylinder_wake import run_benchmark as cylinder_wake_bench
     import chart_template
 except ImportError as e:
     print(f"Warning: Could not import Phase2 executables: {e}")
     L1 = L2 = relative_error = GCI = None
-    ghia1982_bench = naca_bench = None
+    ghia1982_bench = cylinder_wake_bench = None
     chart_template = None
 
 
@@ -48,7 +48,7 @@ class VerifyConsole:
     Calls Phase2 executables:
     - formula_validator.py: L1/L2/relative_error/GCI
     - bench_ghia1982.py: Case1 Lid Cavity validation
-    - bench_naca.py: Case2 NACA VAWT validation
+    - bench_cylinder_wake.py: BENCH-04 Circular Cylinder Wake validation
     - chart_template.py: velocity/contour/GCI charts
     """
 
@@ -60,7 +60,7 @@ class VerifyConsole:
         Run Phase2 benchmark validator.
 
         Args:
-            case_id: "CASE-001" (Ghia1982) or "CASE-002" (NACA VAWT)
+            case_id: "CASE-001" (Ghia1982) or "BENCH-04" (Circular Cylinder Wake)
 
         Returns:
             BenchmarkResult with pass/fail status
@@ -87,23 +87,23 @@ class VerifyConsole:
                 notes=result.get("overall_pass", "PASS" if result.get("overall_pass") else "FAIL")
             )
 
-        elif case_id == "CASE-002":
-            if naca_bench is None:
+        elif case_id == "BENCH-04":
+            if cylinder_wake_bench is None:
                 return BenchmarkResult(
                     benchmark_id=case_id,
-                    validator_used="bench_naca.py",
+                    validator_used="bench_cylinder_wake.py",
                     is_passed=False,
                     notes="Phase2 executable not available"
                 )
 
-            result = naca_bench()
+            result = cylinder_wake_bench()
             return BenchmarkResult(
                 benchmark_id=case_id,
-                validator_used="bench_naca.py",
+                validator_used="bench_cylinder_wake.py",
                 is_passed=result.get("overall_pass", False),
                 error_metrics={
-                    "mean_error_pct": result.get("ct_tsr_validation", {}).get("mean_error_pct", 0),
-                    "mean_error_excl_ds_pct": result.get("ct_tsr_validation", {}).get("mean_error_excl_dynamic_stall_pct", 0),
+                    "strouhal_error_pct": result.get("strouhal_validation", {}).get("error_pct", 0),
+                    "drag_error_pct": result.get("drag_validation", {}).get("error_pct", 0),
                 },
                 notes=result.get("physical_note", "")
             )
@@ -157,7 +157,7 @@ class VerifyConsole:
         Run complete verification: benchmarks + charts + conclusion.
 
         Args:
-            case_id: "CASE-001" or "CASE-002"
+            case_id: "CASE-001" or "BENCH-04"
             results_data: Dict with simulation results
 
         Returns:
@@ -173,15 +173,7 @@ class VerifyConsole:
         output_dir.mkdir(exist_ok=True)
         charts = self.generate_charts(results_data, output_dir)
 
-        # Determine overall pass
-        # F-P2-007: Dual threshold for NACA bench
-        if case_id == "CASE-002":
-            mean_error = benchmark.error_metrics.get("mean_error_pct", 100)
-            mean_error_excl_ds = benchmark.error_metrics.get("mean_error_excl_ds_pct", 100)
-            # Dual threshold: <10% overall OR <5% excluding dynamic stall
-            overall_pass = (mean_error < 10.0) or (mean_error_excl_ds < 5.0)
-        else:
-            overall_pass = benchmark.is_passed
+        overall_pass = benchmark.is_passed
 
         # Build conclusion
         conclusion = self._build_conclusion(benchmark, overall_pass)
@@ -219,7 +211,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Verify CFD results against Phase2 benchmarks")
-    parser.add_argument("--case", default="CASE-001", help="Case ID (CASE-001 or CASE-002)")
+    parser.add_argument("--case", default="CASE-001", help="Case ID (CASE-001 or BENCH-04)")
     parser.add_argument("--results", help="Path to simulation results JSON")
     parser.add_argument("--output", default="verification_report.json", help="Output report path")
 

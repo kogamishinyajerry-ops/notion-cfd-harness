@@ -46,7 +46,7 @@ class PhysicsPlanner(IPhysicsPlanner):
             boundary_conditions={},
             monitors=[],
             convergence_criteria={"initial": 0.001},
-            validation_case_id="CASE-001" if "cavity" in intent.user_query.lower() else "CASE-002",
+            validation_case_id="CASE-001" if "cavity" in intent.user_query.lower() else "BENCH-04",
             acceptance_threshold=5.0
         )
 

@@ -116,7 +116,7 @@ Priority (highest to lowest):
 ### 6.1 Known Gaps (Pre-Declared)
 | Source | Missing Data | Canonical Handling |
 |--------|-------------|-------------------|
-| Thomas&Loutun 2021 PDF | CL/CD polar curves | Set `data_gaps: ["CL/CD polar"]`, do NOT fabricate |
+| Williamson 1996 / BENCH-04 seed | Full lift/drag time history | Set `data_gaps: ["wake trace detail"]`, do NOT fabricate |
 
 ### 6.2 Gap Propagation
 - Raw gaps → propagate to Parsed layer

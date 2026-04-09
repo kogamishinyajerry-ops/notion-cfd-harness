@@ -152,7 +152,7 @@ class PhysicsPlan:
     convergence_criteria: Dict[str, float] = field(default_factory=dict)
 
     # Validation references
-    validation_case_id: Optional[str] = None  # CASE-001, CASE-002
+    validation_case_id: Optional[str] = None  # CASE-001, BENCH-04
     validation_ref: Optional[str] = None  # Reference to data_points.yaml
     acceptance_threshold: float = 5.0  # %
 
@@ -292,8 +292,8 @@ class ChartType(Enum):
 @dataclass
 class BenchmarkResult:
     """Benchmark validation result."""
-    benchmark_id: str  # CASE-001, CASE-002
-    validator_used: str  # bench_ghia1982.py, bench_naca.py
+    benchmark_id: str  # CASE-001, BENCH-04
+    validator_used: str  # bench_ghia1982.py, bench_cylinder_wake.py
     is_passed: bool
     error_metrics: Dict[str, float] = field(default_factory=dict)
     notes: str = ""
@@ -305,7 +305,7 @@ class VerificationReport:
     Result verification report.
 
     Calls Phase2 executables: formula_validator.py, chart_template.py,
-    bench_ghia1982.py, bench_naca.py
+    bench_ghia1982.py, bench_cylinder_wake.py
     """
     case_id: str
     timestamp: datetime = field(default_factory=datetime.now)

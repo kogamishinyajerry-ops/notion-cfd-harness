@@ -28,7 +28,7 @@
       "file_path": "Phase1/procedure_evidence.md",
       "version": "v1.0",
       "sha256": "see git commit",
-      "content_summary": "Case1 Ghia1982 Lid Cavity验证流程，Case2 NACA VAWT Thomas&Loutun2021验证流程，网格独立性数据",
+      "content_summary": "Case1 Ghia1982 Lid Cavity验证流程，BENCH-04 Circular Cylinder Wake (Williamson 1996) 验证流程，关键验证数据",
       "status": "Active"
     }
   ],

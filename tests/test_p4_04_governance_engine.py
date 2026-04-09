@@ -178,16 +178,16 @@ class TestGovernanceChecks:
         assert any("Undocumented null value" in failure for failure in result.failed_checks)
         assert any("Fabrication" in failure for failure in result.failed_checks)
 
-    def test_check_data_honesty_rejects_cl_cd_claim_for_known_missing_source(self):
+    def test_check_data_honesty_rejects_rich_wake_trace_claim_for_bench04_seed(self):
         engine = GovernanceEngine(base_path=KNOWLEDGE_COMPILER_PATH)
         unit = make_canonical_formula_unit()
-        unit["source"] = "Thomas&Loutun 2021 PDF"
-        unit["normalized_form"]["canonical_content"]["cl"] = 0.42
+        unit["source"] = "Williamson 1996 BENCH-04"
+        unit["normalized_form"]["canonical_content"]["lift_history"] = [0.42]
 
         result = engine.check_data_honesty(unit)
 
         assert result.passed is False
-        assert any("Thomas&Loutun" in failure for failure in result.failed_checks)
+        assert any("BENCH-04" in failure for failure in result.failed_checks)
 
     def test_check_schema_compliance_rejects_wrong_spec_version(self):
         engine = GovernanceEngine(base_path=KNOWLEDGE_COMPILER_PATH)
@@ -292,7 +292,7 @@ class TestApprovePublish:
                 "formula_validator": {"passed": True, "detail": "ok"},
                 "chart_template": {"passed": True, "detail": "ok"},
                 "bench_ghia1982": {"passed": True, "detail": "ok"},
-                "bench_naca": {"passed": True, "detail": "ok"},
+                "bench_cylinder_wake": {"passed": True, "detail": "ok"},
             },
         )
 
@@ -310,7 +310,7 @@ class TestApprovePublish:
                 "formula_validator": {"passed": True, "detail": "ok"},
                 "chart_template": {"passed": True, "detail": "ok"},
                 "bench_ghia1982": {"passed": True, "detail": "ok"},
-                "bench_naca": {"passed": True, "detail": "ok"},
+                "bench_cylinder_wake": {"passed": True, "detail": "ok"},
             },
         )
         unit = make_canonical_formula_unit()
@@ -330,7 +330,7 @@ class TestApprovePublish:
                 "formula_validator": {"passed": True, "detail": "ok"},
                 "chart_template": {"passed": True, "detail": "ok"},
                 "bench_ghia1982": {"passed": True, "detail": "ok"},
-                "bench_naca": {"passed": True, "detail": "ok"},
+                "bench_cylinder_wake": {"passed": True, "detail": "ok"},
             },
         )
         unit = make_canonical_formula_unit()
@@ -351,7 +351,7 @@ class TestApprovePublish:
                 "formula_validator": {"passed": True, "detail": "ok"},
                 "chart_template": {"passed": True, "detail": "ok"},
                 "bench_ghia1982": {"passed": True, "detail": "ok"},
-                "bench_naca": {"passed": True, "detail": "ok"},
+                "bench_cylinder_wake": {"passed": True, "detail": "ok"},
             },
         )
         unit = make_canonical_formula_unit()
@@ -381,7 +381,7 @@ class TestApprovePublish:
                 "formula_validator": {"passed": True, "detail": "ok"},
                 "chart_template": {"passed": True, "detail": "ok"},
                 "bench_ghia1982": {"passed": True, "detail": "ok"},
-                "bench_naca": {"passed": True, "detail": "ok"},
+                "bench_cylinder_wake": {"passed": True, "detail": "ok"},
             },
         )
 

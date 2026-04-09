@@ -126,11 +126,11 @@ class TestAnalogyResult:
         """测试创建类比结果"""
         result = AnalogyResult(
             source_case_id="CASE-001",
-            target_case_id="CASE-002",
+            target_case_id="BENCH-04",
             confidence=AnalogyConfidence.HIGH,
         )
         assert result.source_case_id == "CASE-001"
-        assert result.target_case_id == "CASE-002"
+        assert result.target_case_id == "BENCH-04"
         assert result.confidence == AnalogyConfidence.HIGH
         assert result.is_reliable is True
 

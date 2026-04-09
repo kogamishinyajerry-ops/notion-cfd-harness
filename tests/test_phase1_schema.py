@@ -119,10 +119,10 @@ class TestReportSpec:
         )
 
         spec.add_source_case("CASE-001")
-        spec.add_source_case("CASE-002")
+        spec.add_source_case("BENCH-04")
         spec.add_source_case("CASE-001")  # Should not duplicate
 
-        assert spec.source_cases == ["CASE-001", "CASE-002"]
+        assert spec.source_cases == ["CASE-001", "BENCH-04"]
 
     def test_report_spec_add_teach_record(self):
         """ReportSpec should add teach records"""

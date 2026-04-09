@@ -43,7 +43,7 @@ def _manifest() -> dict:
             ],
             "executables": [
                 "executables/bench_ghia1982.py",
-                "executables/bench_naca.py",
+                "executables/bench_cylinder_wake.py",
                 "executables/chart_template.py",
                 "executables/formula_validator.py",
             ],
@@ -94,11 +94,11 @@ def _base_files() -> dict[str, str]:
                   - y_H: 0.5000
                     u_uref_cfd: 0.03951
                     error_pct: 3.43
-              - case_id: CASE-002
-                naca0021_thrust_coefficient:
-                  - tsr: 5.25
-                    cp_cfd: 0.296
-                    error_pct: 10.04
+              - case_id: BENCH-04
+                strouhal_number:
+                  exp: 0.164
+                  cfd: 0.164
+                  error_pct: 0.00
             """
         ).strip()
         + "\n",
@@ -127,7 +127,7 @@ def _base_files() -> dict[str, str]:
         "schema/canonical_schema.json": json.dumps({"fields": [{"field_id": "canonical_id", "type": "string"}]}, indent=2),
         "schema/executable_schema.json": json.dumps({"fields": [{"field_id": "executable_id", "type": "string"}]}, indent=2),
         "executables/bench_ghia1982.py": "print('ghia')\n",
-        "executables/bench_naca.py": "print('naca')\n",
+        "executables/bench_cylinder_wake.py": "print('cylinder')\n",
         "executables/chart_template.py": "print('chart')\n",
         "executables/formula_validator.py": "print('formula')\n",
     }
@@ -160,10 +160,10 @@ class TestClassifyChange:
 
     def test_integral_threshold_above_limit_is_evidence_edit(self):
         result = diff_engine.classify_change(
-            "CASE-002",
-            "naca0021_thrust_coefficient[tsr=5.25].cp_cfd",
-            0.296,
-            0.298,
+            "BENCH-04",
+            "strouhal_number.cfd",
+            0.164,
+            0.166,
         )
         assert result == diff_engine.ChangeType.EVIDENCE_EDIT
 
@@ -191,7 +191,7 @@ class TestImpactAndReview:
         assert diff_engine.track_impact(formula_change) == [
             "EXEC-FORMULA-VALIDATOR-001",
             "EXEC-BENCH-GHIA-001",
-            "EXEC-BENCH-NACA-001",
+            "EXEC-BENCH-CYLINDER-WAKE-001",
         ]
 
     def test_generate_report_marks_requires_review(self):
@@ -288,11 +288,11 @@ class TestCLI:
                       - y_H: 0.5000
                         u_uref_cfd: 0.03951
                         error_pct: 3.63
-                  - case_id: CASE-002
-                    naca0021_thrust_coefficient:
-                      - tsr: 5.25
-                        cp_cfd: 0.296
-                        error_pct: 10.04
+                  - case_id: BENCH-04
+                    strouhal_number:
+                      exp: 0.164
+                      cfd: 0.164
+                      error_pct: 0.00
                 """
             ).strip()
             + "\n",

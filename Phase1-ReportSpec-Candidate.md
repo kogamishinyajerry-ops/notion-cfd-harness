@@ -3,7 +3,7 @@
 **版本**: v1.1
 **状态**: Active（ Superseded Phase1-ReportSpec-Candidate ）
 **生成时间**: 2026-04-07
-**来源**: Case1 Lid-Cavity (Ghia1982) + Case2 NACA Airfoil (Thomas&Loutun 2021)
+**来源**: Case1 Lid-Cavity (Ghia1982) + BENCH-04 Circular Cylinder Wake (Williamson 1996)
 **Executor**: Codex (GPT-5.4) @ task-mnodf1nn-7zjt06
 
 ---
@@ -112,46 +112,47 @@ L2 = sqrt((1/N) * Σ (u_cfd - u_exp)^2)
 
 ---
 
-## 4. Case2 关键数据（NACA Airfoil Thomas&Loutun 2021）
+## 4. BENCH-04 关键数据（Circular Cylinder Wake Williamson 1996）
 
 | 参数 | 值 |
 |------|-----|
-| 进口速度 | 9 m/s |
-| TSR 范围 | 2.0 ~ 8.2 |
-| 湍流模型 | k-omega SST |
-| 最终网格 | 968,060 cells |
-| 翼型 | NACA0015, NACA0018, NACA0021, NACA2421 |
+| 几何 | 2D Circular Cylinder |
+| 参考尺度 | Cylinder diameter D |
+| 计算域 | 22D x 8D, cylinder center 2D from inlet |
+| 雷诺数 | Re = 100 |
+| 求解器 | icoFoam（瞬态层流） |
+| 最终网格 | ~100,000 cells with wake refinement |
 
-### NACA0021 验证数据
+### 关键验证指标
 
 | 指标 | 值 |
 |------|-----|
-| 平均误差 | 3.4488% |
-| 最大误差 | 10.7875% @ TSR=5.25 |
+| Strouhal number | 0.164 |
+| Mean drag coefficient | 1.34 |
+| 目标流动结构 | Karman vortex street |
 
-> **物理解释**：TSR=5.25 处于 VAWT 动态失速区域，该区域翼型气动特性对攻角变化极为敏感，CFD 湍流模型对该工况的预测固有偏差较大（>10%）。此误差属于**可预期的模型系统性偏差**，非 bug，在报告中应显式标注而非掩盖。
+> **物理解释**：Re=100 的圆柱绕流应形成稳定的卡门涡街。报告验证的核心不是单点压力，而是瞬态脱落频率（Strouhal）与平均阻力系数是否同时落在文献容差范围内。
 
-### 峰值性能
+### 验证容差
 
-| 翼型 | Cp_max | @ TSR |
-|------|--------|-------|
-| NACA0018 | 0.296 | 5.25 |
-| NACA0015 | 0.292 | 6.00 |
-| NACA2421 | 0.269 | 5.25 |
+| 指标 | 阈值 |
+|------|------|
+| Strouhal error | <= 8% |
+| Mean drag error | <= 5% |
 
-### 网格独立性表
+### 推荐观测窗口
 
-| Level | Cell Size | Elements | Max Skewness | Torque | Error |
-|-------|-----------|----------|--------------|--------|-------|
-| Coarse | 粗 | N1 | s1 | T1 | e1% |
-| Medium | 中 | N2 | s2 | T2 | e2% |
-| Fine | 细 | N3 | s3 | T3 | e3% |
+| 项目 | 要求 |
+|------|------|
+| 进入周期态后采样 | 至少覆盖多个 shedding cycles |
+| 输出图表 | Wake visualization + force/statistics summary |
+| 关键说明 | 必须明确说明是否已形成 Karman vortex street |
 
 ---
 
 ## 5. 已知数据缺口
 
-> **诚实性声明**: Case2 PDF 不包含 CL/CD 极曲线数据，只有 Cp/Ct vs TSR。报告中不得虚构 CL/CD 数据。
+> **诚实性声明**: BENCH-04 seed 只提供 Strouhal number、mean drag coefficient 和 wake visualization 目标。报告中不得虚构完整升阻力时序或更高分辨率的尾迹统计数据。
 
 ---
 

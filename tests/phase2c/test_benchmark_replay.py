@@ -691,7 +691,7 @@ class TestBenchmarkReplayResult:
         """测试结果序列化"""
         result = BenchmarkReplayResult(
             replay_id="REPLAY-002",
-            case_id="CASE-002",
+            case_id="BENCH-04",
             correction_record_id="CORR-002",
             status="passed",
             input_valid=True,

@@ -347,7 +347,7 @@ G4 Gate: 可泛化?
 1. **P0**: 完善 G3/G4 Gate 的自动化触发
 2. **P1**: 实现真实的 Visualization Engine (ParaView/Matplotlib)
 3. **P1**: 扩展英文支持，达到中英同等水平
-4. **P2**: 添加更多 Gold Standards (Lid-Driven Cavity, NACA Airfoil)
+4. **P2**: 添加更多 Gold Standards (Lid-Driven Cavity, Circular Cylinder Wake)
 5. **P2**: 实现 Replay Engine 的真实 OpenFOAM 解析
 
 ---

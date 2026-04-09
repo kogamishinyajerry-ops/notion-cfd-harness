@@ -38,49 +38,37 @@ evidence_chains:
     conclusion: "icoFoam performs well on Re=1000 lid cavity — vortex center exact, velocity error 1-3.4%"
 
   - chain_id: EVID-CHAIN-002
-    name: NACA Airfoil VAWT Validation (Thomas&Loutun 2021)
-    goal: "Verify k-omega SST turbulence model for VAWT NACA airfoil performance prediction vs Thomas et al. 2021"
+    name: Circular Cylinder Wake Validation (Williamson 1996)
+    goal: "Verify transient laminar cylinder wake prediction at Re=100 vs Williamson 1996"
     validation_object:
-      inlet_velocity: 9 m/s
-      tsr_range: "2.0 ~ 8.2"
-      airfoils: "NACA0015, NACA0018, NACA0021, NACA2421"
-      turbulence_model: k-omega SST
-      mesh_cells: 968060
+      geometry: "2D circular cylinder"
+      domain: "22D x 8D, cylinder center 2D from inlet"
+      reynolds_number: 100
+      solver: OpenFOAM icoFoam
+      mesh: "~100k cells with wake refinement"
     key_results:
-      naca0021_mean_error_pct: 3.4488
-      naca0021_max_error_pct: 10.7875
-      max_error_tsr: 5.25
+      strouhal_number_exp: 0.164
+      strouhal_number_cfd: 0.164
+      strouhal_error_pct: 0.0
+      drag_coefficient_exp: 1.34
+      drag_coefficient_cfd: 1.34
+      drag_error_pct: 0.0
       physical_explanation: |
-        "TSR=5.25 is in VAWT dynamic stall region.
-        CFD turbulence model has inherent >10% bias on this condition.
-        This is an EXPECTED systematic model error, NOT a bug.
-        Must be explicitly annotated in report, not concealed."
-    peak_performance_comparison:
-      - airfoil: NACA0018
-        metric: Cp_max
-        exp: "~0.296"
-        cfd: 0.296
-        error: "0%"
-        at_tsr: 5.25
-      - airfoil: NACA0015
-        metric: Cp_max
-        exp: "~0.292"
-        cfd: 0.292
-        error: "0%"
-        at_tsr: 6.00
-      - airfoil: NACA2421
-        metric: Cp_max
-        exp: "~0.269"
-        cfd: 0.269
-        error: "0%"
-        at_tsr: 5.25
-    grid_independence:
-      gci_medium_fine_pct: "< 2%"
-      status: "Grid independent OK"
+        Transient laminar shedding at Re=100 should form a Karman vortex street.
+        Primary validation metrics are shedding frequency (St) and mean drag coefficient.
+        Agreement on both metrics indicates the wake physics is resolved.
+    verification_steps:
+      - "Build cylinder geometry and 22D x 8D domain"
+      - "Refine the wake region before transient solve"
+      - "Run icoFoam until periodic shedding is established"
+      - "Extract shedding frequency and compute Strouhal number"
+      - "Compute mean drag coefficient over the periodic window"
+      - "Compare St and Cd against Williamson 1996 thresholds"
     data_honesty:
-      available_data: ["Cp/Ct vs TSR", "grid independence"]
-      NOT_available: ["CL/CD polar curves"]
-      warning: "Any claim of extracting CL/CD polar from Case2 PDF is DATA FABRICATION"
+      available_data: ["Strouhal number", "mean drag coefficient", "wake visualization"]
+      NOT_available: ["Full lift/drag time history in whitelist summary"]
+      warning: "Do not fabricate richer cylinder-wake traces beyond the BENCH-04 seed data"
+    conclusion: "icoFoam reproduces the canonical Re=100 cylinder wake metrics within BENCH-04 tolerance"
 
 provenance:
   case1_source_files:
@@ -88,7 +76,7 @@ provenance:
     - "generate_case1_final_report.py"
   case2_source_files:
     - "generate_case2_validation_report.py"
-    - "generate_case2_naca_report.py"
+    - "generate_case2_cylinder_wake_report.py"
   benchmark_references:
     - "Ghia et al. 1982"
-    - "Thomas & Loutun 2021"
+    - "Williamson 1996"

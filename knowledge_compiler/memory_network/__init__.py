@@ -1537,9 +1537,9 @@ class GovernanceEngine:
         if any(fabrication_flags):
             failures.append("Fabrication or failed source verification detected")
 
-        if self._contains_unavailable_cl_cd_claim(unit):
+        if self._contains_unavailable_bench04_claim(unit):
             failures.append(
-                "Thomas&Loutun source cannot publish CL/CD data without a declared gap"
+                "BENCH-04 source cannot publish richer wake traces without a declared gap"
             )
 
         if unit.get("contains_zero_reference") and not (
@@ -1948,9 +1948,9 @@ class GovernanceEngine:
             return True
         return field_def.get("required", False) is False
 
-    def _contains_unavailable_cl_cd_claim(self, unit: Dict[str, Any]) -> bool:
+    def _contains_unavailable_bench04_claim(self, unit: Dict[str, Any]) -> bool:
         data_gaps_text = " ".join(str(gap).lower() for gap in unit.get("data_gaps", []))
-        if "cl/cd" in data_gaps_text or "polar" in data_gaps_text:
+        if any(token in data_gaps_text for token in ("lift", "time history", "wake trace", "polar")):
             return False
 
         source_fragments = self._collect_strings(
@@ -1961,16 +1961,22 @@ class GovernanceEngine:
             }
         )
         source_text = " ".join(fragment.lower() for fragment in source_fragments)
-        if "thomas" not in source_text or "loutun" not in source_text:
+        if "williamson" not in source_text and "bench-04" not in source_text:
             return False
 
-        key_hits = self._collect_keys_matching(unit, {"cl", "cd", "cl_cd", "clcd"})
+        key_hits = self._collect_keys_matching(
+            unit,
+            {"cl", "cl_cd", "clcd", "lift_history", "drag_history", "force_time_series"},
+        )
         if key_hits:
             return True
 
         text_hits = [
             fragment for fragment in self._collect_strings(unit)
-            if "cl/cd" in fragment.lower() or "polar curve" in fragment.lower()
+            if any(
+                token in fragment.lower()
+                for token in ("cl/cd", "polar curve", "time history", "lift coefficient")
+            )
         ]
         return len(text_hits) > 0
 
@@ -2008,7 +2014,7 @@ class GovernanceEngine:
             formula_validator = importlib.import_module("formula_validator")
             chart_template = importlib.import_module("chart_template")
             bench_ghia1982 = importlib.import_module("bench_ghia1982")
-            bench_naca = importlib.import_module("bench_naca")
+            bench_cylinder_wake = importlib.import_module("bench_cylinder_wake")
 
             suite_results["formula_validator"] = self._run_callable_validation(
                 formula_validator.run_all_tests
@@ -2019,8 +2025,8 @@ class GovernanceEngine:
             suite_results["bench_ghia1982"] = self._run_benchmark_validation(
                 bench_ghia1982.run_benchmark
             )
-            suite_results["bench_naca"] = self._run_benchmark_validation(
-                bench_naca.run_benchmark
+            suite_results["bench_cylinder_wake"] = self._run_benchmark_validation(
+                bench_cylinder_wake.run_benchmark
             )
         except Exception as exc:
             suite_results["suite"] = {"passed": False, "detail": str(exc)}
@@ -2196,7 +2202,7 @@ class MemoryNetwork:
         "EXEC-FORMULA-VALIDATOR-001": "knowledge_compiler/executables/formula_validator.py",
         "EXEC-CHART-TEMPLATE-001": "knowledge_compiler/executables/chart_template.py",
         "EXEC-BENCH-GHIA-001": "knowledge_compiler/executables/bench_ghia1982.py",
-        "EXEC-BENCH-NACA-001": "knowledge_compiler/executables/bench_naca.py",
+        "EXEC-BENCH-CYLINDER-WAKE-001": "knowledge_compiler/executables/bench_cylinder_wake.py",
         "EXEC-DIFF-ENGINE-001": "knowledge_compiler/executables/diff_engine.py",
     }
 
@@ -2733,7 +2739,11 @@ class MemoryNetwork:
         return {unit_id: list(mapping_specs.values())}
 
     def _mapping_type_for_executable(self, executable_id: str) -> str:
-        if executable_id in {"EXEC-FORMULA-VALIDATOR-001", "EXEC-BENCH-GHIA-001", "EXEC-BENCH-NACA-001"}:
+        if executable_id in {
+            "EXEC-FORMULA-VALIDATOR-001",
+            "EXEC-BENCH-GHIA-001",
+            "EXEC-BENCH-CYLINDER-WAKE-001",
+        }:
             return "validates"
         if executable_id == "EXEC-CHART-TEMPLATE-001":
             return "implements"

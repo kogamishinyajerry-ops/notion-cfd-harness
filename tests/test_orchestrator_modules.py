@@ -159,7 +159,7 @@ class TestVerifyConsole:
     def test_benchmark_result_with_errors(self):
         """BenchmarkResult supports error metrics"""
         result = BenchmarkResult(
-            benchmark_id="CASE-002",
+            benchmark_id="BENCH-04",
             validator_used="test",
             is_passed=False,
             error_metrics={"velocity_error": 0.15},

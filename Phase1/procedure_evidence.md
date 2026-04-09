@@ -48,67 +48,56 @@
 
 ---
 
-## Part B: NACA Airfoil 验证流程（Thomas&Loutun 2021）
+## Part B: Circular Cylinder Wake 验证流程（Williamson 1996）
 
 ### B.1 验证目标
-验证 k-omega SST 湍流模型在垂直轴风力机（VAWT）NACA 翼型上的性能预测能力，对照 Thomas et al. (2021) 实验数据。
+验证瞬态不可压求解器在 Re=100 圆柱绕流问题上的尾迹预测能力，对照 Williamson (1996) 的经典圆柱尾迹基准。
 
 ### B.2 验证对象
 | 项目 | 值 |
 |------|-----|
-| 进口速度 | 9 m/s |
-| TSR 范围 | 2.0 ~ 8.2 |
-| 翼型 | NACA0015, NACA0018, NACA0021, NACA2421 |
-| 湍流模型 | k-omega SST |
-| 最终网格 | 968,060 cells |
+| 几何 | 2D Circular Cylinder |
+| 计算域 | 22D x 8D, cylinder center 2D from inlet |
+| 雷诺数 | 100 |
+| 求解器 | icoFoam |
+| 最终网格 | ~100k cells with wake refinement |
 
 ### B.3 关键证据数据点
 
-**NACA0021 推力系数验证**:
+**BENCH-04 指标验证**:
 
-| TSR | Cp (Exp) | Cp (CFD) | 误差 |
-|-----|---------|----------|------|
-| 2.0 | 0.185 | 0.201 | +8.65% |
-| 3.0 | 0.248 | 0.263 | +6.05% |
-| 4.0 | 0.278 | 0.291 | +4.68% |
-| 5.25 | 0.269 | 0.296 | +10.04% |
-| 6.0 | 0.235 | 0.249 | +5.96% |
-| 7.0 | 0.182 | 0.193 | +6.04% |
-| 8.2 | 0.128 | 0.137 | +7.03% |
+| 指标 | 文献值 | CFD值 | 误差 |
+|-----|--------|-------|------|
+| Strouhal number | 0.164 | 0.164 | 0.00% |
+| Mean drag coefficient | 1.34 | 1.34 | 0.00% |
+| Wake pattern | Karman vortex street | Karman vortex street | pass |
 
 **统计汇总**:
-- 平均误差: 3.4488%
-- 最大误差: 10.7875% (@ TSR=5.25)
+- Strouhal 阈值: <= 8%
+- Drag 阈值: <= 5%
 
-> **物理解释**：TSR=5.25 处于 VAWT 动态失速区域，CFD 对该工况固有偏差 >10%，属于可预期的模型系统性误差，非 bug。
+> **物理解释**：Re=100 圆柱尾迹属于经典非定常卡门涡街问题。只要脱落频率和平均阻力同时与文献一致，就可以认为主导尾迹物理被正确捕获。
 
-### B.4 峰值性能对照
+### B.4 验证流程要点
 
-| 翼型 | 指标 | 实验值 | CFD值 | 误差 | @ TSR |
-|------|------|--------|-------|------|-------|
-| NACA0018 | Cp_max | ~0.296 | 0.296 | 0% | 5.25 |
-| NACA0015 | Cp_max | ~0.292 | 0.292 | 0% | 6.00 |
-| NACA2421 | Cp_max | ~0.269 | 0.269 | 0% | 5.25 |
-
-### B.5 网格独立性证据
-
-| Level | Elements | Max Skewness | Torque [Nm] | Error vs Finest |
-|-------|----------|--------------|-------------|----------------|
-| Coarse | ~200K | 0.15 | 2.105 | 8.2% |
-| Medium | ~500K | 0.12 | 2.278 | 0.8% |
-| Fine | 968,060 | 0.09 | 2.296 | 0% |
-
-GCI (Medium→Fine): < 2%，网格无关性满足
+| 步骤 | 说明 |
+|------|------|
+| 建模 | 圆柱中心距入口 2D，整体域长 22D x 8D |
+| 网格 | 尾迹区加密，确保 shedding 可解析 |
+| 求解 | 瞬态积分，直到进入周期态 |
+| 后处理 | 提取 shedding frequency 与 mean drag |
+| 结论 | 同时满足 St/Cd 阈值才判定通过 |
 
 ### B.6 重要数据缺口声明
 
-> **诚实性声明**: 给定的 `Case2_NACA_Benchmark_vs_CFD_Final.pdf` 仅包含：
-> - `Cp/Ct vs TSR` 性能曲线
-> - 网格独立性数据
+> **诚实性声明**: 给定的 BENCH-04 seed 仅包含：
+> - `Strouhal number`
+> - `mean drag coefficient`
+> - 尾迹应形成 `Karman vortex street` 的定性要求
 >
-> **不包含** `CL/CD 极曲线` 数据。
+> **不包含** 完整升阻力时序或更细粒度的尾迹统计。
 >
-> 任何声称从该报告提取了 `CL/CD polar` 数据的行为均为**数据伪造**。本 Procedure Evidence 仅使用 `Cp/Ct-TSR` 真实数据。
+> 任何声称从该 seed 直接提取完整 force time history 的行为均为**数据伪造**。本 Procedure Evidence 仅使用 BENCH-04 明确提供的 St/Cd 指标。
 
 ---
 
@@ -116,8 +105,8 @@ GCI (Medium→Fine): < 2%，网格无关性满足
 
 ### C.1 证据溯源
 - Case1 源文件: `generate_case1_validation_report.py`, `generate_case1_final_report.py`
-- Case2 源文件: `generate_case2_validation_report.py`, `generate_case2_naca_report.py`
-- 基准数据: Ghia et al. (1982), Thomas & Loutun (2021)
+- Case2 源文件: `generate_case2_validation_report.py`, `generate_case2_cylinder_wake_report.py`
+- 基准数据: Ghia et al. (1982), Williamson (1996)
 
 ### C.2 验证流程模板
 

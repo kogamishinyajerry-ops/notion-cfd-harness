@@ -95,8 +95,8 @@
       "version_tag": "SPEC-001-v1.1"
     },
     {
-      "unit_id": "CASE-002",
-      "unit_name": "Case2 NACA VAWT 数据",
+      "unit_id": "BENCH-04",
+      "unit_name": "BENCH-04 Circular Cylinder Wake 数据",
       "source_file": "Phase1-ReportSpec-Candidate.md",
       "source_line_range": [115, 149],
       "version_tag": "SPEC-001-v1.1"
@@ -110,7 +110,7 @@
     },
     {
       "unit_id": "EVID-CHAIN-002",
-      "unit_name": "NACA VAWT 验证流程",
+      "unit_name": "Circular Cylinder Wake 验证流程",
       "source_file": "Phase1/procedure_evidence.md",
       "source_line_range": [51, 113],
       "version_tag": "EVID-001-v1.0"

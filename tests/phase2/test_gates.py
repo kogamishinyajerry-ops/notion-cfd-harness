@@ -320,7 +320,7 @@ class TestAuthorizationGate:
             content={"name": "Test"},
         )
         spec.add_source("TEACH-001", "case-001")
-        spec.add_source("TEACH-002", "case-002")
+        spec.add_source("TEACH-002", "bench-04")
         spec.add_source("TEACH-003", "case-003")
 
         result = gate.check(spec)
@@ -367,7 +367,7 @@ class TestAuthorizationGate:
         )
         # Add sources to reduce risk
         spec.add_source("TEACH-001", "case-001")
-        spec.add_source("TEACH-002", "case-002")
+        spec.add_source("TEACH-002", "bench-04")
         spec.add_source("TEACH-003", "case-003")
 
         request = gate.create_auth_request(
@@ -455,7 +455,7 @@ class TestAuthorizationGate:
 
         # From source count (default)
         spec.add_source("TEACH-001", "case-001")
-        spec.add_source("TEACH-002", "case-002")
+        spec.add_source("TEACH-002", "bench-04")
         result2 = gate.check(spec)
         # 2 sources -> 2 * 0.3 + 0.1 = 0.7
         assert result2.metadata["confidence"] == 0.7
@@ -490,7 +490,7 @@ class TestAuthorizationGate:
             content={"name": "Test"},
         )
         spec.add_source("TEACH-001", "case-001")
-        spec.add_source("TEACH-002", "case-002")
+        spec.add_source("TEACH-002", "bench-04")
 
         # Create and approve request
         request = gate.create_auth_request(spec, "engineer-001", "low")

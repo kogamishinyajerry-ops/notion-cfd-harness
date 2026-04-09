@@ -15,7 +15,7 @@
       "type": "string",
       "description": "Original file path or URL",
       "required": true,
-      "examples": ["Phase1-ReportSpec-Candidate.md", "Case2_NACA_Benchmark.pdf"]
+      "examples": ["Phase1-ReportSpec-Candidate.md", "BENCH-04_Cylinder_Wake_Benchmark.pdf"]
     },
     {
       "field_id": "raw_text",

@@ -17,7 +17,7 @@ Before publishing any knowledge asset, all items must pass:
 
 ### 1.2 Data Honesty Check
 - [ ] All `data_gaps` declared (no hidden missing data)
-- [ ] No fabricated data points (e.g. CL/CD from Thomas&Loutun PDF)
+- [ ] No fabricated benchmark data points (e.g. richer cylinder-wake traces beyond BENCH-04 seed data)
 - [ ] Zero-reference values correctly flagged
 
 ### 1.3 Schema Compliance Check
@@ -30,7 +30,7 @@ Before publishing any knowledge asset, all items must pass:
 - [ ] All `formula_validator.py` tests pass
 - [ ] All `chart_template.py` rendering tests pass
 - [ ] `bench_ghia1982.py` — OVERALL PASS
-- [ ] `bench_naca.py` — OVERALL PASS
+- [ ] `bench_cylinder_wake.py` — OVERALL PASS
 - [ ] All bench validator errors within acceptance thresholds
 
 ### 1.5 Semantic Correctness Check
@@ -48,8 +48,8 @@ ALL of the following must be true before publishing:
 ```
 ✅ All review checklist items pass
 ✅ bench_ghia1982.py: overall_pass == True
-✅ bench_naca.py: overall_pass == True
-✅ Grid independence: GCI < 5%
+✅ bench_cylinder_wake.py: overall_pass == True
+✅ Benchmark metrics remain within BENCH-04 tolerances
 ✅ No undeclared data gaps
 ✅ No conflict_flags in any canonical unit
 ✅ Human reviewer has signed off (for Phase1 → Phase2 transition)

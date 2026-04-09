@@ -473,13 +473,13 @@ class TestAnalogySpec:
         analogy = AnalogySpec(
             analogy_id="ANALOGY-001",
             source_case_id="case-001",
-            target_case_id="case-002",
+            target_case_id="bench-04",
             similarity_score=0.85,
         )
 
         assert analogy.analogy_id == "ANALOGY-001"
         assert analogy.source_case_id == "case-001"
-        assert analogy.target_case_id == "case-002"
+        assert analogy.target_case_id == "bench-04"
         assert analogy.similarity_score == 0.85
         assert analogy.analogy_type is None  # Phase 3 placeholder
 
@@ -490,7 +490,7 @@ class TestAnalogySpec:
         analogy = AnalogySpec(
             analogy_id="ANALOGY-001",
             source_case_id="case-001",
-            target_case_id="case-002",
+            target_case_id="bench-04",
             similarity_score=0.85,
         )
 
@@ -558,7 +558,7 @@ class TestPhase1OutputIntegration:
 
         # Add replay results
         output.add_replay_result({"case_id": "case-001", "passed": True})
-        output.add_replay_result({"case_id": "case-002", "passed": True})
+        output.add_replay_result({"case_id": "bench-04", "passed": True})
 
         # Add visualization output
         output.add_visualization_output({

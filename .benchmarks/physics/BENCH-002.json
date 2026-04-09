@@ -1,0 +1,40 @@
+{
+  "case_id": "BENCH-002",
+  "name": "残差收敛验证",
+  "description": "CFD残差收敛验证",
+  "input_data": {
+    "initial_residual": 1.0,
+    "iterations": 100
+  },
+  "expected_output": {
+    "final_residual": 1e-06,
+    "converged": true
+  },
+  "constraints": {
+    "required_fields": [
+      "initial_residual",
+      "iterations"
+    ],
+    "value_ranges": {
+      "initial_residual": [
+        0.1,
+        10.0
+      ],
+      "iterations": [
+        10,
+        1000
+      ]
+    }
+  },
+  "tags": [
+    "cfd",
+    "convergence"
+  ],
+  "difficulty": "medium",
+  "category": "physics",
+  "created_at": 1775719844.559378,
+  "tolerance": {
+    "relative_error": 0.05,
+    "absolute_error": 1e-06
+  }
+}

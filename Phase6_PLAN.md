@@ -29,7 +29,7 @@ Real solver E2E 留作 Phase 7 前置任务。
 
 | 原规划 | 已替换为 |
 |--------|---------|
-| NACA VAWT (🔴 高风险) | **Circular Cylinder Wake (Re=100)** — 涡街, Strouhal ≈ 0.164, 误差 < 5% |
+| **Circular Cylinder Wake (Re=100)** | 涡街, Strouhal ≈ 0.164, 误差 < 5% |
 
 保留：**Lid-Driven Cavity + Backward-Facing Step**。
 

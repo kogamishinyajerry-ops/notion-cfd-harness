@@ -74,8 +74,8 @@ python -m pytest tests/ --cov=knowledge_compiler --cov-report=term-missing
 # Ghia 1982 lid-driven cavity benchmark
 python -m knowledge_compiler.executables.bench_ghia1982
 
-# NACA airfoil VAWT benchmark
-python -m knowledge_compiler.executables.bench_naca
+# Circular cylinder wake benchmark (BENCH-04)
+python -m knowledge_compiler.executables.bench_cylinder_wake
 ```
 
 ### 5. Use the Pipeline Orchestrator

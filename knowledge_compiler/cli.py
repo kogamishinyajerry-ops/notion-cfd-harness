@@ -7,7 +7,7 @@ Usage:
 
 Commands:
     test        Run all tests or specific test file
-    benchmark   Run a benchmark (ghia1982 | naca)
+    benchmark   Run a benchmark (ghia1982 | cylinder_wake)
     pipeline   Run the E2E pipeline orchestrator
     verify     Verify results against gold standards
     gates      Run gate checks on a ReportSpec
@@ -43,7 +43,7 @@ def cmd_benchmark(args):
     """Run a benchmark"""
     bench_map = {
         "ghia1982": "knowledge_compiler.executables.bench_ghia1982",
-        "naca": "knowledge_compiler.executables.bench_naca",
+        "cylinder_wake": "knowledge_compiler.executables.bench_cylinder_wake",
     }
 
     if args.name not in bench_map:
@@ -180,7 +180,7 @@ def main():
 
     # benchmark
     p_bench = subparsers.add_parser("benchmark", help="Run a benchmark")
-    p_bench.add_argument("name", choices=["ghia1982", "naca"], help="Benchmark name")
+    p_bench.add_argument("name", choices=["ghia1982", "cylinder_wake"], help="Benchmark name")
     p_bench.set_defaults(func=cmd_benchmark)
 
     # pipeline
