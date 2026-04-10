@@ -334,3 +334,7 @@
   color: var(--color-failed);
   margin-bottom: 1rem;
 }
+
+.result-summary-wrapper {
+  margin: 2rem 0;
+}

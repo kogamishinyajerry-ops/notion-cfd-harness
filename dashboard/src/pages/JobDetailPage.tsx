@@ -5,9 +5,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiClient } from '../services/api';
-import wsService from '../services/websocket';
+import wsService, { ResidualMessage } from '../services/websocket';
 import type { WebSocketMessage } from '../services/websocket';
 import type { Job, JobLog, JobStatus } from '../services/types';
+import ResultSummaryPanel from '../components/ResultSummaryPanel';
 import './JobDetailPage.css';
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; className: string }> = {
@@ -63,6 +64,14 @@ export default function JobDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'logs' | 'output' | 'config'>('logs');
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const [showResultSummary, setShowResultSummary] = useState(false);
+  const [finalResiduals, setFinalResiduals] = useState<{
+    Ux?: number;
+    Uy?: number;
+    Uz?: number;
+    p?: number;
+  } | null>(null);
+  const [residualHistory, setResidualHistory] = useState<ResidualMessage[]>([]);
 
   // Load job from API
   const loadJob = useCallback(async () => {
@@ -144,6 +153,17 @@ export default function JobDetailPage() {
             message: message.error || 'Unknown error',
           },
         ]);
+      } else if (message.type === 'residual') {
+        const residualMsg = message as ResidualMessage;
+        setResidualHistory((prev) => {
+          const updated = [...prev, residualMsg];
+          return updated.slice(-10);
+        });
+        // Trigger result summary on convergence (MON-04)
+        if (residualMsg.status === 'converged' && !showResultSummary) {
+          setFinalResiduals(residualMsg.residuals);
+          setShowResultSummary(true);
+        }
       }
     });
 
@@ -247,6 +267,23 @@ export default function JobDetailPage() {
           <div>
             <strong>Error:</strong> {job.error_message}
           </div>
+        </div>
+      )}
+
+      {showResultSummary && finalResiduals && (
+        <div className="result-summary-wrapper">
+          <ResultSummaryPanel
+            iteration={residualHistory[residualHistory.length - 1]?.iteration ?? 0}
+            executionTime={
+              job.completed_at && job.started_at
+                ? (new Date(job.completed_at).getTime() - new Date(job.started_at).getTime()) / 1000
+                : 0
+            }
+            caseId={job.case_id}
+            solver={(job as Record<string, unknown>).solver as string || 'simpleFoam'}
+            finalResiduals={finalResiduals}
+            onClose={() => setShowResultSummary(false)}
+          />
         </div>
       )}
 
