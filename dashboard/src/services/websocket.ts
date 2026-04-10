@@ -5,7 +5,7 @@
 import { API_BASE_URL } from './config';
 import type { Job } from './types';
 
-export type WebSocketMessageType = 'status' | 'progress' | 'completion' | 'error';
+export type WebSocketMessageType = 'status' | 'progress' | 'completion' | 'error' | 'residual';
 
 export interface WebSocketMessage {
   type: WebSocketMessageType;
@@ -14,6 +14,25 @@ export interface WebSocketMessage {
   status?: string;
   result?: Record<string, unknown>;
   error?: string;
+}
+
+/**
+ * ResidualMessage - Real-time residual data from CFD solver
+ * Received via WebSocket when a job is running
+ */
+export interface ResidualMessage {
+  type: 'residual';
+  job_id: string;
+  iteration: number;
+  time_value: number;
+  residuals: {
+    Ux?: number;
+    Uy?: number;
+    Uz?: number;
+    p?: number;
+    [key: string]: number | undefined;
+  };
+  status: string;
 }
 
 type MessageHandler = (message: WebSocketMessage) => void;
