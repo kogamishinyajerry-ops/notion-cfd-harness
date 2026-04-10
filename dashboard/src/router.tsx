@@ -1,5 +1,5 @@
 import { createBrowserRouter } from 'react-router-dom';
-import App from './App';
+import { MainLayout } from './layouts';
 import {
   DashboardPage,
   CasesPage,
@@ -11,7 +11,7 @@ import {
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <App />,
+    element: <MainLayout />,
     children: [
       { index: true, element: <DashboardPage /> },
       { path: 'cases', element: <CasesPage /> },
