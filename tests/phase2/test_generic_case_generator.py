@@ -475,3 +475,32 @@ def test_solver_control_dict_contains_correct_application(tmp_path: Path) -> Non
     assert (case_path / "constant/turbulenceProperties").exists()
     assert (case_path / "0/k").exists()
     assert (case_path / "0/epsilon").exists()
+
+
+def test_body_in_channel_produces_blocks(tmp_path: Path) -> None:
+    """BODY_IN_CHANNEL geometry produces 8+ hex blocks (not empty list)."""
+    from knowledge_compiler.phase2.execution_layer.case_generator_specs import (
+        GeometrySpec, MeshSpec, PhysicsSpec, BoundarySpec, BoundaryPatchSpec,
+        GeometryType, SolverType, BCType,
+    )
+    from knowledge_compiler.phase2.execution_layer.generic_case_generator import GenericOpenFOAMCaseGenerator
+    geometry = GeometrySpec(
+        GeometryType.BODY_IN_CHANNEL,
+        -1.0, 3.0, -0.5, 0.5,
+        thickness=0.01,
+        body_x_min=-0.05, body_x_max=0.05,
+        body_y_min=-0.05, body_y_max=0.05,
+    )
+    mesh = MeshSpec(nx_left=20, nx_body=10, nx_right=60, ny_outer=20, ny_body=10)
+    physics = PhysicsSpec(SolverType.ICO_FOAM, 100.0)
+    boundary = BoundarySpec(patches={
+        "inlet": BoundaryPatchSpec("inlet", BCType.FIXED_VALUE, "(1 0 0)"),
+        "outlet": BoundaryPatchSpec("outlet", BCType.ZERO_GRADIENT),
+        "walls": BoundaryPatchSpec("walls", BCType.WALL),
+        "frontAndBack": BoundaryPatchSpec("frontAndBack", BCType.EMPTY),
+    })
+    verts = GenericOpenFOAMCaseGenerator._body_in_channel_vertices(geometry, mesh)
+    blocks = GenericOpenFOAMCaseGenerator._generate_blockmesh_blocks(geometry, mesh, verts)
+    assert len(verts) > 0, "no vertices generated"
+    assert len(blocks) > 0, "no blocks generated (BODY_IN_CHANNEL block generation incomplete)"
+
