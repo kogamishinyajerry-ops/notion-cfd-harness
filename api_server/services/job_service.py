@@ -7,6 +7,7 @@ Business logic for job submission and management.
 import asyncio
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -19,7 +20,14 @@ logger = logging.getLogger(__name__)
 _JOBS: Dict[str, JobResponse] = {}
 
 # Active job tracking
-_ACTIVE_JOBS: Dict[str, asyncio.Task] = {}
+_ACTIVE_JOBS: Dict[str, "ActiveJob"] = {}
+
+
+@dataclass
+class ActiveJob:
+    task: asyncio.Task
+    container_id: Optional[str] = None
+    job_id: str = ""
 
 
 class JobService:
@@ -97,21 +105,8 @@ class JobService:
                 "job": self._job_to_dict(job),
             })
 
-            # Simulate job execution progress
-            for progress in [10, 30, 50, 70, 90, 100]:
-                await asyncio.sleep(0.1)  # Simulated work
-                job.progress = float(progress)
-                _JOBS[job_id] = job
-
-                # Broadcast progress update
-                await ws_manager.broadcast(job_id, {
-                    "type": "progress",
-                    "progress": job.progress,
-                    "status": job.status.value,
-                })
-
-            # Execute the actual job using CLI/Runtime
-            result = await self._run_job(submission)
+            # Execute the actual job — residual streaming via WebSocket is handled in _run_case
+            result = await self._run_job(submission, job_id)
 
             job.status = JobStatus.COMPLETED
             job.completed_at = datetime.utcnow()
@@ -141,19 +136,20 @@ class JobService:
 
         _JOBS[job_id] = job
 
-    async def _run_job(self, submission: JobSubmission) -> Dict:
+    async def _run_job(self, submission: JobSubmission, job_id: str) -> Dict:
         """
         Run the actual job logic.
 
         Args:
             submission: Job submission specification
+            job_id: Job identifier (for container tracking)
 
         Returns:
             Job result data
         """
         # Delegate to runtime based on job type
         if submission.job_type == "run":
-            return await self._run_case(submission)
+            return await self._run_case(submission, job_id)
         elif submission.job_type == "verify":
             return await self._verify_case(submission)
         elif submission.job_type == "report":
@@ -161,40 +157,53 @@ class JobService:
         else:
             return {"status": "unknown_job_type", "job_type": submission.job_type}
 
-    async def _run_case(self, submission: JobSubmission) -> Dict:
-        """Execute a case using the pipeline orchestrator."""
-        try:
-            from knowledge_compiler.phase2d.pipeline_orchestrator import (
-                PipelineOrchestrator,
-                PipelineConfig,
-                PipelineStage,
-            )
+    async def _run_case(self, submission: JobSubmission, job_id: str) -> Dict:
+        """Execute a case using the streaming executor with real-time residual broadcasting."""
+        from knowledge_compiler.phase2.execution_layer.openfoam_docker import OpenFOAMDockerExecutor
 
-            problem_type = submission.parameters.get("problem_type", "external_flow") if submission.parameters else "external_flow"
+        ws_manager = get_websocket_manager()
 
-            config = PipelineConfig(
-                pipeline_id=submission.case_id or "api-job",
-                name=f"API Job: {submission.case_id}",
-                description="Run via API",
-                enabled_stages=[
-                    PipelineStage.REPORT_SPEC_GENERATION,
-                    PipelineStage.PHYSICS_PLANNING,
-                    PipelineStage.EXECUTION,
-                ],
-            )
-
-            orchestrator = PipelineOrchestrator(config)
-            result = orchestrator.execute({
-                "problem_type": problem_type,
-                "physics_models": ["RANS"],
+        async def residual_callback(residual_data: Dict) -> None:
+            """Broadcast residual data to WebSocket subscribers."""
+            await ws_manager.broadcast(job_id, {
+                "type": "residual",
+                **residual_data,
             })
 
+        # Wrap with DivergenceDetector for MON-06 divergence detection
+        from api_server.services.divergence_detector import DivergenceDetector
+        detector = DivergenceDetector(residual_callback)
+
+        try:
+            # Build config from submission parameters
+            config = {
+                "case_id": submission.case_id,
+                "case_dir": submission.parameters.get("case_dir"),
+                "solver": submission.parameters.get("solver", "simpleFoam"),
+                "docker": submission.parameters.get("docker", {}),
+            }
+
+            executor = OpenFOAMDockerExecutor()
+            streaming_result = await executor.execute_streaming(
+                config=config,
+                residual_callback=detector,
+            )
+
+            # Store container_id in _ACTIVE_JOBS for abort support
+            if job_id in _ACTIVE_JOBS:
+                _ACTIVE_JOBS[job_id].container_id = streaming_result.container_id
+
+            result = streaming_result.solver_result
             return {
-                "status": "completed",
+                "status": "completed" if result.success else "failed",
                 "case_id": submission.case_id,
                 "job_type": submission.job_type,
-                "message": "Case executed via pipeline",
-                "result": result,
+                "message": "Case executed via streaming executor",
+                "result": {
+                    "output_dir": result.output_dir,
+                    "metrics": result.metrics,
+                    "execution_time_s": result.execution_time_s,
+                },
             }
         except Exception as e:
             logger.error(f"Case execution failed: {e}")
@@ -331,6 +340,41 @@ class JobService:
             return True
 
         return False
+
+    async def cancel_job_async(self, job_id: str) -> bool:
+        """
+        Asynchronously cancel a running job by killing its Docker container.
+
+        Args:
+            job_id: Job identifier
+
+        Returns:
+            True if cancelled, False if job not found or no container
+        """
+        active_job = _ACTIVE_JOBS.get(job_id)
+        if not active_job:
+            return False
+
+        if active_job.container_id:
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "docker", "kill", active_job.container_id,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                await proc.communicate()
+                logger.info(f"Docker container {active_job.container_id} killed for job {job_id}")
+            except Exception as e:
+                logger.warning(f"Failed to kill container {active_job.container_id}: {e}")
+
+        if active_job.task and not active_job.task.done():
+            active_job.task.cancel()
+            try:
+                await active_job.task
+            except asyncio.CancelledError:
+                pass
+
+        return True
 
     def get_active_job_count(self) -> int:
         """Get count of active (pending/running) jobs."""
