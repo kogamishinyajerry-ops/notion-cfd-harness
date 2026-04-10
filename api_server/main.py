@@ -21,7 +21,7 @@ from api_server.config import (
     PORT,
     REDOC_URL,
 )
-from api_server.routers import cases, jobs, knowledge, status
+from api_server.routers import cases, jobs, knowledge, status, auth
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,7 @@ def create_app() -> FastAPI:
 
     # Register routers
     app.include_router(status.router, prefix=API_PREFIX, tags=["status"])
+    app.include_router(auth.router, prefix=API_PREFIX, tags=["auth"])
     app.include_router(cases.router, prefix=API_PREFIX, tags=["cases"])
     app.include_router(jobs.router, prefix=API_PREFIX, tags=["jobs"])
     app.include_router(knowledge.router, prefix=API_PREFIX, tags=["knowledge"])

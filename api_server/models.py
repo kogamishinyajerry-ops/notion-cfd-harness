@@ -171,3 +171,42 @@ class HealthResponse(BaseModel):
     status: str = Field(..., description="Health status")
     timestamp: datetime = Field(..., description="Check timestamp")
     version: str = Field(..., description="API version")
+
+
+# =============================================================================
+# Auth Models
+# =============================================================================
+
+
+class LoginRequest(BaseModel):
+    """Login request credentials"""
+    username: str = Field(..., description="Username", min_length=1, max_length=100)
+    password: str = Field(..., description="Password", min_length=1)
+
+
+class TokenResponse(BaseModel):
+    """Token response after successful login"""
+    access_token: str = Field(..., description="JWT access token")
+    refresh_token: str = Field(..., description="JWT refresh token")
+    token_type: str = Field(default="bearer", description="Token type")
+    expires_in: int = Field(..., description="Token expiration in seconds")
+
+
+class RefreshRequest(BaseModel):
+    """Token refresh request"""
+    refresh_token: str = Field(..., description="JWT refresh token")
+
+
+class UserInfo(BaseModel):
+    """Current user information"""
+    user_id: str = Field(..., description="User identifier")
+    username: str = Field(..., description="Username")
+    role: str = Field(..., description="User role")
+    permission_level: PermissionLevel = Field(..., description="Permission level (L0-L3)")
+    session_count: int = Field(default=1, description="Number of active sessions")
+
+
+class LogoutResponse(BaseModel):
+    """Logout response"""
+    message: str = Field(..., description="Logout status message")
+    sessions_terminated: int = Field(default=0, description="Number of sessions terminated")
