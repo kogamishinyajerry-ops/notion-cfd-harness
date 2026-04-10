@@ -15,6 +15,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  ReferenceLine,
 } from 'recharts';
 import wsService, { ResidualMessage } from '../services/websocket';
 import './ResidualChart.css';
@@ -147,6 +148,17 @@ export default function ResidualChart({ jobId, onClose }: ResidualChartProps) {
             margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
           >
             <CartesianGrid strokeDasharray="3 3" />
+            <ReferenceLine
+              y={1e-5}
+              stroke="#f59e0b"
+              strokeDasharray="5 5"
+              label={{
+                value: "Convergence (1e-5)",
+                position: "right",
+                fill: "#f59e0b",
+                fontSize: 10,
+              }}
+            />
             <XAxis
               dataKey="iteration"
               label={{ value: 'Iteration', position: 'bottom', offset: 0 }}

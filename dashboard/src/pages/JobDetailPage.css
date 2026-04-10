@@ -335,65 +335,6 @@
   margin-bottom: 1rem;
 }
 
-/* Convergence Monitoring Section */
-.convergence-section {
+.result-summary-wrapper {
   margin: 2rem 0;
-  padding: 1rem;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-}
-
-.convergence-section h2 {
-  margin: 0 0 1rem 0;
-  font-size: 1.25rem;
-}
-
-.residual-history {
-  margin: 2rem 0;
-}
-
-.residual-history h3 {
-  margin: 0 0 1rem 0;
-  font-size: 1rem;
-}
-
-.residual-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-
-.residual-table th,
-.residual-table td {
-  padding: 0.5rem;
-  text-align: left;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.residual-table th {
-  font-weight: 600;
-  background: var(--bg-secondary);
-}
-
-.residual-table td {
-  font-family: monospace;
-}
-
-/* Simulation Metadata Section */
-.simulation-meta {
-  margin: 2rem 0;
-  padding: 1rem;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-}
-
-.simulation-meta h3 {
-  margin: 0 0 1rem 0;
-  font-size: 1rem;
-}
-
-.simulation-meta .meta-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
 }

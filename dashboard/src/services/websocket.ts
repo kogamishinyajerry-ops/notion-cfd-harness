@@ -7,19 +7,7 @@ import type { Job } from './types';
 
 export type WebSocketMessageType = 'status' | 'progress' | 'completion' | 'error' | 'residual';
 
-export interface WebSocketMessage {
-  type: WebSocketMessageType;
-  job?: Job;
-  progress?: number;
-  status?: string;
-  result?: Record<string, unknown>;
-  error?: string;
-}
-
-/**
- * ResidualMessage - Real-time residual data from CFD solver
- * Received via WebSocket when a job is running
- */
+/** Residual data message from solver streaming backend */
 export interface ResidualMessage {
   type: 'residual';
   job_id: string;
@@ -32,7 +20,20 @@ export interface ResidualMessage {
     p?: number;
     [key: string]: number | undefined;
   };
-  status: string;
+  status: string; // running | converged | diverged | stalled
+}
+
+export interface WebSocketMessage {
+  type: WebSocketMessageType;
+  job?: Job;
+  progress?: number;
+  status?: string;
+  result?: Record<string, unknown>;
+  error?: string;
+  job_id?: string;
+  iteration?: number;
+  time_value?: number;
+  residuals?: Record<string, number | undefined>;
 }
 
 type MessageHandler = (message: WebSocketMessage) => void;
@@ -141,4 +142,5 @@ class WebSocketService {
 }
 
 export const wsService = new WebSocketService();
+export { ResidualMessage };
 export default wsService;

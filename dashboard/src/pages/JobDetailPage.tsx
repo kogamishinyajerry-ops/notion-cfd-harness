@@ -5,10 +5,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiClient } from '../services/api';
-import wsService from '../services/websocket';
-import type { WebSocketMessage, ResidualMessage } from '../services/websocket';
+import wsService, { ResidualMessage } from '../services/websocket';
+import type { WebSocketMessage } from '../services/websocket';
 import type { Job, JobLog, JobStatus } from '../services/types';
-import ResidualChart from '../components/ResidualChart';
+import ResultSummaryPanel from '../components/ResultSummaryPanel';
 import './JobDetailPage.css';
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; className: string }> = {
@@ -63,8 +63,15 @@ export default function JobDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'logs' | 'output' | 'config'>('logs');
-  const [residualHistory, setResidualHistory] = useState<ResidualMessage[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const [showResultSummary, setShowResultSummary] = useState(false);
+  const [finalResiduals, setFinalResiduals] = useState<{
+    Ux?: number;
+    Uy?: number;
+    Uz?: number;
+    p?: number;
+  } | null>(null);
+  const [residualHistory, setResidualHistory] = useState<ResidualMessage[]>([]);
 
   // Load job from API
   const loadJob = useCallback(async () => {
@@ -150,9 +157,13 @@ export default function JobDetailPage() {
         const residualMsg = message as ResidualMessage;
         setResidualHistory((prev) => {
           const updated = [...prev, residualMsg];
-          // Keep only last 10 iterations
           return updated.slice(-10);
         });
+        // Trigger result summary on convergence (MON-04)
+        if (residualMsg.status === 'converged' && !showResultSummary) {
+          setFinalResiduals(residualMsg.residuals);
+          setShowResultSummary(true);
+        }
       }
     });
 
@@ -238,28 +249,6 @@ export default function JobDetailPage() {
         )}
       </div>
 
-      <div className="simulation-meta">
-        <h3>Simulation Details</h3>
-        <div className="meta-grid">
-          <div className="meta-item">
-            <span className="meta-label">Case ID</span>
-            <span className="meta-value">{job.case_id}</span>
-          </div>
-          <div className="meta-item">
-            <span className="meta-label">Solver</span>
-            <span className="meta-value">{job.parameters?.solver || 'simpleFoam'}</span>
-          </div>
-          <div className="meta-item">
-            <span className="meta-label">Job Type</span>
-            <span className="meta-value">{job.job_type || 'run'}</span>
-          </div>
-          <div className="meta-item">
-            <span className="meta-label">Runtime</span>
-            <span className="meta-value">{formatDuration(job.started_at, job.completed_at)}</span>
-          </div>
-        </div>
-      </div>
-
       {isActive && (
         <div className="progress-section">
           <div className="progress-bar">
@@ -272,52 +261,29 @@ export default function JobDetailPage() {
         </div>
       )}
 
-      {/* Convergence Monitoring Section */}
-      {(job.status === 'running' || job.status === 'queued') && (
-        <div className="convergence-section">
-          <h2>Convergence Monitoring</h2>
-          <ResidualChart jobId={job.id} />
-        </div>
-      )}
-
-      {residualHistory.length > 0 && (
-        <div className="residual-history">
-          <h3>Residual History (Last 10 Iterations)</h3>
-          <table className="residual-table">
-            <thead>
-              <tr>
-                <th>Iteration</th>
-                <th>Time</th>
-                <th>Ux</th>
-                <th>Uy</th>
-                <th>Uz</th>
-                <th>p</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {residualHistory.map((r, idx) => (
-                <tr key={idx}>
-                  <td>{r.iteration}</td>
-                  <td>{r.time_value.toFixed(4)}</td>
-                  <td>{r.residuals.Ux?.toExponential(2) ?? '-'}</td>
-                  <td>{r.residuals.Uy?.toExponential(2) ?? '-'}</td>
-                  <td>{r.residuals.Uz?.toExponential(2) ?? '-'}</td>
-                  <td>{r.residuals.p?.toExponential(2) ?? '-'}</td>
-                  <td>{r.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
       {job.error_message && (
         <div className="error-banner">
           <span className="error-icon">!</span>
           <div>
             <strong>Error:</strong> {job.error_message}
           </div>
+        </div>
+      )}
+
+      {showResultSummary && finalResiduals && (
+        <div className="result-summary-wrapper">
+          <ResultSummaryPanel
+            iteration={residualHistory[residualHistory.length - 1]?.iteration ?? 0}
+            executionTime={
+              job.completed_at && job.started_at
+                ? (new Date(job.completed_at).getTime() - new Date(job.started_at).getTime()) / 1000
+                : 0
+            }
+            caseId={job.case_id}
+            solver={(job as Record<string, unknown>).solver as string || 'simpleFoam'}
+            finalResiduals={finalResiduals}
+            onClose={() => setShowResultSummary(false)}
+          />
         </div>
       )}
 
