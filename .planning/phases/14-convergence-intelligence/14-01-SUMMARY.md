@@ -98,6 +98,19 @@ streaming_result = await executor.execute_streaming(config=config, residual_call
 
 None — plan executed as written.
 
+## Post-Execution Fix
+
+**Gap:** DivergenceDetector created but not wired into job execution path.
+
+**Fix (commit e95d02e):** Modified `_run_case()` to wrap `residual_callback` with `DivergenceDetector(residual_callback)` before passing to `execute_streaming()`. Now active in job execution path.
+
+```python
+# job_service._run_case() fix:
+from api_server.services.divergence_detector import DivergenceDetector
+detector = DivergenceDetector(residual_callback)
+streaming_result = await executor.execute_streaming(config=config, residual_callback=detector)
+```
+
 ## Self-Check
 
 - [x] api_server/services/divergence_detector.py — EXISTS (131 lines)
