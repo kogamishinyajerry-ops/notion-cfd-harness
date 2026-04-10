@@ -366,17 +366,15 @@ class ReportGenerator:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Correction endpoint location**
-   - What we know: `CorrectionRecorder` exists, accepts `record_from_generator()` input
-   - What's unclear: Is there an existing HTTP server/endpoint pattern in this project for receiving correction callbacks?
-   - Recommendation: Assume standalone script that processes correction requests; integration with Notion Phase 4 push is optional
+1. **Correction endpoint location** — RESOLVED
+   - Decision: Standalone script (`correction_endpoint.py`) with `process_correction_request()` function. HTTP endpoint optional for Phase 9. Notion Phase 4 push deferred.
+   - Resolution: Plan 09-03 creates `correction_endpoint.py` with `CorrectionCallback` and `process_correction_request()` — no new HTTP server required.
 
-2. **PDF archival location**
-   - What we know: Reports should go to `knowledge_compiler/reports/`
-   - What's unclear: Should PDF also go to Notion Cases DB (Phase 4 integration)?
-   - Recommendation: Local files only for Phase 9; Notion push as future enhancement
+2. **PDF archival location** — RESOLVED
+   - Decision: Local files in `knowledge_compiler/reports/` only for Phase 9.
+   - Resolution: Notion Cases DB push (Phase 4 integration) is a future enhancement, not Phase 9 scope.
 
 ---
 
