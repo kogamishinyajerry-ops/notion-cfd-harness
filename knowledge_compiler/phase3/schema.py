@@ -291,6 +291,7 @@ class PostprocessFormat(Enum):
     CSV = "csv"
     VTK = "vtk"
     PNG = "png"
+    PDF = "pdf"
     HTML_REPORT = "html_report"
 
 @dataclass
