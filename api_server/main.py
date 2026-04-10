@@ -21,7 +21,7 @@ from api_server.config import (
     PORT,
     REDOC_URL,
 )
-from api_server.routers import cases, jobs, knowledge, status, auth
+from api_server.routers import cases, jobs, knowledge, status, auth, websocket
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(cases.router, prefix=API_PREFIX, tags=["cases"])
     app.include_router(jobs.router, prefix=API_PREFIX, tags=["jobs"])
     app.include_router(knowledge.router, prefix=API_PREFIX, tags=["knowledge"])
+    app.include_router(websocket.router, tags=["websocket"])
 
     @app.get("/", tags=["root"])
     async def root():

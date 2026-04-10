@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 from api_server.models import JobResponse, JobStatus, JobSubmission
+from api_server.services.websocket_manager import get_websocket_manager
 
 logger = logging.getLogger(__name__)
 
@@ -83,16 +84,31 @@ class JobService:
         if not job:
             return
 
+        ws_manager = get_websocket_manager()
+
         try:
             job.status = JobStatus.RUNNING
             job.started_at = datetime.utcnow()
             _JOBS[job_id] = job
+
+            # Broadcast running status
+            await ws_manager.broadcast(job_id, {
+                "type": "status",
+                "job": self._job_to_dict(job),
+            })
 
             # Simulate job execution progress
             for progress in [10, 30, 50, 70, 90, 100]:
                 await asyncio.sleep(0.1)  # Simulated work
                 job.progress = float(progress)
                 _JOBS[job_id] = job
+
+                # Broadcast progress update
+                await ws_manager.broadcast(job_id, {
+                    "type": "progress",
+                    "progress": job.progress,
+                    "status": job.status.value,
+                })
 
             # Execute the actual job using CLI/Runtime
             result = await self._run_job(submission)
@@ -102,11 +118,26 @@ class JobService:
             job.progress = 100.0
             job.result = result
 
+            # Broadcast completion
+            await ws_manager.broadcast(job_id, {
+                "type": "completion",
+                "status": job.status.value,
+                "result": result,
+                "job": self._job_to_dict(job),
+            })
+
         except Exception as e:
             job.status = JobStatus.FAILED
             job.completed_at = datetime.utcnow()
             job.error = str(e)
             logger.error(f"Job {job_id} failed: {e}")
+
+            # Broadcast failure
+            await ws_manager.broadcast(job_id, {
+                "type": "error",
+                "error": str(e),
+                "job": self._job_to_dict(job),
+            })
 
         _JOBS[job_id] = job
 
@@ -228,3 +259,38 @@ class JobService:
             1 for j in _JOBS.values()
             if j.status in (JobStatus.PENDING, JobStatus.RUNNING)
         )
+
+    def _job_to_dict(self, job: JobResponse) -> dict:
+        """
+        Convert a JobResponse to a dictionary for JSON serialization.
+
+        Args:
+            job: Job response object
+
+        Returns:
+            Dictionary representation
+        """
+        return {
+            "job_id": job.job_id,
+            "case_id": job.case_id,
+            "job_type": job.job_type,
+            "status": job.status.value,
+            "progress": job.progress,
+            "submitted_at": job.submitted_at.isoformat(),
+            "started_at": job.started_at.isoformat() if job.started_at else None,
+            "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+            "result": job.result,
+            "error": job.error,
+        }
+
+
+# Service singleton
+_job_service: Optional[JobService] = None
+
+
+def get_job_service() -> JobService:
+    """Get or create job service instance."""
+    global _job_service
+    if _job_service is None:
+        _job_service = JobService()
+    return _job_service
