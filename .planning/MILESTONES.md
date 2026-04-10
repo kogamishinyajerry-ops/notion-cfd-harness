@@ -2,6 +2,32 @@
 
 ---
 
+## v1.2.0 — API & Web Interface
+
+**Planned:** 2026-04-10
+**Phases:** 10-11 (6 plans)
+**Status:** 🔄 Planning
+
+### Proposed Phases
+
+#### Phase 10: REST API Server
+- FastAPI-based REST API exposing all CLI functionality
+- JWT authentication with PermissionLevel enforcement
+- WebSocket support for real-time job progress
+- OpenAPI/Swagger documentation
+
+#### Phase 11: Web Dashboard
+- React + TypeScript frontend
+- Case builder with geometry visualization
+- Job queue management and real-time status
+- Report viewer with interactive charts
+
+### Dependencies
+- Phase 10 depends on: Phase 9
+- Phase 11 depends on: Phase 10
+
+---
+
 ## v1.1.0 — Report Automation & CaseGenerator v2
 
 **Shipped:** 2026-04-10
