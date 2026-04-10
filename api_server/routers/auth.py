@@ -6,7 +6,7 @@ Provides login, logout, token refresh, and user info endpoints.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 
 from api_server.auth.jwt_handler import jwt_auth, create_tokens, JWT_ACCESS_TOKEN_EXPIRE_MINUTES
 from api_server.auth.session_store import session_store

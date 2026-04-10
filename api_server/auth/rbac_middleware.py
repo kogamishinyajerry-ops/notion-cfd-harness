@@ -14,7 +14,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from api_server.auth.jwt_handler import JWTAuth, jwt_auth
 from api_server.auth.session_store import session_store, UserSession
-from knowledge_compiler.security.rbac import RBACEngine, get_rbac, Permission, PermissionLevel
+from knowledge_compiler.security.rbac import RBACEngine, get_rbac, Permission
 
 
 # HTTP Bearer scheme for JWT extraction
