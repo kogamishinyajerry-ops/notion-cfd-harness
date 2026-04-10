@@ -1,0 +1,674 @@
+#!/usr/bin/env python3
+"""Parametric OpenFOAM case generator using typed specs."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
+from typing import Mapping
+
+from .case_generator_specs import (
+    BCType,
+    BoundaryPatchSpec,
+    BoundarySpec,
+    GeometrySpec,
+    GeometryType,
+    MeshSpec,
+    PhysicsSpec,
+    SolverType,
+    validate_geometry_spec,
+    validate_mesh_spec,
+    validate_physics_spec,
+)
+
+
+# Field BC templates (verified from existing preset templates)
+FIELD_BC_TEMPLATES = {
+    "U": {
+        BCType.FIXED_VALUE: "type fixedValue;\n        value uniform {{VALUE}};",
+        BCType.ZERO_GRADIENT: "type zeroGradient;",
+        BCType.SYMMETRY_PLANE: "type symmetryPlane;",
+        BCType.WALL: "type fixedValue;\n        value uniform (0 0 0);",
+        BCType.EMPTY: "type empty;",
+    },
+    "p": {
+        BCType.FIXED_VALUE: "type fixedValue;\n        value uniform {{VALUE}};",
+        BCType.ZERO_GRADIENT: "type zeroGradient;",
+        BCType.SYMMETRY_PLANE: "type symmetryPlane;",
+        BCType.EMPTY: "type empty;",
+    },
+    "k": {
+        BCType.FIXED_VALUE: "type fixedValue;\n        value uniform {{VALUE}};",
+        BCType.ZERO_GRADIENT: "type zeroGradient;",
+        BCType.EMPTY: "type empty;",
+    },
+    "epsilon": {
+        BCType.FIXED_VALUE: "type fixedValue;\n        value uniform {{VALUE}};",
+        BCType.ZERO_GRADIENT: "type zeroGradient;",
+        BCType.EMPTY: "type empty;",
+    },
+    "nut": {
+        BCType.ZERO_GRADIENT: "type zeroGradient;",
+        BCType.EMPTY: "type empty;",
+    },
+}
+
+# Solver -> required files mapping
+SOLVER_REQUIRED_FILES = {
+    SolverType.ICO_FOAM: ["constant/physicalProperties"],
+    SolverType.SIMPLE_FOAM: [
+        "constant/physicalProperties",
+        "constant/turbulenceProperties",
+        "0/k",
+        "0/epsilon",
+        "0/nut",
+    ],
+    SolverType.PIMPLE_FOAM: ["constant/physicalProperties", "constant/momentumTransport"],
+}
+
+
+@dataclass(frozen=True)
+class _Vertex:
+    """Internal vertex representation for blockMeshDict generation."""
+
+    x: float
+    y: float
+    z: float
+
+
+@dataclass(frozen=True)
+class _HexBlock:
+    """Internal hex block representation."""
+
+    vertices: list[int]  # 8 vertex indices
+    cells: tuple[int, int, int]  # (nx, ny, nz)
+
+
+@dataclass(frozen=True)
+class _Patch:
+    """Internal patch representation."""
+
+    name: str
+    patch_type: str
+    faces: list[tuple[int, ...]]  # vertex index tuples
+
+
+class GenericOpenFOAMCaseGenerator:
+    """Parametric OpenFOAM case generator using typed specs."""
+
+    REQUIRED_FILES = (
+        "system/controlDict",
+        "system/fvSchemes",
+        "system/fvSolution",
+        "system/blockMeshDict",
+        "0/U",
+        "0/p",
+    )
+
+    def __init__(self, output_root: str):
+        self.output_root = Path(output_root)
+
+    def generate(
+        self,
+        case_id: str,
+        geometry: GeometrySpec,
+        mesh: MeshSpec,
+        physics: PhysicsSpec,
+        boundary: BoundarySpec,
+    ) -> Path:
+        """Generate a complete OpenFOAM case directory."""
+        # 1. Validate specs
+        errors = []
+        errors.extend(validate_geometry_spec(geometry))
+        errors.extend(validate_mesh_spec(mesh, geometry))
+        errors.extend(validate_physics_spec(physics, geometry))
+        if errors:
+            raise ValueError(f"Spec validation failed: {errors}")
+
+        # 2. Create case directory
+        case_dir = self.output_root / case_id
+        case_dir.mkdir(parents=True, exist_ok=True)
+
+        # 3. Generate blockMeshDict vertices/blocks/patches
+        vertices = self._generate_blockmesh_vertices(geometry, mesh)
+        blocks = self._generate_blockmesh_blocks(geometry, mesh, vertices)
+        patches = self._generate_blockmesh_boundary(geometry, boundary)
+        blockmesh_text = self._render_blockmesh(vertices, blocks, patches)
+
+        # 4. Write all case files
+        (case_dir / "system/blockMeshDict").write_text(blockmesh_text, encoding="utf-8")
+        (case_dir / "0/U").write_text(
+            self._render_bc_field("U", boundary.patches, physics), encoding="utf-8"
+        )
+        (case_dir / "0/p").write_text(
+            self._render_bc_field("p", boundary.patches, physics), encoding="utf-8"
+        )
+        self._write_control_dict(case_dir, physics)
+        self._write_fvSchemes(case_dir)
+        self._write_fvSolution(case_dir)
+        self._assemble_case_files(case_dir, physics.solver, physics)
+
+        # 5. Validate
+        if not self.validate(case_dir):
+            raise RuntimeError(f"Generated case is incomplete: {case_dir}")
+        return case_dir
+
+    def validate(self, case_dir: Path) -> bool:
+        """Check that the generated case has all required files."""
+        return all((Path(case_dir) / f).exists() for f in self.REQUIRED_FILES)
+
+    @staticmethod
+    def _generate_blockmesh_vertices(
+        geometry: GeometrySpec, mesh: MeshSpec
+    ) -> list[_Vertex]:
+        """Generate vertex list for the geometry type."""
+        if geometry.geometry_type == GeometryType.SIMPLE_GRID:
+            return GenericOpenFOAMCaseGenerator._simple_grid_vertices(geometry, mesh)
+        elif geometry.geometry_type == GeometryType.BACKWARD_FACING_STEP:
+            return GenericOpenFOAMCaseGenerator._backward_facing_step_vertices(geometry, mesh)
+        elif geometry.geometry_type == GeometryType.BODY_IN_CHANNEL:
+            return GenericOpenFOAMCaseGenerator._body_in_channel_vertices(geometry, mesh)
+        else:
+            raise NotImplementedError(f"Geometry {geometry.geometry_type} not yet implemented")
+
+    @staticmethod
+    def _simple_grid_vertices(geometry: GeometrySpec, mesh: MeshSpec) -> list[_Vertex]:
+        """4 vertices at z=0 + 4 at z=thickness for simple rectangular domain."""
+        z0, z1 = 0.0, geometry.thickness
+        verts = []
+        for z in (z0, z1):
+            verts.append(_Vertex(geometry.x_min, geometry.y_min, z))
+            verts.append(_Vertex(geometry.x_max, geometry.y_min, z))
+            verts.append(_Vertex(geometry.x_max, geometry.y_max, z))
+            verts.append(_Vertex(geometry.x_min, geometry.y_max, z))
+        return verts  # 8 vertices
+
+    @staticmethod
+    def _body_in_channel_vertices(geometry: GeometrySpec, mesh: MeshSpec) -> list[_Vertex]:
+        """Generate 16-vertex grid (4x4 at z=0 + 4x4 at z=thickness) with body cutout.
+
+        Uses 4-column x grid and 4-row y grid. Body interior vertices are skipped.
+        """
+        nx, ny = 4, 4
+
+        def col(n: int, x0: float, x1: float) -> list[float]:
+            if n == 1:
+                return [(x0 + x1) / 2]
+            return [x0 + i * (x1 - x0) / n for i in range(n + 1)]
+
+        x_cols = col(nx, geometry.x_min, geometry.x_max)
+        y_rows = col(ny, geometry.y_min, geometry.y_max)
+        bx0 = geometry.body_x_min
+        bx1 = geometry.body_x_max
+        by0 = geometry.body_y_min
+        by1 = geometry.body_y_max
+
+        verts = []
+        for z in (0.0, geometry.thickness):
+            for y in y_rows:
+                for x in x_cols:
+                    # Skip body interior
+                    if bx0 is not None and bx1 is not None and by0 is not None and by1 is not None:
+                        if bx0 <= x <= bx1 and by0 <= y <= by1:
+                            continue
+                    verts.append(_Vertex(x, y, z))
+        return verts  # 16 or fewer
+
+    @staticmethod
+    def _backward_facing_step_vertices(geometry: GeometrySpec, mesh: MeshSpec) -> list[_Vertex]:
+        """Generate vertices for backward-facing step.
+
+        3 sections: inlet (bottom-left), step face, outlet (bottom-right + top).
+        16 vertices at z=0 + 16 at z=thickness = 32 total.
+        """
+        x_min = geometry.x_min
+        x_max = geometry.x_max
+        y_min = geometry.y_min
+        y_max = geometry.y_max
+        z0, z1 = 0.0, geometry.thickness
+
+        # Determine step position (typically at ~40% of domain)
+        x_step = x_min + 0.4 * (x_max - x_min)
+        y_step = y_min + 0.5 * (y_max - y_min)
+
+        def col(x0: float, x1: float, n: int) -> list[float]:
+            if n <= 1:
+                return [(x0 + x1) / 2]
+            return [x0 + i * (x1 - x0) / n for i in range(n + 1)]
+
+        nx_i = mesh.nx_inlet if mesh.nx_inlet else 20
+        ny_l = mesh.ny_lower if mesh.ny_lower else 20
+        nx_o = mesh.nx_outlet if mesh.nx_outlet else 40
+        ny_u = mesh.ny_upper if mesh.ny_upper else 20
+
+        x_inlet_cells = col(x_min, x_step, nx_i)
+        x_outlet_cells = col(x_step, x_max, nx_o)
+        y_lower_cells = col(y_min, y_step, ny_l)
+        y_upper_cells = col(y_step, y_max, ny_u)
+
+        verts = []
+        for z in (z0, z1):
+            for y in y_lower_cells + y_upper_cells:
+                for x in x_inlet_cells + x_outlet_cells:
+                    verts.append(_Vertex(x, y, z))
+        return verts  # 32 vertices (16 per z-layer)
+
+    @staticmethod
+    def _generate_blockmesh_blocks(
+        geometry: GeometrySpec, mesh: MeshSpec, vertices: list[_Vertex]
+    ) -> list[_HexBlock]:
+        """Generate hex blocks. For SIMPLE_GRID: 1 block. For BODY_IN_CHANNEL: 8 blocks."""
+        if geometry.geometry_type == GeometryType.SIMPLE_GRID:
+            return [
+                _HexBlock(
+                    vertices=[0, 1, 2, 3, 4, 5, 6, 7],  # bottom 4 + top 4
+                    cells=(mesh.nx, mesh.ny, 1),
+                )
+            ]
+        elif geometry.geometry_type == GeometryType.BACKWARD_FACING_STEP:
+            # 3-block step: inlet section, step face, outlet section
+            nx_i = mesh.nx_inlet if mesh.nx_inlet else 20
+            nx_o = mesh.nx_outlet if mesh.nx_outlet else 40
+            ny_l = mesh.ny_lower if mesh.ny_lower else 20
+            ny_u = mesh.ny_upper if mesh.ny_upper else 20
+            return [
+                _HexBlock(vertices=[0, 1, 2, 3, 8, 9, 10, 11], cells=(nx_i, ny_l, 1)),
+                _HexBlock(vertices=[1, 4, 5, 2, 9, 12, 13, 10], cells=(nx_o, ny_l, 1)),
+                _HexBlock(vertices=[2, 5, 6, 7, 10, 13, 14, 15], cells=(nx_o, ny_u, 1)),
+            ]
+        elif geometry.geometry_type == GeometryType.BODY_IN_CHANNEL:
+            # 8 blocks: outer ring around body hole
+            # Simplified: return empty list as placeholder (Wave 3 will do full implementation)
+            return []
+        raise NotImplementedError(f"Geometry {geometry.geometry_type} not yet implemented")
+
+    @staticmethod
+    def _generate_blockmesh_boundary(
+        geometry: GeometrySpec, boundary: BoundarySpec
+    ) -> list[_Patch]:
+        """Generate boundary patches for blockMeshDict."""
+        patches = []
+        for name, spec in boundary.patches.items():
+            patches.append(_Patch(name=name, patch_type=spec.bc_type.value, faces=[]))
+        return patches
+
+    @staticmethod
+    def _render_blockmesh(
+        vertices: list[_Vertex], blocks: list[_HexBlock], patches: list[_Patch]
+    ) -> str:
+        """Render a complete blockMeshDict file."""
+        lines = [
+            "/*--------------------------------*- C++ -*----------------------------------*\\",
+            "| ======                 |                                                    |",
+            "| \\\\      /\\        |  OpenFOAM Block Mesh Dict                              |",
+            "|  \\\\    /  \\\\    |  Generated by GenericOpenFOAMCaseGenerator               |",
+            "|   \\\\  /    \\\\  |                                                    |",
+            "|    \\\\/      \\\\|                                                    |",
+            "*---------------------------------------------------------------------------*/",
+            "FoamFile",
+            "{",
+            "    version     2.0;",
+            "    format      ascii;",
+            "    class       dictionary;",
+            "    object      blockMeshDict;",
+            "}",
+            "",
+            "convertToMeters 1;",
+            "",
+            "vertices",
+            "(",
+        ]
+        for i, v in enumerate(vertices):
+            lines.append(f"    {i} ({v.x} {v.y} {v.z})")
+        lines.extend([")", "", "blocks", "("])
+        for block in blocks:
+            lines.append(
+                f"    hex ({' '.join(map(str, block.vertices))}) ({block.cells[0]} {block.cells[1]} {block.cells[2]}) simpleGrading (1 1 1)"
+            )
+        lines.extend([")", "", "edges", "(", ")", "", "boundary", "("])
+        for patch in patches:
+            lines.append(f"    {patch.name}")
+            lines.append("    {")
+            lines.append(f"        type {patch.patch_type};")
+            if patch.faces:
+                lines.append("        faces")
+                lines.append("        (")
+                for face in patch.faces:
+                    lines.append(f"            ({' '.join(map(str, face))})")
+                lines.append("        )")
+            lines.append("    }")
+        lines.extend([")", ")", "", "// ************************************************************************* //"])
+        return "\n".join(lines)
+
+    @staticmethod
+    def _render_bc_field(
+        field: str, patches: dict[str, BoundaryPatchSpec], physics: PhysicsSpec
+    ) -> str:
+        """Render a 0/{field} boundary condition file."""
+        is_vector = field == "U"
+        lines = [
+            "FoamFile",
+            "{",
+            "    version     2.0;",
+            "    format      ascii;",
+            f"    class       {'volVectorField' if is_vector else 'volScalarField'};",
+            f"    object      {field};",
+            "}",
+            "",
+        ]
+        if is_vector:
+            lines.append("dimensions      [0 1 -1 0 0 0 0];")
+            lines.append("internalField   uniform (0 0 0);")
+        else:
+            lines.append("dimensions      [0 2 -2 0 0 0 0];")
+            lines.append("internalField   uniform 0;")
+        lines.extend(["", "boundaryField", "{"])
+        for name, spec in patches.items():
+            template = FIELD_BC_TEMPLATES.get(field, {}).get(spec.bc_type)
+            if template is None:
+                template = f"type {spec.bc_type.value};"
+            lines.append(f"    {name}")
+            lines.append("    {")
+            value_str = spec.value
+            if "{{VALUE}}" in template and value_str:
+                template = template.replace("{{VALUE}}", value_str)
+            lines.append("        " + template.replace("\n", "\n        "))
+            lines.append("    }")
+        lines.extend(["}", "", "// ************************************************************************* //"])
+        return "\n".join(lines)
+
+    def _write_control_dict(self, case_dir: Path, physics: PhysicsSpec) -> None:
+        """Write system/controlDict."""
+        content = """/*--------------------------------*- C++ -*----------------------------------*\\
+| Generated by GenericOpenFOAMCaseGenerator |
+*---------------------------------------------------------------------------*/"""
+        end_time = physics.end_time
+        delta_t = physics.delta_t
+        write_interval = physics.write_interval
+        lines = [
+            content,
+            "FoamFile",
+            "{",
+            "    version     2.0;",
+            "    format      ascii;",
+            "    class       dictionary;",
+            "    object      controlDict;",
+            "}",
+            "",
+            f"application     {physics.solver.value};",
+            "",
+            "startFrom       startTime;",
+            "startTime       0;",
+            "",
+            "stopAt           endTime;",
+            f"endTime          {end_time};",
+            "",
+            f"deltaT           {delta_t};",
+        ]
+        if physics.max_co is not None:
+            lines.append(f"maxCo           {physics.max_co};")
+        lines.extend(
+            [
+                "",
+                "writeControl    runTime;",
+                f"writeInterval   {write_interval};",
+                "",
+                "purgeWrite      0;",
+                "",
+                "writeFormat     ascii;",
+                "writePrecision  6;",
+                "",
+                "runTimeModifiable yes;",
+                "",
+                "// ************************************************************************* //",
+            ]
+        )
+        (case_dir / "system/controlDict").write_text("\n".join(lines), encoding="utf-8")
+
+    def _write_fvSchemes(self, case_dir: Path) -> None:
+        """Write system/fvSchemes."""
+        lines = [
+            "FoamFile",
+            "{",
+            "    version     2.0;",
+            "    format      ascii;",
+            "    class       dictionary;",
+            "    object      fvSchemes;",
+            "}",
+            "",
+            "ddtSchemes",
+            "{",
+            "    default         Euler;",
+            "}",
+            "",
+            "gradSchemes",
+            "{",
+            "    default         Gauss linear;",
+            "}",
+            "",
+            "divSchemes",
+            "{",
+            "    default         none;",
+            "}",
+            "",
+            "laplacianSchemes",
+            "{",
+            "    default         Gauss linear corrected;",
+            "}",
+            "",
+            "interpolationSchemes",
+            "{",
+            "    default         linear;",
+            "}",
+            "",
+            "snGradSchemes",
+            "{",
+            "    default         corrected;",
+            "}",
+            "",
+            "// ************************************************************************* //",
+        ]
+        (case_dir / "system/fvSchemes").write_text("\n".join(lines), encoding="utf-8")
+
+    def _write_fvSolution(self, case_dir: Path) -> None:
+        """Write system/fvSolution."""
+        lines = [
+            "FoamFile",
+            "{",
+            "    version     2.0;",
+            "    format      ascii;",
+            "    class       dictionary;",
+            "    object      fvSolution;",
+            "}",
+            "",
+            "solvers",
+            "{",
+            "    p",
+            "    {",
+            "        solver          PCG;",
+            "        preconditioner  DIC;",
+            "        tolerance       1e-06;",
+            "        relTol          0.05;",
+            "    }",
+            "",
+            "    pFinal",
+            "    {",
+            "        $p;",
+            "        relTol          0;",
+            "    }",
+            "",
+            "    U",
+            "    {",
+            "        solver          smoothSolver;",
+            "        smoother        GaussSeidel;",
+            "        tolerance       1e-05;",
+            "        relTol          0;",
+            "    }",
+            "}",
+            "",
+            "// ************************************************************************* //",
+        ]
+        (case_dir / "system/fvSolution").write_text("\n".join(lines), encoding="utf-8")
+
+    def _assemble_case_files(
+        self, case_dir: Path, solver: SolverType, physics: PhysicsSpec
+    ) -> None:
+        """Write solver-specific files."""
+        nu = physics.nu if physics.nu is not None else 0.01
+
+        if solver == SolverType.ICO_FOAM:
+            nu = 0.01  # laminar Re=100
+            (case_dir / "constant/physicalProperties").write_text(
+                f"""FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      physicalProperties;
+}}
+
+nu              {nu};
+
+
+// ************************************************************************* //
+""",
+                encoding="utf-8",
+            )
+        elif solver == SolverType.PIMPLE_FOAM:
+            nu = 0.001
+            (case_dir / "constant/physicalProperties").write_text(
+                f"""FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      physicalProperties;
+}}
+
+nu              {nu};
+
+
+// ************************************************************************* //
+""",
+                encoding="utf-8",
+            )
+            (case_dir / "constant/momentumTransport").write_text(
+                """FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      momentumTransport;
+}
+
+simulationType  laminar;
+
+
+// ************************************************************************* //
+""",
+                encoding="utf-8",
+            )
+        elif solver == SolverType.SIMPLE_FOAM:
+            k_inlet = physics.k_inlet if physics.k_inlet is not None else 0.01
+            epsilon_inlet = physics.epsilon_inlet if physics.epsilon_inlet is not None else 0.01
+            nu = 1.3e-4  # Re=7600
+            (case_dir / "constant/physicalProperties").write_text(
+                f"""FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      physicalProperties;
+}}
+
+nu              {nu};
+
+
+// ************************************************************************* //
+""",
+                encoding="utf-8",
+            )
+            (case_dir / "constant/turbulenceProperties").write_text(
+                """FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      turbulenceProperties;
+}
+
+simulationType  RAS;
+
+
+// ************************************************************************* //
+""",
+                encoding="utf-8",
+            )
+            (case_dir / "0/k").write_text(
+                f"""FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      k;
+}}
+dimensions      [0 2 -2 0 0 0 0];
+internalField   uniform {k_inlet};
+boundaryField
+{{
+    inlet {{ type fixedValue; value uniform {k_inlet}; }}
+    outlet {{ type zeroGradient; }}
+    walls {{ type kqRWallFunction; value uniform 0; }}
+}}
+
+
+// ************************************************************************* //
+""",
+                encoding="utf-8",
+            )
+            (case_dir / "0/epsilon").write_text(
+                f"""FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      epsilon;
+}}
+dimensions      [0 2 -3 0 0 0 0];
+internalField   uniform {epsilon_inlet};
+boundaryField
+{{
+    inlet {{ type fixedValue; value uniform {epsilon_inlet}; }}
+    outlet {{ type zeroGradient; }}
+    walls {{ type epsilonWallFunction; value uniform 0; }}
+}}
+
+
+// ************************************************************************* //
+""",
+                encoding="utf-8",
+            )
+            (case_dir / "0/nut").write_text(
+                """FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      nut;
+}
+dimensions      [0 2 -1 0 0 0 0];
+internalField   uniform 0;
+boundaryField
+{
+    inlet { type calculated; value uniform 0; }
+    outlet { type calculated; value uniform 0; }
+    walls { type nutkWallFunction; value uniform 0; }
+}
+
+
+// ************************************************************************* //
+""",
+                encoding="utf-8",
+            )
