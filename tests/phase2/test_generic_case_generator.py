@@ -372,3 +372,106 @@ def test_blockmesh_contains_vertices_and_blocks(tmp_path: Path) -> None:
     assert "blocks" in blockmesh
     assert "hex" in blockmesh
     assert "boundary" in blockmesh
+
+
+# Wave 3 tests — integration, backward compatibility, Docker round-trip
+
+
+def test_generic_case_adapter_simple_grid(tmp_path: Path) -> None:
+    """GenericCaseAdapter.generate() produces valid case from parameter mapping."""
+    from knowledge_compiler.phase2.execution_layer.case_generator import GenericCaseAdapter
+    adapter = GenericCaseAdapter(str(tmp_path))
+    params = {
+        "geometry_type": "SIMPLE_GRID",
+        "x_min": "0", "x_max": "1",
+        "y_min": "0", "y_max": "1",
+        "thickness": "0.01",
+        "nx": "10", "ny": "10",
+        "solver": "ICO_FOAM",
+        "reynolds_number": "100",
+        "bc_type_fixedWalls": "WALL",
+        "bc_type_movingWall": "FIXED_VALUE",
+        "bc_value_movingWall": "(1 0 0)",
+        "bc_type_frontAndBack": "EMPTY",
+    }
+    case_path = adapter.generate("ADAPTER-TEST-01", params)
+    assert (case_path / "system/blockMeshDict").exists()
+    assert (case_path / "0/U").exists()
+    assert (case_path / "system/controlDict").exists()
+
+
+def test_backward_compat_case_preset_still_works(tmp_path: Path) -> None:
+    """Existing CasePreset.generate() works after GenericOpenFOAMCaseGenerator addition."""
+    from knowledge_compiler.phase2.execution_layer.case_generator import CASE_PRESETS
+    preset = CASE_PRESETS.get("BENCH-01")
+    assert preset is not None
+    from knowledge_compiler.phase2.execution_layer.case_generator import OpenFOAMCaseGenerator
+    generator = OpenFOAMCaseGenerator(str(tmp_path))
+    case_path = generator.generate("BENCH-01")
+    assert (case_path / "system/blockMeshDict").exists()
+    assert (case_path / "0/U").exists()
+
+
+def test_executor_factory_instantiates_generic(tmp_path: Path) -> None:
+    """ExecutorFactory provides GenericOpenFOAMCaseGenerator via 'generic' key."""
+    from knowledge_compiler.phase2.execution_layer.executor_factory import ExecutorFactory
+    factory = ExecutorFactory(str(tmp_path))
+    gen = factory.get_generator("generic")
+    assert gen is not None
+    from knowledge_compiler.phase2.execution_layer.case_generator import GenericCaseAdapter
+    assert isinstance(gen, GenericCaseAdapter)
+
+
+def test_blockmesh_renders_hex_blocks_simple_grid(tmp_path: Path) -> None:
+    """SIMPLE_GRID blockMeshDict contains exactly 1 hex block declaration."""
+    from knowledge_compiler.phase2.execution_layer.case_generator_specs import (
+        GeometrySpec, MeshSpec, PhysicsSpec, BoundarySpec, BoundaryPatchSpec,
+        GeometryType, SolverType, BCType,
+    )
+    from knowledge_compiler.phase2.execution_layer.generic_case_generator import GenericOpenFOAMCaseGenerator
+    geometry = GeometrySpec(GeometryType.SIMPLE_GRID, 0.0, 1.0, 0.0, 1.0, thickness=0.01)
+    mesh = MeshSpec(nx=10, ny=10)
+    physics = PhysicsSpec(SolverType.ICO_FOAM, 100.0, u_lid=1.0)
+    boundary = BoundarySpec(patches={
+        "movingWall": BoundaryPatchSpec("movingWall", BCType.FIXED_VALUE, "(1 0 0)"),
+        "fixedWalls": BoundaryPatchSpec("fixedWalls", BCType.WALL),
+        "frontAndBack": BoundaryPatchSpec("frontAndBack", BCType.EMPTY),
+    })
+    gen = GenericOpenFOAMCaseGenerator(str(tmp_path))
+    case_path = gen.generate("BLOCKMESH-TEST", geometry, mesh, physics, boundary)
+    blockmesh = (case_path / "system/blockMeshDict").read_text(encoding="utf-8")
+    assert "hex" in blockmesh
+    # Should have exactly one hex block
+    assert blockmesh.count("hex ") == 1
+    assert "vertices" in blockmesh
+    assert "boundary" in blockmesh
+
+
+def test_solver_control_dict_contains_correct_application(tmp_path: Path) -> None:
+    """SIMPLE_FOAM controlDict contains 'simpleFoam' as application."""
+    from knowledge_compiler.phase2.execution_layer.case_generator_specs import (
+        GeometrySpec, MeshSpec, PhysicsSpec, BoundarySpec, BoundaryPatchSpec,
+        GeometryType, SolverType, BCType,
+    )
+    from knowledge_compiler.phase2.execution_layer.generic_case_generator import GenericOpenFOAMCaseGenerator
+    geometry = GeometrySpec(GeometryType.SIMPLE_GRID, 0.0, 1.0, 0.0, 1.0, thickness=0.01)
+    mesh = MeshSpec(nx=10, ny=10)
+    physics = PhysicsSpec(
+        SolverType.SIMPLE_FOAM, 7600.0,
+        k_inlet=0.01, epsilon_inlet=0.001
+    )
+    boundary = BoundarySpec(patches={
+        "inlet": BoundaryPatchSpec("inlet", BCType.FIXED_VALUE, "(1 0 0)"),
+        "outlet": BoundaryPatchSpec("outlet", BCType.ZERO_GRADIENT),
+        "walls": BoundaryPatchSpec("walls", BCType.WALL),
+        "frontAndBack": BoundaryPatchSpec("frontAndBack", BCType.EMPTY),
+    })
+    gen = GenericOpenFOAMCaseGenerator(str(tmp_path))
+    case_path = gen.generate("SOLVER-TEST", geometry, mesh, physics, boundary)
+    control = (case_path / "system/controlDict").read_text(encoding="utf-8")
+    assert "application" in control
+    assert "simpleFoam" in control
+    # turbulence files should also exist
+    assert (case_path / "constant/turbulenceProperties").exists()
+    assert (case_path / "0/k").exists()
+    assert (case_path / "0/epsilon").exists()
