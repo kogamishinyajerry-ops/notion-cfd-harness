@@ -49,3 +49,9 @@
   - [x] 08-02-PLAN.md — GenericOpenFOAMCaseGenerator: programmatic blockMeshDict + BC rendering + solver-aware file assembly
   - [x] 08-03-PLAN.md — Integration tests + backward compatibility + Docker round-trip verification
   - [x] 08-04-PLAN.md — Gap closure: BODY_IN_CHANNEL 8-block hex generation fix
+
+### Phase 9: Report Automation & Postprocess Intelligence
+- **Goal**: 从 SolverResult 自动生成结构化报告 — PostprocessPipeline + ReportGenerator + ReportTeachMode + ComparisonEngine
+- **Status**: Planned
+- **Depends on**: Phase 8
+- **Plans**: TBD (run /gsd-plan-phase 9 to break down)
