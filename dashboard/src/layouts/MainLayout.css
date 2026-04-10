@@ -9,8 +9,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 1rem 2rem;
-  background: #1a1a2e;
-  color: #fff;
+  background: var(--nav-bg);
+  color: var(--nav-text);
 }
 
 .header-brand {
@@ -20,7 +20,7 @@
 }
 
 .brand-logo {
-  background: #e94560;
+  background: var(--accent-color);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-weight: 700;
@@ -53,10 +53,25 @@
 
 .nav-link.active {
   color: #fff;
-  background: #e94560;
+  background: var(--accent-color);
+}
+
+.theme-toggle {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 0.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .main-content {
   flex: 1;
   padding: 2rem;
+  background: var(--bg-primary);
 }

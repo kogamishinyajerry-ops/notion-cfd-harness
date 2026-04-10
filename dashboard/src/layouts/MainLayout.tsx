@@ -1,7 +1,18 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import './MainLayout.css';
 
 export default function MainLayout() {
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
+
   return (
     <div className="layout">
       <header className="header">
@@ -26,6 +37,9 @@ export default function MainLayout() {
             Settings
           </NavLink>
         </nav>
+        <button className="theme-toggle" onClick={toggleTheme} type="button">
+          {theme === 'light' ? '🌙' : '☀️'}
+        </button>
       </header>
       <main className="main-content">
         <Outlet />
