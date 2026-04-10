@@ -345,23 +345,136 @@ function ProfilesTab() {
   );
 }
 
-// Mock comparison data
-const MOCK_COMPARISON_DATA: ComparisonData[] = [
-  { name: 'Max Velocity', computed: 1.02, literature: 1.01, difference: 0.99 },
-  { name: 'Pressure Drop', computed: 0.12, literature: 0.11, difference: 9.1 },
-  { name: 'Recirculation Length', computed: 0.35, literature: 0.34, difference: 2.9 },
-  { name: 'Wall Shear', computed: 0.048, literature: 0.047, difference: 2.1 },
+// LiteratureComparison data structure matching GoldStandardLoader LiteratureComparison
+interface LiteratureComparisonData {
+  metric_name: string;
+  simulated_value: number;
+  reference_value: number;
+  error_pct: number;
+  unit: string;
+  reference_source: string;
+  reynolds_number: number;
+  status: 'PASS' | 'WARN' | 'FAIL';
+}
+
+// Mock comparison data with PASS/WARN/FAIL status
+const MOCK_LITERATURE_COMPARISONS: LiteratureComparisonData[] = [
+  {
+    metric_name: 'Max Centerline Velocity',
+    simulated_value: 1.02,
+    reference_value: 1.01,
+    error_pct: 0.99,
+    unit: 'm/s',
+    reference_source: 'Ghia 1982',
+    reynolds_number: 100,
+    status: 'PASS',
+  },
+  {
+    metric_name: 'Pressure Drop (dP)',
+    simulated_value: 0.12,
+    reference_value: 0.11,
+    error_pct: 9.1,
+    unit: 'Pa',
+    reference_source: 'Armaly 1983',
+    reynolds_number: 100,
+    status: 'WARN',
+  },
+  {
+    metric_name: 'Recirculation Length (Xr/H)',
+    simulated_value: 0.35,
+    reference_value: 0.34,
+    error_pct: 2.94,
+    unit: '-',
+    reference_source: 'Armaly 1983',
+    reynolds_number: 100,
+    status: 'PASS',
+  },
+  {
+    metric_name: 'Wall Shear Stress',
+    simulated_value: 0.048,
+    reference_value: 0.047,
+    error_pct: 2.13,
+    unit: 'Pa',
+    reference_source: 'Ghia 1982',
+    reynolds_number: 100,
+    status: 'PASS',
+  },
+  {
+    metric_name: 'Secondary Peak Location',
+    simulated_value: 0.82,
+    reference_value: 0.75,
+    error_pct: 9.33,
+    unit: 'y/H',
+    reference_source: 'Ghia 1982',
+    reynolds_number: 100,
+    status: 'FAIL',
+  },
 ];
 
+// Mock comparison data for bar charts
+const MOCK_COMPARISON_DATA: ComparisonData[] = MOCK_LITERATURE_COMPARISONS.map((c) => ({
+  name: c.metric_name,
+  computed: c.simulated_value,
+  literature: c.reference_value,
+  difference: c.error_pct,
+}));
+
 function ComparisonTab() {
+  const passCount = MOCK_LITERATURE_COMPARISONS.filter((c) => c.status === 'PASS').length;
+  const warnCount = MOCK_LITERATURE_COMPARISONS.filter((c) => c.status === 'WARN').length;
+  const failCount = MOCK_LITERATURE_COMPARISONS.filter((c) => c.status === 'FAIL').length;
+
   return (
     <div className="comparison-tab">
-      <div className="chart-container">
-        <h3>Gold Standard Comparison</h3>
-        <p className="chart-description">
-          Comparison with literature values (Ghia 1982, Armaly 1983)
-        </p>
+      <div className="gold-standard-header">
+        <div className="gs-summary">
+          <h3>Literature Validation Summary</h3>
+          <div className="gs-status-counts">
+            <span className="gs-count pass">{passCount} PASS</span>
+            <span className="gs-count warn">{warnCount} WARN</span>
+            <span className="gs-count fail">{failCount} FAIL</span>
+          </div>
+        </div>
+        <div className="gs-sources">
+          <span className="source-label">Reference Sources:</span>
+          <span className="source-badge">Ghia 1982</span>
+          <span className="source-badge">Armaly 1983</span>
+        </div>
+      </div>
 
+      <div className="comparison-section">
+        <h4>Detailed Literature Comparison</h4>
+        <div className="literature-comparison-table">
+          <div className="table-header">
+            <span>Metric</span>
+            <span>Computed</span>
+            <span>Reference</span>
+            <span>Error (%)</span>
+            <span>Status</span>
+          </div>
+          {MOCK_LITERATURE_COMPARISONS.map((comparison, idx) => (
+            <div key={idx} className={`table-row ${comparison.status.toLowerCase()}`}>
+              <span className="metric-name" title={comparison.reference_source}>
+                {comparison.metric_name}
+                <span className="re-info">Re={comparison.reynolds_number}</span>
+              </span>
+              <span className="value computed">{comparison.simulated_value.toFixed(4)}</span>
+              <span className="value reference">
+                {comparison.reference_value.toFixed(4)}
+                <span className="unit"> {comparison.unit}</span>
+              </span>
+              <span className={`value error ${comparison.status.toLowerCase()}`}>
+                {comparison.error_pct.toFixed(2)}%
+              </span>
+              <span className={`status-indicator ${comparison.status.toLowerCase()}`}>
+                {comparison.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="chart-container">
         <div className="comparison-section">
           <h4>Quantitative Comparison</h4>
           <ResponsiveContainer width="100%" height={300}>
@@ -395,7 +508,7 @@ function ComparisonTab() {
         </div>
 
         <div className="comparison-section">
-          <h4>Difference Analysis</h4>
+          <h4>Error Analysis</h4>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={MOCK_COMPARISON_DATA} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
@@ -410,7 +523,7 @@ function ComparisonTab() {
               <YAxis
                 stroke="var(--text-secondary)"
                 fontSize={12}
-                label={{ value: 'Difference (%)', angle: -90, position: 'insideLeft' }}
+                label={{ value: 'Error (%)', angle: -90, position: 'insideLeft' }}
               />
               <Tooltip
                 contentStyle={{
@@ -422,13 +535,22 @@ function ComparisonTab() {
               />
               <Bar
                 dataKey="difference"
-                name="Difference"
+                name="Error %"
                 fill="#f59e0b"
                 background="#f0f0f0"
               />
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      <div className="comparison-info">
+        <h4>Validation Criteria</h4>
+        <ul>
+          <li><span className="status-indicator pass">PASS</span> Error within threshold (&lt;5%)</li>
+          <li><span className="status-indicator warn">WARN</span> Error 5-10% - review recommended</li>
+          <li><span className="status-indicator fail">FAIL</span> Error &gt;10% - investigation required</li>
+        </ul>
       </div>
     </div>
   );
