@@ -6,6 +6,7 @@ import {
   JobsPage,
   JobDetailPage,
   ReportsPage,
+  ReportViewerPage,
   SettingsPage,
 } from './pages';
 
@@ -21,6 +22,7 @@ export const router = createBrowserRouter([
       { path: 'jobs', element: <JobsPage /> },
       { path: 'jobs/:jobId', element: <JobDetailPage /> },
       { path: 'reports', element: <ReportsPage /> },
+      { path: 'reports/:reportId', element: <ReportViewerPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },
