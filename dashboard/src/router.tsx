@@ -4,6 +4,7 @@ import {
   DashboardPage,
   CasesPage,
   JobsPage,
+  JobDetailPage,
   ReportsPage,
   SettingsPage,
 } from './pages';
@@ -18,6 +19,7 @@ export const router = createBrowserRouter([
       { path: 'cases/new', element: <CasesPage /> },
       { path: 'cases/edit/:caseId', element: <CasesPage /> },
       { path: 'jobs', element: <JobsPage /> },
+      { path: 'jobs/:jobId', element: <JobDetailPage /> },
       { path: 'reports', element: <ReportsPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
