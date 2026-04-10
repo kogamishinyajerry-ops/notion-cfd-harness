@@ -6,7 +6,9 @@ D-07: Errors logged but do NOT block pipeline.
 D-08: Three formats: HTML (primary self-contained), PDF, JSON.
 """
 
+import json
 import logging
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -73,18 +75,17 @@ class ReportGenerator:
         reynolds_number: Optional[float] = None,
     ) -> Dict[str, str]:
         """
-        Generate HTML report from postprocess and solver results.
+        Generate all report formats (HTML, PDF, JSON).
 
-        Args:
-            postprocess_result: StandardPostprocessResult from PostprocessRunner
-            solver_result: SolverResult from solver execution
-            case_type: Case type string for literature comparison lookup
-            reynolds_number: Reynolds number for literature comparison
+        D-06: Fully automatic -- no human intervention required.
+        D-07: Errors logged but do NOT block pipeline -- each format fails gracefully.
+        D-08: Three formats: HTML (primary self-contained), PDF, JSON.
 
         Returns:
-            Dict with "html" key pointing to generated HTML file path.
-            Per D-07: errors are logged, not raised; returns {"html": "", "error": str}
+            Dict with keys: html, pdf, json (empty string if format failed)
         """
+        result = {"html": "", "pdf": "", "json": ""}
+
         try:
             # 1. Generate charts
             residual_chart_b64 = self._generate_residual_chart(postprocess_result.residuals)
@@ -95,7 +96,7 @@ class ReportGenerator:
                 postprocess_result, solver_result, case_type, reynolds_number
             )
 
-            # 3. Render HTML
+            # 3. Render HTML (primary format)
             html_path = self._render_html(
                 postprocess_result,
                 solver_result,
@@ -103,12 +104,71 @@ class ReportGenerator:
                 residual_chart_b64,
                 field_charts,
             )
+            result["html"] = str(html_path)
 
-            return {"html": str(html_path)}
+            # 4. Render PDF from HTML (archival format)
+            # D-07: PDF errors are logged, not blocking
+            try:
+                pdf_path = self._render_pdf(html_path)
+                result["pdf"] = str(pdf_path)
+            except Exception as e:
+                logger.warning(f"PDF generation failed: {e}")
+
+            # 5. Render JSON (machine consumption)
+            # D-07: JSON errors are logged, not blocking
+            try:
+                json_path = self._render_json(postprocess_result, solver_result, summary_data)
+                result["json"] = str(json_path)
+            except Exception as e:
+                logger.warning(f"JSON generation failed: {e}")
 
         except Exception as e:
+            # D-07: Top-level errors logged, not blocking
             logger.error(f"Report generation failed: {e}")
-            return {"html": "", "error": str(e)}  # D-07: logged, not blocking
+
+        return result
+
+    def generate_artifacts(
+        self,
+        postprocess_result: StandardPostprocessResult,
+        solver_result: SolverResult,
+        case_type: str = "unknown",
+        reynolds_number: Optional[float] = None,
+    ) -> List["PostprocessArtifact"]:
+        """
+        Generate all formats and return PostprocessArtifact list for pipeline integration.
+
+        Returns list of PostprocessArtifact with format, file_path, metadata.
+        Empty file_path indicates format failed (per D-07).
+        """
+        from knowledge_compiler.phase3.schema import PostprocessArtifact, PostprocessFormat
+
+        paths = self.generate(postprocess_result, solver_result, case_type, reynolds_number)
+
+        artifacts = []
+
+        if paths.get("html"):
+            artifacts.append(PostprocessArtifact(
+                format=PostprocessFormat.HTML_REPORT,
+                file_path=paths["html"],
+                metadata={"case_type": case_type, "reynolds_number": reynolds_number},
+            ))
+
+        if paths.get("pdf") and paths["pdf"] not in ("", "."):
+            artifacts.append(PostprocessArtifact(
+                format=PostprocessFormat.PDF,
+                file_path=paths["pdf"],
+                metadata={"case_type": case_type, "reynolds_number": reynolds_number},
+            ))
+
+        if paths.get("json"):
+            artifacts.append(PostprocessArtifact(
+                format=PostprocessFormat.JSON,
+                file_path=paths["json"],
+                metadata={"case_type": case_type, "reynolds_number": reynolds_number},
+            ))
+
+        return artifacts
 
     def _generate_residual_chart(self, residuals: Optional[ResidualSummary]) -> str:
         """
@@ -250,3 +310,89 @@ class ReportGenerator:
         output_path.write_text(html_content, encoding="utf-8")
 
         return output_path
+
+    def _render_json(
+        self,
+        postprocess_result: StandardPostprocessResult,
+        solver_result: SolverResult,
+        summary_data: Dict[str, Any],
+    ) -> Path:
+        """Generate JSON machine-consumable format (D-08)."""
+        output_data = {
+            "report_metadata": {
+                "result_id": postprocess_result.result_id,
+                "generated_at": time.time(),
+                "case_path": postprocess_result.case_path,
+                "solver_type": postprocess_result.solver_type,
+            },
+            "convergence": {
+                "converged": postprocess_result.residuals.converged if postprocess_result.residuals else False,
+                "convergence_reason": postprocess_result.residuals.convergence_reason if postprocess_result.residuals else "",
+                "final_residuals": postprocess_result.residuals.variables if postprocess_result.residuals else {},
+                "initial_residuals": postprocess_result.residuals.initial if postprocess_result.residuals else {},
+                "iterations": postprocess_result.residuals.iterations if postprocess_result.residuals else {},
+            },
+            "performance": {
+                "processing_time": postprocess_result.processing_time,
+                "runtime_seconds": solver_result.runtime_seconds,
+            },
+            "mesh_info": postprocess_result.mesh_info,
+            "derived_quantities": [
+                {
+                    "name": q.name,
+                    "value": q.value,
+                    "unit": q.unit,
+                    "location": q.location,
+                    "formula": q.formula,
+                }
+                for q in postprocess_result.derived_quantities
+            ],
+            "literature_comparisons": [
+                {
+                    "metric_name": comp.metric_name,
+                    "simulated_value": comp.simulated_value,
+                    "reference_value": comp.reference_value,
+                    "error_pct": comp.error_pct,
+                    "unit": comp.unit,
+                    "reference_source": comp.reference_source,
+                    "reynolds_number": comp.reynolds_number,
+                    "status": comp.status,
+                }
+                for comp in summary_data.get("literature_comparisons", [])
+            ],
+        }
+
+        output_path = Path(self.config.output_dir) / f"report_{postprocess_result.result_id}.json"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_path, "w") as f:
+            json.dump(output_data, f, indent=2)
+
+        logger.info(f"JSON generated: {output_path}")
+        return output_path
+
+    def _render_pdf(self, html_path: Path) -> Path:
+        """
+        Generate PDF archival format from HTML using weasyprint (D-08).
+
+        weasyprint chosen over pdfkit because:
+        - Pure Python, no system dependencies (wkhtmltopdf)
+        - Better macOS compatibility
+        - CSS support aligns with HTML template
+        """
+        try:
+            from weasyprint import HTML
+        except ImportError:
+            logger.warning("weasyprint not installed, skipping PDF generation")
+            return Path("")
+
+        pdf_path = html_path.with_suffix(".pdf")
+
+        try:
+            HTML(filename=str(html_path)).write_pdf(str(pdf_path))
+            logger.info(f"PDF generated: {pdf_path}")
+        except Exception as e:
+            logger.warning(f"PDF generation failed: {e}")
+            return Path("")
+
+        return pdf_path
