@@ -162,32 +162,111 @@ class JobService:
             return {"status": "unknown_job_type", "job_type": submission.job_type}
 
     async def _run_case(self, submission: JobSubmission) -> Dict:
-        """Execute a case."""
-        # In production, this would call the actual CLI/runtime
-        return {
-            "status": "completed",
-            "case_id": submission.case_id,
-            "job_type": submission.job_type,
-            "message": "Case execution simulated",
-        }
+        """Execute a case using the pipeline orchestrator."""
+        try:
+            from knowledge_compiler.phase2d.pipeline_orchestrator import (
+                PipelineOrchestrator,
+                PipelineConfig,
+                PipelineStage,
+            )
+
+            problem_type = submission.parameters.get("problem_type", "external_flow") if submission.parameters else "external_flow"
+
+            config = PipelineConfig(
+                pipeline_id=submission.case_id or "api-job",
+                name=f"API Job: {submission.case_id}",
+                description="Run via API",
+                enabled_stages=[
+                    PipelineStage.REPORT_SPEC_GENERATION,
+                    PipelineStage.PHYSICS_PLANNING,
+                    PipelineStage.EXECUTION,
+                ],
+            )
+
+            orchestrator = PipelineOrchestrator(config)
+            result = orchestrator.execute({
+                "problem_type": problem_type,
+                "physics_models": ["RANS"],
+            })
+
+            return {
+                "status": "completed",
+                "case_id": submission.case_id,
+                "job_type": submission.job_type,
+                "message": "Case executed via pipeline",
+                "result": result,
+            }
+        except Exception as e:
+            logger.error(f"Case execution failed: {e}")
+            return {
+                "status": "failed",
+                "case_id": submission.case_id,
+                "job_type": submission.job_type,
+                "error": str(e),
+            }
 
     async def _verify_case(self, submission: JobSubmission) -> Dict:
-        """Verify case results."""
-        return {
-            "status": "completed",
-            "case_id": submission.case_id,
-            "job_type": submission.job_type,
-            "message": "Verification simulated",
-        }
+        """Verify case results using the verify console."""
+        try:
+            from knowledge_compiler.orchestrator.verify_console import VerifyConsole
+
+            console = VerifyConsole()
+            results_data = submission.parameters.get("results_data", {}) if submission.parameters else {}
+
+            report = console.run_full_verification(
+                submission.case_id or "CASE-001",
+                results_data
+            )
+
+            return {
+                "status": "completed",
+                "case_id": submission.case_id,
+                "job_type": submission.job_type,
+                "message": "Verification completed",
+                "result": report.to_dict() if hasattr(report, 'to_dict') else str(report),
+                "passed": report.overall_pass if hasattr(report, 'overall_pass') else True,
+            }
+        except Exception as e:
+            logger.error(f"Verification failed: {e}")
+            return {
+                "status": "failed",
+                "case_id": submission.case_id,
+                "job_type": submission.job_type,
+                "error": str(e),
+            }
 
     async def _generate_report(self, submission: JobSubmission) -> Dict:
-        """Generate case report."""
-        return {
-            "status": "completed",
-            "case_id": submission.case_id,
-            "job_type": submission.job_type,
-            "message": "Report generation simulated",
-        }
+        """Generate case report using the report generator."""
+        try:
+            from knowledge_compiler.phase9_report import ReportGenerator
+
+            case_id = submission.case_id or "CASE-001"
+            parameters = submission.parameters or {}
+
+            # Generate report (standalone, without case context)
+            report_gen = ReportGenerator()
+            report_result = report_gen.generate(
+                case_id=case_id,
+                solver_result=parameters.get("solver_result"),
+                derived_quantities=parameters.get("derived_quantities"),
+            )
+
+            return {
+                "status": "completed",
+                "case_id": case_id,
+                "job_type": submission.job_type,
+                "message": "Report generated",
+                "result": report_result,
+                "formats": list(report_result.keys()) if isinstance(report_result, dict) else ["html"],
+            }
+        except Exception as e:
+            logger.error(f"Report generation failed: {e}")
+            return {
+                "status": "failed",
+                "case_id": submission.case_id,
+                "job_type": submission.job_type,
+                "error": str(e),
+            }
 
     def get_job(self, job_id: str) -> Optional[JobResponse]:
         """
