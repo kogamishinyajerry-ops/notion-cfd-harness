@@ -58,12 +58,15 @@ export interface SolverConfig {
 export interface Job {
   id: string;
   case_id: string;
-  case_name: string;
+  case_name?: string;
   status: JobStatus;
   progress: number;
+  submitted_at?: string;
   started_at?: string;
   completed_at?: string;
   error_message?: string;
+  result?: Record<string, unknown>;
+  job_type?: string;
 }
 
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';

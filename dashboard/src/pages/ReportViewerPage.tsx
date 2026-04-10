@@ -16,8 +16,6 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  ScatterChart,
-  Scatter,
 } from 'recharts';
 import { apiClient } from '../services/api';
 import type { Report, ReportFormat, ReportStatus } from '../services/types';
@@ -234,7 +232,7 @@ function ResidualsTab() {
                 border: '1px solid var(--border-color)',
                 borderRadius: '4px',
               }}
-              formatter={(value: number) => value.toExponential(2)}
+              formatter={(value) => typeof value === 'number' ? value.toExponential(2) : String(value)}
             />
             <Legend />
             <Line
@@ -531,13 +529,12 @@ function ComparisonTab() {
                   border: '1px solid var(--border-color)',
                   borderRadius: '4px',
                 }}
-                formatter={(value: number) => `${value.toFixed(2)}%`}
+                formatter={(value) => typeof value === 'number' ? `${value.toFixed(2)}%` : String(value)}
               />
               <Bar
                 dataKey="difference"
                 name="Error %"
                 fill="#f59e0b"
-                background="#f0f0f0"
               />
             </BarChart>
           </ResponsiveContainer>

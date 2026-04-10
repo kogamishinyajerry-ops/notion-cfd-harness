@@ -5,7 +5,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../services/api';
-import wsService, { WebSocketMessage } from '../services/websocket';
+import wsService from '../services/websocket';
+import type { WebSocketMessage } from '../services/websocket';
 import type { Job, JobStatus } from '../services/types';
 import './JobQueueView.css';
 
@@ -15,7 +16,7 @@ interface JobQueueViewProps {
 }
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; className: string }> = {
-  pending: { label: 'Queued', className: 'status-queued' },
+  queued: { label: 'Queued', className: 'status-queued' },
   running: { label: 'Running', className: 'status-running' },
   completed: { label: 'Completed', className: 'status-completed' },
   failed: { label: 'Failed', className: 'status-failed' },
@@ -70,7 +71,7 @@ export default function JobQueueView({ caseId, onJobSelect }: JobQueueViewProps)
     const unsubscribers: (() => void)[] = [];
 
     jobs.forEach((job) => {
-      if (job.status === 'pending' || job.status === 'running') {
+      if (job.status === 'queued' || job.status === 'running') {
         // Connect to WebSocket
         wsService.connect(job.id);
 
@@ -168,10 +169,10 @@ export default function JobQueueView({ caseId, onJobSelect }: JobQueueViewProps)
           Running ({statusCounts.running || 0})
         </button>
         <button
-          className={`filter-btn ${filter === 'pending' ? 'active' : ''}`}
-          onClick={() => setFilter('pending')}
+          className={`filter-btn ${filter === 'queued' ? 'active' : ''}`}
+          onClick={() => setFilter('queued')}
         >
-          Queued ({statusCounts.pending || 0})
+          Queued ({statusCounts.queued || 0})
         </button>
         <button
           className={`filter-btn ${filter === 'completed' ? 'active' : ''}`}
@@ -217,7 +218,7 @@ interface JobCardProps {
 
 function JobCard({ job, onClick }: JobCardProps) {
   const config = STATUS_CONFIG[job.status];
-  const isActive = job.status === 'pending' || job.status === 'running';
+  const isActive = job.status === 'queued' || job.status === 'running';
 
   return (
     <div

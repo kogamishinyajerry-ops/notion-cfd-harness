@@ -4,7 +4,6 @@
  */
 
 import JobQueueView from '../components/JobQueueView';
-import type { Job } from '../services/types';
 
 export default function JobsPage() {
   return (

@@ -5,12 +5,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiClient } from '../services/api';
-import wsService, { WebSocketMessage } from '../services/websocket';
+import wsService from '../services/websocket';
+import type { WebSocketMessage } from '../services/websocket';
 import type { Job, JobLog, JobStatus } from '../services/types';
 import './JobDetailPage.css';
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; className: string }> = {
-  pending: { label: 'Queued', className: 'status-queued' },
+  queued: { label: 'Queued', className: 'status-queued' },
   running: { label: 'Running', className: 'status-running' },
   completed: { label: 'Completed', className: 'status-completed' },
   failed: { label: 'Failed', className: 'status-failed' },
@@ -37,7 +38,7 @@ function formatDuration(startedAt?: string, completedAt?: string): string {
 // Mock logs for demonstration - in production these would come from the API
 function generateMockLogs(job: Job): JobLog[] {
   const logs: JobLog[] = [
-    { timestamp: job.submitted_at, level: 'INFO', message: 'Job submitted successfully' },
+    { timestamp: job.submitted_at || new Date().toISOString(), level: 'INFO', message: 'Job submitted successfully' },
   ];
   if (job.started_at) {
     logs.push({ timestamp: job.started_at, level: 'INFO', message: 'Job started processing' });
@@ -88,7 +89,7 @@ export default function JobDetailPage() {
   useEffect(() => {
     if (!jobId || !job) return;
 
-    const isActive = job.status === 'pending' || job.status === 'running';
+    const isActive = job.status === 'queued' || job.status === 'running';
     if (!isActive) return;
 
     wsService.connect(jobId);
@@ -180,7 +181,7 @@ export default function JobDetailPage() {
   }
 
   const config = STATUS_CONFIG[job.status];
-  const isActive = job.status === 'pending' || job.status === 'running';
+  const isActive = job.status === 'queued' || job.status === 'running';
 
   return (
     <div className="page job-detail">
