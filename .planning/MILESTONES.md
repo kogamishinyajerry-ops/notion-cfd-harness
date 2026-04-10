@@ -4,27 +4,46 @@
 
 ## v1.2.0 — API & Web Interface
 
-**Planned:** 2026-04-10
-**Phases:** 10-11 (6 plans)
-**Status:** 🔄 Planning
+**Shipped:** 2026-04-10
+**Phases:** 10-11 (6 plans, 6 summaries)
+**Status:** ✅ SHIPPED
 
-### Proposed Phases
+### Key Accomplishments
+
+1. **Phase 10: REST API Server** — FastAPI + JWT auth + WebSocket + case/job endpoints
+2. **Phase 11: Web Dashboard** — React + TypeScript + case builder + job queue + report viewer
+
+### Phase Details
 
 #### Phase 10: REST API Server
-- FastAPI-based REST API exposing all CLI functionality
-- JWT authentication with PermissionLevel enforcement
-- WebSocket support for real-time job progress
-- OpenAPI/Swagger documentation
+- 10-01: FastAPI project structure, case/job endpoints (12 tests)
+- 10-02: JWT authentication with RBAC (36 auth tests)
+- 10-03: WebSocket streaming (14 WS tests)
 
 #### Phase 11: Web Dashboard
-- React + TypeScript frontend
-- Case builder with geometry visualization
-- Job queue management and real-time status
-- Report viewer with interactive charts
+- 11-01: React + TypeScript + Vite, routing, dark/light theme
+- 11-02: Case builder UI with wizard
+- 11-03: Job queue, real-time updates, report viewer
 
-### Dependencies
-- Phase 10 depends on: Phase 9
-- Phase 11 depends on: Phase 10
+### Stats
+- **LOC added:** ~5,000 (api_server/ + dashboard/)
+- **Tests:** 1905 passed, 1 skipped
+- **Tag:** v1.2.0
+
+---
+
+## v1.3.0 — Real-time Convergence Monitoring
+
+**Planned:** 2026-04-10
+**Phases:** TBD
+**Status:** 🔄 Planning
+
+### Target Features
+
+- **RC-01**: 仿真进程残差数据 WebSocket 推送（日志解析）
+- **RC-02**: Dashboard 实时残差曲线（Plotly，随迭代更新）
+- **RC-03**: Job detail 页面收敛监控面板
+- **RC-04**: 收敛完成后结果摘要展示
 
 ---
 
