@@ -138,6 +138,9 @@ class GenericOpenFOAMCaseGenerator:
         blockmesh_text = self._render_blockmesh(vertices, blocks, patches)
 
         # 4. Write all case files
+        (case_dir / "system").mkdir(parents=True, exist_ok=True)
+        (case_dir / "0").mkdir(parents=True, exist_ok=True)
+        (case_dir / "constant").mkdir(parents=True, exist_ok=True)
         (case_dir / "system/blockMeshDict").write_text(blockmesh_text, encoding="utf-8")
         (case_dir / "0/U").write_text(
             self._render_bc_field("U", boundary.patches, physics), encoding="utf-8"
@@ -187,34 +190,32 @@ class GenericOpenFOAMCaseGenerator:
 
     @staticmethod
     def _body_in_channel_vertices(geometry: GeometrySpec, mesh: MeshSpec) -> list[_Vertex]:
-        """Generate 16-vertex grid (4x4 at z=0 + 4x4 at z=thickness) with body cutout.
+        """Generate 4x4 vertex grid (16 per z-layer, 32 total) for body-in-channel.
 
-        Uses 4-column x grid and 4-row y grid. Body interior vertices are skipped.
+        Uses 4 x-coordinates and 4 y-coordinates to create a 3x3 cell grid in xy.
+        nz=1 gives 1 z-interval (2 z-layers), yielding 8 outer cells * 1 = 8 hex blocks.
+
+        The body occupies the 2x2 cell region at the center of the 3x3 grid.
+        The 8 outer cells form the channel blocks.
+
+        Vertex layout per z-layer (4x4 grid = 16 vertices):
+          v0   v1   v2   v3   (y=y_min)
+          v4   v5   v6   v7   (y=y_body_min)
+          v8   v9   v10  v11  (y=y_body_max)
+          v12  v13  v14  v15  (y=y_max)
+        z-layers: z=0 (v0-v15), z=thickness (v16-v31)
         """
-        nx, ny = 4, 4
-
-        def col(n: int, x0: float, x1: float) -> list[float]:
-            if n == 1:
-                return [(x0 + x1) / 2]
-            return [x0 + i * (x1 - x0) / n for i in range(n + 1)]
-
-        x_cols = col(nx, geometry.x_min, geometry.x_max)
-        y_rows = col(ny, geometry.y_min, geometry.y_max)
-        bx0 = geometry.body_x_min
-        bx1 = geometry.body_x_max
-        by0 = geometry.body_y_min
-        by1 = geometry.body_y_max
+        xs = [geometry.x_min, geometry.body_x_min, geometry.body_x_max, geometry.x_max]
+        ys = [geometry.y_min, geometry.body_y_min, geometry.body_y_max, geometry.y_max]
+        zs = [0.0, geometry.thickness]
 
         verts = []
-        for z in (0.0, geometry.thickness):
-            for y in y_rows:
-                for x in x_cols:
-                    # Skip body interior
-                    if bx0 is not None and bx1 is not None and by0 is not None and by1 is not None:
-                        if bx0 <= x <= bx1 and by0 <= y <= by1:
-                            continue
+        for z in zs:
+            for y in ys:
+                for x in xs:
                     verts.append(_Vertex(x, y, z))
-        return verts  # 16 or fewer
+        # 16 per z-layer x 2 z-layers = 32 vertices total
+        return verts
 
     @staticmethod
     def _backward_facing_step_vertices(geometry: GeometrySpec, mesh: MeshSpec) -> list[_Vertex]:
@@ -280,8 +281,40 @@ class GenericOpenFOAMCaseGenerator:
             ]
         elif geometry.geometry_type == GeometryType.BODY_IN_CHANNEL:
             # 8 blocks: outer ring around body hole
-            # Simplified: return empty list as placeholder (Wave 3 will do full implementation)
-            return []
+            # 4x4 xy-vertex grid (16 per z-layer) with nz=1 (2 z-layers)
+            # gives 3x3 = 9 cells in xy, body occupies center 2x2 cells (1,1),(1,2),(2,1),(2,2)
+            # 8 outer cells form the channel blocks
+            #
+            # Vertex layout per z-layer (4x4 = 16 vertices):
+            #   v0   v1   v2   v3   (y=y_min)
+            #   v4   v5   v6   v7   (y=y_body_min)
+            #   v8   v9   v10  v11  (y=y_body_max)
+            #   v12  v13  v14  v15  (y=y_max)
+            # z=0: v0-v15, z=thickness: v16-v31
+            nx_l = mesh.nx_left if mesh.nx_left else 20
+            nx_b = mesh.nx_body if mesh.nx_body else 10
+            nx_r = mesh.nx_right if mesh.nx_right else 60
+            ny_o = mesh.ny_outer if mesh.ny_outer else 20
+            ny_b = mesh.ny_body if mesh.ny_body else 10
+
+            return [
+                # cell (0,0): bottom-left corner
+                _HexBlock(vertices=[0, 1, 5, 4, 16, 17, 21, 20], cells=(nx_l, ny_o, 1)),
+                # cell (1,0): bottom-middle
+                _HexBlock(vertices=[1, 2, 6, 5, 17, 18, 22, 21], cells=(nx_b, ny_o, 1)),
+                # cell (2,0): bottom-right corner
+                _HexBlock(vertices=[2, 3, 7, 6, 18, 19, 23, 22], cells=(nx_r, ny_o, 1)),
+                # cell (0,1): middle-left
+                _HexBlock(vertices=[4, 5, 9, 8, 20, 21, 25, 24], cells=(nx_l, ny_b, 1)),
+                # cell (0,2): top-left corner
+                _HexBlock(vertices=[8, 9, 13, 12, 24, 25, 29, 28], cells=(nx_l, ny_o, 1)),
+                # cell (1,2): top-middle
+                _HexBlock(vertices=[9, 10, 14, 13, 25, 26, 30, 29], cells=(nx_b, ny_o, 1)),
+                # cell (2,2): top-right corner
+                _HexBlock(vertices=[10, 11, 15, 14, 26, 27, 31, 30], cells=(nx_r, ny_o, 1)),
+                # cell (2,1): middle-right
+                _HexBlock(vertices=[6, 7, 11, 10, 22, 23, 27, 26], cells=(nx_r, ny_b, 1)),
+            ]
         raise NotImplementedError(f"Geometry {geometry.geometry_type} not yet implemented")
 
     @staticmethod
