@@ -86,9 +86,31 @@
 </details>
 
 <details>
-<summary>🔄 v1.3.0 — Next Milestone (planning)</summary>
+<summary>🔄 v1.3.0 — Real-time Convergence Monitoring (planning)</summary>
 
-**Goal:** TBD
+**Goal:** 仿真运行时实时追踪收敛曲线，Dashboard 可视化
+
+### Phase 12: Residual Streaming Backend
+- **Goal**: OpenFOAM log residual parser + WebSocket streaming + job abort
+- **Status**: 🔄 Pending
+- **Depends on**: Phase 11
+- **Plans**: 12-01, 12-02, 12-03
+- **Requirements**: MON-01 (残差数据 WS 推送), MON-05 (Job abort 按钮)
+- **Key decisions**: Remove --rm from Docker for abort; ResidualStreamer as asyncio.Task alongside solver subprocess; debounce to 500ms
+
+### Phase 13: Real-time Convergence Frontend
+- **Goal**: Dashboard real-time residual charts + Job detail page
+- **Status**: 🔄 Pending
+- **Depends on**: Phase 12
+- **Plans**: 13-01, 13-02
+- **Requirements**: MON-02 (实时残差曲线), MON-03 (Job detail 收敛监控面板)
+
+### Phase 14: Convergence Intelligence
+- **Goal**: Divergence detection + result summary
+- **Status**: 🔄 Pending
+- **Depends on**: Phase 13
+- **Plans**: 14-01, 14-02
+- **Requirements**: MON-04 (收敛完成后结果摘要), MON-06 (收敛异常检测 + 告警)
 
 </details>
 
@@ -107,6 +129,9 @@
 | 9 | v1.1.0 | 3/3 | Complete | 2026-04-10 |
 | 10 | v1.2.0 | 3/3 | Complete   | 2026-04-10 |
 | 11 | v1.2.0 | 3/3 | Complete   | 2026-04-10 |
+| 12 | v1.3.0 | 3/3 | Pending    | - |
+| 13 | v1.3.0 | 2/2 | Pending    | - |
+| 14 | v1.3.0 | 2/2 | Pending    | - |
 
 ---
 
