@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1.0
-milestone_name: milestone
+milestone: v1.3.0
+milestone_name: Real-time Convergence Monitoring
 status: Planning
-last_updated: "2026-04-10T13:08:34.525Z"
+last_updated: "2026-04-10T17:45:56.658Z"
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 13
-  completed_plans: 13
+  total_phases: 8
+  completed_phases: 6
+  total_plans: 18
+  completed_plans: 18
   percent: 100
 ---
 
@@ -34,54 +34,57 @@ progress:
 
 ## Phase Structure
 
-### Phase 12: Residual Streaming Backend
+### Phase 12: Residual Streaming Backend ✅ COMPLETED
 
 - **Goal**: OpenFOAM log residual parser + WebSocket streaming + job abort
 - **Depends on**: Phase 11
 - **Requirements**: MON-01, MON-05
-- **Plans**: 12-01, 12-02, 12-03
+- **Plans**: 12-01, 12-02, 12-03 (all completed)
 - **Key decisions**:
   - Remove --rm from Docker for abort support
   - ResidualStreamer as asyncio.Task alongside solver subprocess
   - Debounce to 500ms
-  - ResidualParser isolated in `knowledge_compiler/phase2/execution_layer/residual_parser.py`
+  - ConvergenceMessage Pydantic model for WebSocket broadcast
 
-### Phase 13: Real-time Convergence Frontend
+### Phase 13: Real-time Convergence Frontend ✅ COMPLETED
 
 - **Goal**: Dashboard real-time residual charts + Job detail page
 - **Depends on**: Phase 12
 - **Requirements**: MON-02, MON-03
-- **Plans**: 13-01, 13-02
+- **Plans**: 13-01 ✅, 13-02 ✅ (all completed)
 - **Key decisions**:
   - Recharts (already installed) for LineChart
-  - Log-scale Y-axis
-  - 500-point sliding window
+  - Log-scale Y-axis (1e-8 to 1e-1)
+  - 500-point sliding window (FIFO)
+  - Wave 1: WS subscription + ResidualChart component
+  - Wave 2: Job detail page convergence panel
 
-### Phase 14: Convergence Intelligence
+### Phase 14: Convergence Intelligence (Planning Complete)
 
 - **Goal**: Divergence detection + result summary
 - **Depends on**: Phase 13
 - **Requirements**: MON-04, MON-06
-- **Plans**: 14-01, 14-02
+- **Plans**: 14-01 (backend), 14-02 (frontend) — Plans Ready
 - **Key decisions**:
   - Rolling 5-iteration window per variable for divergence detection
   - Divergence alert fires when residual increases 5 consecutive times
   - Convergence criteria overlay at 1e-5
+  - DivergenceDetector wraps residual_callback without breaking existing behavior
 
 ## Requirements Traceability
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| MON-01 | 12 | Pending |
-| MON-02 | 13 | Pending |
-| MON-03 | 13 | Pending |
-| MON-04 | 14 | Pending |
-| MON-05 | 12 | Pending |
-| MON-06 | 14 | Pending |
+| MON-01 | 12 | ✅ Complete |
+| MON-02 | 13 | ✅ Complete |
+| MON-03 | 13 | ✅ Complete |
+| MON-04 | 14 | 📋 Plans Ready |
+| MON-05 | 12 | ✅ Complete |
+| MON-06 | 14 | 📋 Plans Ready |
 
 ## Milestone History
 
 - **M1**: Phases 1-7 (shipped 2026-04-07)
 - **v1.1.0**: Phases 8-9 (shipped 2026-04-10) — CaseGenerator v2 + Report Automation
 - **v1.2.0**: Phases 10-11 (shipped 2026-04-10) — REST API + Web Dashboard
-- **v1.3.0**: Phases 12-14 (planning) — Real-time Convergence Monitoring
+- **v1.3.0**: Phases 12-14 (in progress) — Real-time Convergence Monitoring

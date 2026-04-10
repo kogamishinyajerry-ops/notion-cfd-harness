@@ -27,9 +27,9 @@
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| MON-01 | TBD | - |
-| MON-02 | TBD | - |
-| MON-03 | TBD | - |
-| MON-04 | TBD | - |
-| MON-05 | TBD | - |
-| MON-06 | TBD | - |
+| MON-01 | 12 | ✅ Complete |
+| MON-02 | 13 | ✅ Complete |
+| MON-03 | 13 | ✅ Complete |
+| MON-04 | 14 | 📋 Plans Ready |
+| MON-05 | 12 | ✅ Complete |
+| MON-06 | 14 | 📋 Plans Ready |
