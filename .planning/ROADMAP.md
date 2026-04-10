@@ -52,9 +52,9 @@
 
 ### Phase 9: Report Automation & Postprocess Intelligence
 - **Goal**: 从 SolverResult 自动生成结构化报告 — PostprocessPipeline + ReportGenerator + ReportTeachMode + ComparisonEngine
-- **Status**: Planned
+- **Status**: ✅ Complete
 - **Depends on**: Phase 8
 - **Plans**:
   - [x] 09-01-PLAN.md — ReportGenerator core + HTML template (two-tier structure, chart embedding, gold standards query)
-  - [ ] 09-02-PLAN.md — PDF + JSON output formats (weasyprint integration, JSON schema)
-  - [ ] 09-03-PLAN.md — ReportTeachMode + integration tests (inline correction, pipeline integration)
+  - [x] 09-02-PLAN.md — PDF + JSON output formats (weasyprint integration, JSON schema)
+  - [x] 09-03-PLAN.md — ReportTeachMode + integration tests (inline correction, pipeline integration)
