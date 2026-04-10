@@ -54,6 +54,102 @@ def fig_to_base64_png(fig: plt.Figure, dpi: int = 150) -> str:
     return base64.b64encode(img_bytes).decode("utf-8")
 
 
+class ReportTeachMode:
+    """
+    D-10: Future reports auto-apply corrections from the teach store.
+
+    Loads corrections from CorrectionRecorder storage and applies
+    corrected values to report data before rendering.
+    """
+
+    def __init__(self, storage_path: str = "data/corrections"):
+        self.storage_path = storage_path
+        self._corrections: Dict[str, Dict[str, Any]] = {}
+        self._load_corrections()
+
+    def _load_corrections(self):
+        """Load all corrections from storage."""
+        try:
+            from knowledge_compiler.phase2c.correction_recorder import CorrectionRecorder
+            recorder = CorrectionRecorder(storage_path=self.storage_path)
+            records = recorder.list_records(limit=1000)
+
+            for record in records:
+                if record.approved:
+                    # Only apply approved corrections
+                    self._apply_correction_record(record)
+
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Failed to load corrections: {e}")
+
+    def _apply_correction_record(self, record):
+        """Extract field corrections from a CorrectionRecord."""
+        # Extract field corrections from correct_output
+        correct_output = record.correct_output
+
+        # The validation_result contains field_name and corrected_value
+        if isinstance(correct_output, dict):
+            validation_result = correct_output.get("validation_result", {})
+            if isinstance(validation_result, dict):
+                field_name = validation_result.get("field_name")
+                corrected_value = validation_result.get("corrected_value")
+                if field_name and corrected_value is not None:
+                    self._corrections[field_name] = {
+                        "value": corrected_value,
+                        "source": record.record_id,
+                    }
+
+    def get_corrected_value(self, field_name: str, original_value: Any) -> Any:
+        """
+        Get corrected value for a field, or original if no correction exists.
+
+        D-10: Future reports auto-apply corrections from the teach store.
+        """
+        correction = self._corrections.get(field_name)
+        if correction:
+            logging.getLogger(__name__).debug(
+                f"Applying correction for {field_name}: {original_value} -> {correction['value']}"
+            )
+            return correction["value"]
+        return original_value
+
+    def apply_corrections_to_summary(self, summary_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply corrections to executive summary data before rendering."""
+        corrected = summary_data.copy()
+
+        # Apply corrections to derived_quantities
+        if "derived_quantities" in corrected:
+            corrected["derived_quantities"] = [
+                {
+                    **q,
+                    "value": self.get_corrected_value(q["name"], q["value"]),
+                }
+                for q in corrected["derived_quantities"]
+            ]
+
+        # Apply corrections to literature_comparisons (literature_comparisons are dataclass LiteratureComparison)
+        if "literature_comparisons" in corrected:
+            corrected["literature_comparisons"] = [
+                type(comp)(
+                    metric_name=comp.metric_name,
+                    simulated_value=self.get_corrected_value(
+                        f"{comp.metric_name}_sim", comp.simulated_value
+                    ),
+                    reference_value=comp.reference_value,
+                    error_pct=comp.error_pct,
+                    unit=comp.unit,
+                    reference_source=comp.reference_source,
+                    reynolds_number=comp.reynolds_number,
+                    status=comp.status,
+                )
+                if hasattr(comp, 'metric_name')  # LiteratureComparison dataclass
+                else comp
+                for comp in corrected["literature_comparisons"]
+            ]
+
+        return corrected
+
+
 class ReportGenerator:
     """
     Generates multi-format CFD reports from StandardPostprocessResult.
@@ -63,9 +159,11 @@ class ReportGenerator:
     Per D-07: All errors caught and logged, never blocking the pipeline.
     """
 
-    def __init__(self, config: Optional[ReportConfig] = None) -> None:
+    def __init__(self, config: Optional[ReportConfig] = None, teach_mode: bool = True) -> None:
         self.config = config or ReportConfig()
         self.gold_loader = GoldStandardLoader()
+        # D-10: Auto-apply corrections from teach store
+        self.teach_mode = ReportTeachMode() if teach_mode else None
 
     def generate(
         self,
@@ -234,7 +332,7 @@ class ReportGenerator:
                     postprocess_result, ref_data, reynolds_number
                 )
 
-        return {
+        summary_data = {
             "status": status,
             "precision_status": precision_status,
             "result_id": postprocess_result.result_id,
@@ -250,6 +348,12 @@ class ReportGenerator:
             ],
             "mesh_info": postprocess_result.mesh_info,
         }
+
+        # D-10: Apply corrections from teach store
+        if self.teach_mode:
+            summary_data = self.teach_mode.apply_corrections_to_summary(summary_data)
+
+        return summary_data
 
     def _build_literature_comparisons(
         self,
