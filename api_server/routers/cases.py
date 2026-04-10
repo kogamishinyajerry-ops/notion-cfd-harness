@@ -12,6 +12,7 @@ from api_server.models import (
     CaseListResponse,
     CaseResponse,
     CaseSpec,
+    CaseUpdate,
     ProblemType,
 )
 from api_server.services import CaseService
@@ -92,9 +93,7 @@ async def get_case(case_id: str):
 @router.patch("/cases/{case_id}", response_model=CaseResponse, tags=["cases"])
 async def update_case(
     case_id: str,
-    name: Optional[str] = None,
-    description: Optional[str] = None,
-    status: Optional[str] = None,
+    update: CaseUpdate,
 ):
     """
     Update an existing case.
@@ -106,7 +105,7 @@ async def update_case(
 
     # Validate status if provided
     valid_statuses = ["created", "running", "completed", "failed"]
-    if status and status not in valid_statuses:
+    if update.status and update.status not in valid_statuses:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid status. Must be one of: {valid_statuses}"
@@ -114,9 +113,9 @@ async def update_case(
 
     case = service.update_case(
         case_id=case_id,
-        name=name,
-        description=description,
-        status=status,
+        name=update.name,
+        description=update.description,
+        status=update.status,
     )
 
     if not case:

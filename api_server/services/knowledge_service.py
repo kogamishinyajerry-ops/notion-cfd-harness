@@ -7,7 +7,7 @@ Business logic for knowledge registry queries.
 import logging
 from typing import Any, Dict, List, Optional
 
-from api_server.models import KnowledgeUnit, KnowledgeUnitRef
+from api_server.models import KnowledgeUnit
 
 logger = logging.getLogger(__name__)
 

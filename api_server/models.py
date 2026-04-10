@@ -59,6 +59,13 @@ class CaseSpec(BaseModel):
     permission_level: PermissionLevel = Field(default=PermissionLevel.L1, description="Required permission level")
 
 
+class CaseUpdate(BaseModel):
+    """Specification for updating an existing case"""
+    name: Optional[str] = Field(default=None, description="Case name", min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, description="Case description")
+    status: Optional[str] = Field(default=None, description="Case status")
+
+
 class CaseResponse(BaseModel):
     """Response model for case data"""
     case_id: str = Field(..., description="Unique case identifier")
