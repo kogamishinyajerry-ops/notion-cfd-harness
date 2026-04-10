@@ -6,9 +6,9 @@ from __future__ import annotations
 import importlib
 import shutil
 import subprocess
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
-from knowledge_compiler.phase2.execution_layer.case_generator import OpenFOAMCaseGenerator
+from knowledge_compiler.phase2.execution_layer.case_generator import GenericCaseAdapter, OpenFOAMCaseGenerator
 from knowledge_compiler.phase2.execution_layer.mock_solver import MockSolverExecutor
 from knowledge_compiler.phase2.execution_layer.openfoam_docker import DEFAULT_CASE_ROOT
 from knowledge_compiler.phase2.execution_layer.openfoam_docker import DEFAULT_IMAGE
@@ -30,10 +30,20 @@ class ExecutorFactory:
         ),
     }
 
-    def __init__(self, config: dict[str, Any]):
-        self.config = config or {}
+    def __init__(self, config: Union[str, dict[str, Any]]):
+        if isinstance(config, str):
+            # Support legacy string-path initialization
+            self.config: dict[str, Any] = {"cases_root": config}
+        else:
+            self.config = config or {}
         self._solver_config = self.config.get("solver", {})
         self.fallback = self._solver_config.get("fallback", "mock")
+        # Initialize case generators
+        cases_root = self.config.get("cases_root", DEFAULT_CASE_ROOT)
+        self._cases_root = cases_root
+        self._generators: dict[str, Any] = {
+            "generic": GenericCaseAdapter(str(self._cases_root)),
+        }
 
     def create(self, executor_name: Optional[str] = None) -> SolverExecutor:
         """Create an executor based on config, with fallback on unavailability."""
@@ -163,3 +173,15 @@ class ExecutorFactory:
             return False
 
         return result.returncode == 0
+
+    def get_generator(self, name: str) -> Any:
+        """Return a case generator by name.
+
+        Currently supports:
+        - "generic": GenericCaseAdapter wrapping GenericOpenFOAMCaseGenerator
+        """
+        if name not in self._generators:
+            raise ValueError(
+                f"Unknown generator '{name}'. Available generators: {', '.join(self._generators.keys())}"
+            )
+        return self._generators[name]

@@ -6,7 +6,19 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Optional
+
+from .case_generator_specs import (
+    BCType,
+    BoundaryPatchSpec,
+    BoundarySpec,
+    GeometrySpec,
+    GeometryType,
+    MeshSpec,
+    PhysicsSpec,
+    SolverType,
+)
+from .generic_case_generator import GenericOpenFOAMCaseGenerator
 
 
 @dataclass(frozen=True)
@@ -188,3 +200,92 @@ class OpenFOAMCaseGenerator:
             raise ValueError(f"Unresolved template placeholders: {joined}")
 
         return rendered
+
+
+# Backward-compatibility alias: expose _CASE_PRESETS at module level
+CASE_PRESETS = OpenFOAMCaseGenerator._CASE_PRESETS
+
+
+class GenericCaseAdapter:
+    """Wraps GenericOpenFOAMCaseGenerator to provide CasePreset-style interface.
+
+    Allows legacy code using CasePreset.generate(case_id, parameters)
+    to transparently use the new GenericOpenFOAMCaseGenerator.
+    """
+
+    def __init__(self, output_root: str):
+        self._gen = GenericOpenFOAMCaseGenerator(output_root)
+
+    def generate(self, case_id: str, parameters: Mapping[str, str]) -> Path:
+        """Generate case using parameter mapping.
+
+        Maps CasePreset-style parameters to GeometrySpec/MeshSpec/PhysicsSpec/BoundarySpec.
+        Parameters must include: geometry_type, x_min, x_max, y_min, y_max, thickness,
+        nx, ny, solver, reynolds_number, and boundary patch definitions.
+        """
+        # Parse geometry type
+        geom_type_str = parameters.get("geometry_type", "SIMPLE_GRID")
+        try:
+            geometry_type = GeometryType[geom_type_str.upper().replace("-", "_")]
+        except KeyError:
+            raise ValueError(f"Unknown geometry_type: {geom_type_str}")
+
+        # Build GeometrySpec
+        geometry = GeometrySpec(
+            geometry_type=geometry_type,
+            x_min=float(parameters["x_min"]),
+            x_max=float(parameters["x_max"]),
+            y_min=float(parameters["y_min"]),
+            y_max=float(parameters["y_max"]),
+            thickness=float(parameters.get("thickness", "0.01")),
+            body_x_min=float(parameters["body_x_min"]) if "body_x_min" in parameters else None,
+            body_x_max=float(parameters["body_x_max"]) if "body_x_max" in parameters else None,
+            body_y_min=float(parameters["body_y_min"]) if "body_y_min" in parameters else None,
+            body_y_max=float(parameters["body_y_max"]) if "body_y_max" in parameters else None,
+        )
+
+        # Build MeshSpec
+        mesh_kwargs: dict = {"nx": int(parameters.get("nx", 40)), "ny": int(parameters.get("ny", 40))}
+        if geometry_type == GeometryType.BACKWARD_FACING_STEP:
+            mesh_kwargs.update({
+                "nx_inlet": int(parameters["nx_inlet"]) if "nx_inlet" in parameters else None,
+                "nx_outlet": int(parameters["nx_outlet"]) if "nx_outlet" in parameters else None,
+                "ny_lower": int(parameters["ny_lower"]) if "ny_lower" in parameters else None,
+                "ny_upper": int(parameters["ny_upper"]) if "ny_upper" in parameters else None,
+            })
+        elif geometry_type == GeometryType.BODY_IN_CHANNEL:
+            mesh_kwargs.update({
+                "nx_left": int(parameters["nx_left"]) if "nx_left" in parameters else None,
+                "nx_body": int(parameters["nx_body"]) if "nx_body" in parameters else None,
+                "nx_right": int(parameters["nx_right"]) if "nx_right" in parameters else None,
+                "ny_outer": int(parameters["ny_outer"]) if "ny_outer" in parameters else None,
+                "ny_body": int(parameters["ny_body"]) if "ny_body" in parameters else None,
+            })
+        mesh = MeshSpec(**mesh_kwargs)
+
+        # Build PhysicsSpec
+        physics = PhysicsSpec(
+            solver=SolverType[parameters.get("solver", "ICO_FOAM").upper().replace("-", "_")],
+            reynolds_number=float(parameters["reynolds_number"]),
+            u_inlet=float(parameters.get("u_inlet", "1.0")),
+            u_lid=float(parameters.get("u_lid", "1.0")),
+            k_inlet=float(parameters["k_inlet"]) if "k_inlet" in parameters else None,
+            epsilon_inlet=float(parameters["epsilon_inlet"]) if "epsilon_inlet" in parameters else None,
+            nu=float(parameters["nu"]) if "nu" in parameters else None,
+            end_time=float(parameters.get("end_time", "10.0")),
+            delta_t=float(parameters.get("delta_t", "0.001")),
+            write_interval=float(parameters.get("write_interval", "1.0")),
+            max_co=float(parameters["max_co"]) if "max_co" in parameters else None,
+        )
+
+        # Build BoundarySpec from patch parameters
+        patches: dict[str, BoundaryPatchSpec] = {}
+        for patch_name in ["inlet", "outlet", "movingWall", "fixedWalls", "frontAndBack",
+                           "walls", "symmetry", "cylinder"]:
+            if f"bc_type_{patch_name}" in parameters:
+                bc_type = BCType[parameters[f"bc_type_{patch_name}"].upper().replace("-", "_")]
+                value = parameters.get(f"bc_value_{patch_name}", "")
+                patches[patch_name] = BoundaryPatchSpec(patch_name, bc_type, value)
+        boundary = BoundarySpec(patches=patches)
+
+        return self._gen.generate(case_id, geometry, mesh, physics, boundary)
