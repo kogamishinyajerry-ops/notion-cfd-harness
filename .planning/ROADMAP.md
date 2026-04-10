@@ -42,9 +42,10 @@
 
 ### Phase 8: 通用 CaseGenerator
 - **Goal**: 从 template-based preset (3个case) 进化到任意 OpenFOAM geometry 参数化生成
-- **Status**: Planned
+- **Status**: ✅ Complete
 - **Depends on**: Phase 7
 - **Plans**:
   - [x] 08-01-PLAN.md — Typed dataclasses (GeometrySpec, MeshSpec, PhysicsSpec, BoundarySpec) + validation + test scaffold
   - [x] 08-02-PLAN.md — GenericOpenFOAMCaseGenerator: programmatic blockMeshDict + BC rendering + solver-aware file assembly
   - [x] 08-03-PLAN.md — Integration tests + backward compatibility + Docker round-trip verification
+  - [x] 08-04-PLAN.md — Gap closure: BODY_IN_CHANNEL 8-block hex generation fix

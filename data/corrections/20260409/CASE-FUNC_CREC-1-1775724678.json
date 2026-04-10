@@ -1,0 +1,39 @@
+{
+  "record_id": "CREC-1-1775724678",
+  "created_at": 1775724678.622128,
+  "error_type": "missing_component",
+  "wrong_output": {
+    "anomaly": {
+      "type": "high_aspect_ratio",
+      "message": "网格质量差",
+      "location": "",
+      "severity": "medium"
+    },
+    "solver_result": null,
+    "action_taken": null
+  },
+  "correct_output": {
+    "suggested_actions": [
+      "检查网格质量"
+    ],
+    "retry_strategy": {}
+  },
+  "human_reason": "检测到 high_aspect_ratio 类型的异常，位置: ",
+  "evidence": [
+    "validation_id: VAL-1775724679",
+    "timestamp: 2026-04-09T16:51:18.622140",
+    "attempt_count: 0",
+    "anomaly: high_aspect_ratio at "
+  ],
+  "impact_scope": "single_case",
+  "root_cause": "网格质量问题：宽长比过高导致数值不稳定",
+  "fix_action": "建议修正措施: 网格质量差",
+  "needs_replay": true,
+  "severity": "medium",
+  "replay_status": "pending",
+  "linked_spec_ids": [],
+  "linked_constraint_ids": [],
+  "source_case_id": "CASE-FUNC",
+  "source_validation_id": "VAL-1775724679",
+  "approved": false
+}
