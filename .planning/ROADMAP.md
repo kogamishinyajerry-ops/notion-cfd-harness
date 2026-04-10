@@ -4,7 +4,8 @@
 
 - ✅ **M1** — Well-Harness AI-CFD OS (Phases 1-7, shipped 2026-04-07)
 - ✅ **v1.1.0** — Report Automation & CaseGenerator v2 (Phases 8-9, shipped 2026-04-10)
-- 🔄 **v1.2.0** — API & Web Interface (Phases 10-11, planning)
+- ✅ **v1.2.0** — API & Web Interface (Phases 10-11, shipped 2026-04-10)
+- 🔄 **v1.3.0** — Next Milestone (planning)
 
 ## Phases
 
@@ -68,19 +69,26 @@
 </details>
 
 <details>
-<summary>🔄 v1.2.0 — Phases 10-11 (planning)</summary>
+<summary>✅ v1.2.0 — Phases 10-11 (shipped 2026-04-10)</summary>
 
 ### Phase 10: REST API Server
 - **Goal**: FastAPI-based REST API exposing all CLI functionality
-- **Status**: 🔄 Planning
-- **Depends on**: Phase 9
+- **Status**: ✅ Complete (6/6 verification passed)
 - **Plans**: 10-01, 10-02, 10-03
 
 ### Phase 11: Web Dashboard
 - **Goal**: React-based UI for case management, job monitoring, report viewing
-- **Status**: 🔄 Planning
-- **Depends on**: Phase 10
+- **Status**: ✅ Complete (5/5 verification passed)
 - **Plans**: 11-01, 11-02, 11-03
+
+**Archive:** [v1.2.0-ROADMAP.md](./milestones/v1.2.0-ROADMAP.md)
+
+</details>
+
+<details>
+<summary>🔄 v1.3.0 — Next Milestone (planning)</summary>
+
+**Goal:** TBD
 
 </details>
 
