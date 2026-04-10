@@ -1,0 +1,273 @@
+/* JobQueueView styles */
+
+.job-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.job-queue.loading,
+.job-queue.error {
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--accent-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.job-queue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.job-queue-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.job-stats {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.stat-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.stat-badge.status-queued {
+  background: var(--color-draft);
+  color: white;
+}
+
+.stat-badge.status-running {
+  background: var(--color-running);
+  color: white;
+}
+
+.stat-badge.status-completed {
+  background: var(--color-completed);
+  color: white;
+}
+
+.stat-badge.status-failed {
+  background: var(--color-failed);
+  color: white;
+}
+
+.stat-badge.status-cancelled {
+  background: var(--text-secondary);
+  color: white;
+}
+
+.job-filters {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-btn:hover {
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+}
+
+.filter-btn.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+
+.job-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.job-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.job-card:hover {
+  border-color: var(--accent-color);
+  box-shadow: var(--card-shadow);
+}
+
+.job-card.active {
+  border-left: 3px solid var(--color-running);
+}
+
+.job-card.status-completed {
+  border-left: 3px solid var(--color-completed);
+}
+
+.job-card.status-failed {
+  border-left: 3px solid var(--color-failed);
+}
+
+.job-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.job-id {
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.status-badge {
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-badge.status-queued {
+  background: var(--color-draft);
+  color: white;
+}
+
+.status-badge.status-running {
+  background: var(--color-running);
+  color: white;
+}
+
+.status-badge.status-completed {
+  background: var(--color-completed);
+  color: white;
+}
+
+.status-badge.status-failed {
+  background: var(--color-failed);
+  color: white;
+}
+
+.status-badge.status-cancelled {
+  background: var(--text-secondary);
+  color: white;
+}
+
+.job-details {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.job-case {
+  font-weight: 500;
+}
+
+.progress-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--color-running);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 35px;
+}
+
+.job-error {
+  font-size: 0.875rem;
+  color: var(--color-failed);
+  padding: 0.5rem;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+}
+
+.error-label {
+  font-weight: 600;
+}
+
+.job-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.view-details-link {
+  color: var(--accent-color);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.view-details-link:hover {
+  text-decoration: underline;
+}
+
+.refresh-btn {
+  align-self: flex-end;
+}
+
+.error-message {
+  color: var(--color-failed);
+}
