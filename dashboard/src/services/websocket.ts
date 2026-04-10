@@ -5,7 +5,23 @@
 import { API_BASE_URL } from './config';
 import type { Job } from './types';
 
-export type WebSocketMessageType = 'status' | 'progress' | 'completion' | 'error';
+export type WebSocketMessageType = 'status' | 'progress' | 'completion' | 'error' | 'residual';
+
+/** Residual data message from solver streaming backend */
+export interface ResidualMessage {
+  type: 'residual';
+  job_id: string;
+  iteration: number;
+  time_value: number;
+  residuals: {
+    Ux?: number;
+    Uy?: number;
+    Uz?: number;
+    p?: number;
+    [key: string]: number | undefined;
+  };
+  status: string; // running | converged | diverged | stalled
+}
 
 export interface WebSocketMessage {
   type: WebSocketMessageType;
@@ -14,6 +30,10 @@ export interface WebSocketMessage {
   status?: string;
   result?: Record<string, unknown>;
   error?: string;
+  job_id?: string;
+  iteration?: number;
+  time_value?: number;
+  residuals?: Record<string, number | undefined>;
 }
 
 type MessageHandler = (message: WebSocketMessage) => void;
@@ -122,4 +142,5 @@ class WebSocketService {
 }
 
 export const wsService = new WebSocketService();
+export { ResidualMessage };
 export default wsService;
