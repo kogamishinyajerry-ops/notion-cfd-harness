@@ -13,7 +13,6 @@ import type {
   KnowledgeEntry,
   KnowledgeQueryRequest,
   SystemStatus,
-  ApiResponse,
   PaginatedResponse,
 } from './types';
 
