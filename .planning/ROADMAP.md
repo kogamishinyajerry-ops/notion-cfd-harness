@@ -45,6 +45,6 @@
 - **Status**: Planned
 - **Depends on**: Phase 7
 - **Plans**:
-  - [ ] 08-01-PLAN.md — Typed dataclasses (GeometrySpec, MeshSpec, PhysicsSpec, BoundarySpec) + validation + test scaffold
-  - [ ] 08-02-PLAN.md — GenericOpenFOAMCaseGenerator: programmatic blockMeshDict + BC rendering + solver-aware file assembly
-  - [ ] 08-03-PLAN.md — Integration tests + backward compatibility + Docker round-trip verification
+  - [x] 08-01-PLAN.md — Typed dataclasses (GeometrySpec, MeshSpec, PhysicsSpec, BoundarySpec) + validation + test scaffold
+  - [x] 08-02-PLAN.md — GenericOpenFOAMCaseGenerator: programmatic blockMeshDict + BC rendering + solver-aware file assembly
+  - [x] 08-03-PLAN.md — Integration tests + backward compatibility + Docker round-trip verification
