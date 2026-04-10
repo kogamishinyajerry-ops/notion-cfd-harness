@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CFD Report - {{ summary_data.result_id }}</title>
+    <link rel="stylesheet" href="report.css">
+</head>
+<body>
+
+{# ================================================================ #}
+{# D-01: TWO-TIER STRUCTURE - EXECUTIVE SUMMARY FIRST (TIER 1)     #}
+{# ================================================================ #}
+<div id="executive-summary" class="{{ summary_data.status | lower }}">
+
+    <h1>Executive Summary</h1>
+
+    {# Status Badge: CONVERGED (green) / FAILED (red) #}
+    <div class="status-badge {{ summary_data.status | lower }}">
+        {{ summary_data.status }}
+    </div>
+
+    {# Precision Gate Status #}
+    <div class="precision-gate">
+        <span class="label">Precision Gate:</span>
+        <span class="value {{ summary_data.precision_status | lower }}">{{ summary_data.precision_status }}</span>
+    </div>
+
+    {# Key Metrics Table #}
+    <h2>Key Metrics</h2>
+    <table class="metrics-table">
+        <thead>
+            <tr>
+                <th>Metric</th>
+                <th>Value</th>
+                <th>Unit</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Result ID</td>
+                <td class="correctable" data-field="result_id" data-value="{{ summary_data.result_id }}">{{ summary_data.result_id }}</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>Case Path</td>
+                <td>{{ summary_data.case_path }}</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>Solver</td>
+                <td>{{ summary_data.solver_type }}</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>Processing Time</td>
+                <td>{{ "%.2f"|format(summary_data.processing_time) }}</td>
+                <td>s</td>
+            </tr>
+            <tr>
+                <td>Runtime</td>
+                <td>{{ "%.2f"|format(summary_data.runtime_seconds) }}</td>
+                <td>s</td>
+            </tr>
+        </tbody>
+    </table>
+
+    {# Literature Comparison Summary (D-03/D-04) #}
+    {% if summary_data.literature_comparisons %}
+    <h2>Literature Comparison</h2>
+    <table class="comparison-table">
+        <thead>
+            <tr>
+                <th>Metric</th>
+                <th>Simulated</th>
+                <th>Reference</th>
+                <th>Error %</th>
+                <th>Source</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for comp in summary_data.literature_comparisons %}
+            <tr>
+                <td>{{ comp.metric_name }}</td>
+                <td class="correctable" data-field="{{ comp.metric_name }}_sim" data-value="{{ comp.simulated_value }}">{{ "%.4f"|format(comp.simulated_value) }}</td>
+                <td class="correctable" data-field="{{ comp.metric_name }}_ref" data-value="{{ comp.reference_value }}">{{ "%.4f"|format(comp.reference_value) }}</td>
+                <td class="{{ comp.status | lower }}">{{ "%.2f"|format(comp.error_pct) }}%</td>
+                <td>{{ comp.reference_source }}</td>
+                <td class="{{ comp.status | lower }}">{{ comp.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+</div>
+
+{# ================================================================ #}
+{# D-02: RESIDUAL CONVERGENCE CHART (EMBEDDED AS BASE64 PNG)        #}
+{# ================================================================ #}
+{% if residual_chart_b64 %}
+<div id="residual-chart">
+    <h2>Residual Convergence</h2>
+    <img src="{{ 'data:image/png;base64,' | safe }}{{ residual_chart_b64 }}" alt="Residual Convergence" />
+</div>
+{% endif %}
+
+{# ================================================================ #}
+{# D-01: TWO-TIER STRUCTURE - DETAILED BREAKDOWN (TIER 2)          #}
+{# ================================================================ #}
+<div id="detailed-breakdown">
+
+    <h1>Detailed Breakdown</h1>
+
+    {# Residuals Section #}
+    <div class="section">
+        <h2>Final Residuals</h2>
+        {% if residuals and residuals.variables %}
+        <table class="residuals-table">
+            <thead>
+                <tr>
+                    <th>Variable</th>
+                    <th>Final Residual</th>
+                    <th>Initial Residual</th>
+                    <th>Iterations</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for var, final_res in residuals.variables.items() %}
+                <tr>
+                    <td>{{ var }}</td>
+                    <td class="correctable" data-field="residual_{{ var }}" data-value="{{ final_res }}">{{ "%.6e"|format(final_res) }}</td>
+                    <td>{{ "%.6e"|format(residuals.initial.get(var, 0)) }}</td>
+                    <td>{{ residuals.iterations.get(var, '-') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="no-data">No residual data available.</p>
+        {% endif %}
+    </div>
+
+    {# Derived Quantities Section #}
+    {% if summary_data.derived_quantities %}
+    <div class="section">
+        <h2>Derived Quantities</h2>
+        <table class="metrics-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Value</th>
+                    <th>Unit</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for q in summary_data.derived_quantities %}
+                <tr>
+                    <td>{{ q.name }}</td>
+                    <td class="correctable" data-field="{{ q.name }}" data-value="{{ q.value }}">{{ "%.4f"|format(q.value) }}</td>
+                    <td>{{ q.unit }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {# Field Data Section #}
+    {% if fields %}
+    <div class="section">
+        <h2>Field Data</h2>
+        <table class="fields-table">
+            <thead>
+                <tr>
+                    <th>Field</th>
+                    <th>Type</th>
+                    <th>Min</th>
+                    <th>Max</th>
+                    <th>Mean</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for field in fields %}
+                <tr>
+                    <td>{{ field.name }}</td>
+                    <td>{{ field.field_type.value }}</td>
+                    <td>{{ "%.4f"|format(field.min_value or 0) }}</td>
+                    <td>{{ "%.4f"|format(field.max_value or 0) }}</td>
+                    <td>{{ "%.4f"|format(field.mean_value or 0) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {# Mesh Information Section #}
+    {% if summary_data.mesh_info %}
+    <div class="section">
+        <h2>Mesh Information</h2>
+        <pre>{{ summary_data.mesh_info | tojson(indent=2) }}</pre>
+    </div>
+    {% endif %}
+
+</div>
+
+{# ================================================================ #}
+{# D-09: INLINE CORRECTION MECHANISM FOOTER                       #}
+{# ================================================================ #}
+<div id="correction-footer">
+    <p>Found an error? Click on any value to flag it for correction.</p>
+    <p class="correction-note">Corrections are recorded to the teach store and applied to future reports.</p>
+</div>
+
+<script>
+{# D-09: Inline correction via query param #}
+document.querySelectorAll('.correctable').forEach(function(el) {
+    el.style.cursor = 'pointer';
+    el.title = 'Click to flag incorrect value';
+    el.addEventListener('click', function() {
+        var field = el.getAttribute('data-field');
+        var value = el.getAttribute('data-value');
+        var recordId = '{{ summary_data.result_id }}';
+        var correctionUrl = '/correct?record=' + recordId + '&field=' + encodeURIComponent(field) + '&value=' + encodeURIComponent(value);
+        window.location.href = correctionUrl;
+    });
+});
+</script>
+
+</body>
+</html>
