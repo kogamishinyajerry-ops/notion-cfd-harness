@@ -92,7 +92,7 @@
 
 ### Phase 12: Residual Streaming Backend
 - **Goal**: OpenFOAM log residual parser + WebSocket streaming + job abort
-- **Status**: 🔄 Pending
+- **Status**: ✅ Complete
 - **Depends on**: Phase 11
 - **Plans**: 12-01, 12-02, 12-03
 - **Requirements**: MON-01 (残差数据 WS 推送), MON-05 (Job abort 按钮)
@@ -100,7 +100,7 @@
 
 ### Phase 13: Real-time Convergence Frontend
 - **Goal**: Dashboard real-time residual charts + Job detail page
-- **Status**: 🔄 Pending
+- **Status**: 📋 Plans Ready
 - **Depends on**: Phase 12
 - **Plans**: 13-01, 13-02
 - **Requirements**: MON-02 (实时残差曲线), MON-03 (Job detail 收敛监控面板)
@@ -129,8 +129,8 @@
 | 9 | v1.1.0 | 3/3 | Complete | 2026-04-10 |
 | 10 | v1.2.0 | 3/3 | Complete   | 2026-04-10 |
 | 11 | v1.2.0 | 3/3 | Complete   | 2026-04-10 |
-| 12 | v1.3.0 | 3/3 | Pending    | - |
-| 13 | v1.3.0 | 2/2 | Pending    | - |
+| 12 | v1.3.0 | 3/3 | Complete   | - |
+| 13 | v1.3.0 | 2/2 | Plans Ready| - |
 | 14 | v1.3.0 | 2/2 | Pending    | - |
 
 ---
