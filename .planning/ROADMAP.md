@@ -54,4 +54,7 @@
 - **Goal**: 从 SolverResult 自动生成结构化报告 — PostprocessPipeline + ReportGenerator + ReportTeachMode + ComparisonEngine
 - **Status**: Planned
 - **Depends on**: Phase 8
-- **Plans**: TBD (run /gsd-plan-phase 9 to break down)
+- **Plans**:
+  - [x] 09-01-PLAN.md — ReportGenerator core + HTML template (two-tier structure, chart embedding, gold standards query)
+  - [ ] 09-02-PLAN.md — PDF + JSON output formats (weasyprint integration, JSON schema)
+  - [ ] 09-03-PLAN.md — ReportTeachMode + integration tests (inline correction, pipeline integration)
