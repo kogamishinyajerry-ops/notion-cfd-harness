@@ -12,6 +12,24 @@
   --nav-text: #ffffff;
   --nav-active: #e94560;
   --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+  /* Case status colors */
+  --color-draft: #9ca3af;
+  --color-validated: #3b82f6;
+  --color-running: #f59e0b;
+  --color-completed: #10b981;
+  --color-failed: #ef4444;
+
+  /* Geometry preview colors */
+  --color-preview-bg: #f8fafc;
+  --color-grid: #e2e8f0;
+  --color-domain: #3b82f6;
+  --color-domain-stroke: #1d4ed8;
+  --color-body: #f97316;
+  --color-body-stroke: #c2410c;
+  --color-step: #8b5cf6;
+  --color-patch-label: #64748b;
+  --color-flow-arrow: #10b981;
 }
 
 [data-theme='dark'] {
@@ -27,6 +45,17 @@
   --nav-text: #ffffff;
   --nav-active: #e94560;
   --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+  /* Geometry preview colors - dark mode */
+  --color-preview-bg: #1e293b;
+  --color-grid: #334155;
+  --color-domain: #3b82f6;
+  --color-domain-stroke: #60a5fa;
+  --color-body: #f97316;
+  --color-body-stroke: #fb923c;
+  --color-step: #a78bfa;
+  --color-patch-label: #94a3b8;
+  --color-flow-arrow: #34d399;
 }
 
 * {
