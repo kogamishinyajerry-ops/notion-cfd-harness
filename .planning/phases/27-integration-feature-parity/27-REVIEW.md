@@ -45,7 +45,7 @@ The most significant issue is a test that does not verify its stated behavioral 
 **File:** `tests/phase27/test_filter_registry.py:301-308`
 **Issue:** The test `test_filter_streamtracer_caps_max_steps` calls `on_filter_streamtracer_create(integration_direction="FORWARD", max_steps=99999)` and only asserts `result["success"] is True`. The docstring explicitly states "caps max_steps at 10000", but the actual capped value is never checked. If the capping logic is broken and 99999 is passed through unmodified, the test still passes.
 
-**Fix:**
+**Fix (applied commit `5fe2efb`):**
 ```python
 def test_filter_streamtracer_caps_max_steps(self, ns):
     """on_filter_streamtracer_create caps max_steps at 10000."""
@@ -53,19 +53,12 @@ def test_filter_streamtracer_caps_max_steps(self, ns):
         integration_direction="FORWARD", max_steps=99999
     )
     assert result["success"] is True
-    # Verify the proxy was called with capped value (10000)
-    calls = ns["_simple_mock"].StreamTracer.call_args_list
-    assert len(calls) == 1
-    # The MockSimple.StreamTracer returns a proxy whose MaximumSteps
-    # should have been capped by the function
-    proxy = result.get("proxy") or ns["_simple_mock"].StreamTracer()
-    # Alternative: verify via the proxy's MaximumSteps attribute directly
-    # by checking the actual call was made with 10000
-    streamtracer_call = ns["_simple_mock"].StreamTracer.call_args
-    assert streamtracer_call is not None
-    _, kwargs = streamtracer_call
-    assert kwargs.get("MaximumSteps", 99999) <= 10000
+    filter_uuid = result["filterId"]
+    registered = ns["_state"].filters[filter_uuid]
+    assert registered["params"]["maxSteps"] <= 10000
 ```
+
+**Status:** Fixed ✅
 
 ---
 
@@ -74,17 +67,15 @@ def test_filter_streamtracer_caps_max_steps(self, ns):
 **File:** `tests/phase27/test_docker_lifecycle.py:285`
 **Issue:** `datetime.utcnow()` is used at line 285 in `test_idle_timeout_shuts_down`. This method is deprecated in Python 3.12 because it returns a naive datetime without timezone info. It should be replaced with `datetime.now(timezone.utc)`.
 
-**Fix:**
+**Fix (applied commit `5fe2efb`):**
 ```python
-# Before:
-old_time = datetime.utcnow() - timedelta(minutes=31)
-
-# After:
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
+# ...
 old_time = datetime.now(timezone.utc) - timedelta(minutes=31)
 ```
+Also updated: `api_server/models.py` (all `default_factory=datetime.utcnow` → `lambda: datetime.now(timezone.utc)`) and `api_server/services/trame_session_manager.py` (both `datetime.utcnow()` calls → `datetime.now(timezone.utc)`) to maintain consistency. Fixed naive datetime in `test_session_isolation.py:191` as well.
 
-Note: `test_session_isolation.py:191` uses `datetime(2026, 1, 1, 0, 0, 0)` (a naive datetime constructor), which is a different pattern and acceptable for mock data construction.
+**Status:** Fixed ✅
 
 ---
 
@@ -148,6 +139,15 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 ```
 
 ---
+
+## Fix Summary
+
+| Finding | File | Fix | Commit |
+|---------|------|-----|--------|
+| WR-01: missing assertion for max_steps cap | test_filter_registry.py:301 | Assert `registered["params"]["maxSteps"] <= 10000` | `5fe2efb` |
+| WR-02: deprecated datetime.utcnow() | test_docker_lifecycle.py:285, models.py, trame_session_manager.py | Replaced with `datetime.now(timezone.utc)` | `5fe2efb` |
+
+**Status:** All warnings resolved ✅
 
 _Reviewed: 2026-04-12_
 _Reviewer: Claude (gsd-code-reviewer)_

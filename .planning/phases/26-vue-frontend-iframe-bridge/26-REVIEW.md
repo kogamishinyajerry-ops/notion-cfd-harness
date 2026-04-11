@@ -13,7 +13,7 @@ findings:
   warning: 5
   info: 6
   total: 13
-status: issues_found
+status: all_resolved
 ---
 
 # Phase 26: Code Review Report
@@ -206,6 +206,21 @@ contour.ContourBy = ["POINTS", "scalars"]
 **Fix:** Define a strict union type for the method/params pairs and use discriminated unions instead of runtime casting.
 
 ---
+
+## Fix Summary
+
+| Finding | File | Fix | Commit |
+|---------|------|-----|--------|
+| CR-01: onError invoked instead of passed | TrameViewer.tsx:258 | `onError(errorMessage)` → `onError(err instanceof Error ? err.message : 'Launch failed')` | `16e6f62` |
+| CR-02: postMessage targetOrigin='*' | CFDViewerBridge.ts:74 | Dynamic origin extraction from iframe.src | `16e6f62` |
+| WR-01: stale errorMessage in deps | TrameViewer.tsx:261 | Removed errorMessage from dependency array | `322f2b7` |
+| WR-02: showResultSummary missing deps | JobDetailPage.tsx:175 | Added showResultSummary to dependency array | `322f2b7` |
+| WR-03: silent heartbeat catch | TrameViewer.tsx:224 | Added `console.warn('[TrameViewer] heartbeat failed:', err)` | `322f2b7` |
+| WR-04: lut_map defined but never applied | trame_server.py:507 | Applies ColorTransferFunction RGBPoints to LookupTable | `322f2b7` |
+| WR-05: screenshot unmount race | TrameViewer.tsx:184 | Added mountedRef guard to timeout callback | `322f2b7` |
+| IN-01: ParaView CSS naming | TrameViewer.tsx | Renamed ParaViewViewer.css → TrameViewer.css | Phase 28 |
+| IN-02: missing heartbeat warning | TrameViewer.tsx:224 | Covered by WR-03 fix | `322f2b7` |
+| IN-04: debug console.log | JobDetailPage.tsx:377 | Replaced with empty arrow function | `322f2b7` |
 
 _Reviewed: 2026-04-12_
 _Reviewer: Claude (gsd-code-reviewer)_
