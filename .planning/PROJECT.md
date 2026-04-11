@@ -1,7 +1,7 @@
 # AI-CFD Knowledge Harness — Project
 
-**Version:** v1.4.0 (Next)
-**Status:** Planning
+**Version:** v1.4.0 (Current)
+**Status:** Shipped
 
 ---
 
@@ -20,7 +20,7 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 - **REST API Server**: FastAPI exposing all CLI functionality
 - **Web Dashboard**: React-based UI for case management
 - **Real-time Convergence Monitoring**: WebSocket residual streaming + DivergenceDetector
-- **ParaView Web 3D Visualization**: Embedded interactive CFD viewer (new in v1.4.0)
+- **ParaView Web 3D Visualization**: Embedded interactive CFD viewer with slice/color controls (v1.4.0)
 
 ## Milestones
 
@@ -30,7 +30,7 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 | v1.1.0 | 8-9 | ✅ Shipped | 2026-04-10 |
 | v1.2.0 | 10-11 | ✅ Shipped | 2026-04-10 |
 | v1.3.0 | 12-14 | ✅ Shipped | 2026-04-11 |
-| v1.4.0 | 15-18 | 🔄 Planning | TBD |
+| v1.4.0 | 15-18 | ✅ Shipped | 2026-04-11 |
 
 ## v1.3.0 — Real-time Convergence Monitoring ✅
 
@@ -50,19 +50,32 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 **Archive:** `.planning/milestones/v1.3.0-ROADMAP.md`
 </details>
 
-## v1.4.0 — ParaView Web 3D Visualization 🔄
+## v1.4.0 — ParaView Web 3D Visualization ✅
 
 **Goal:** Embed ParaView Web viewer in Dashboard for interactive 3D CFD field visualization (velocity, pressure)
 
-**Target features:**
+**Delivered:**
 - **PV-01**: ParaView Web server integration (launch + lifecycle management)
 - **PV-02**: Dashboard embedded 3D viewer (React + ParaView Web client)
 - **PV-03**: Case result loading and field selection (velocity/pressure scalar fields)
 - **PV-04**: Basic interaction (rotation, zoom, slicing, color mapping)
 
+**Archive:** `.planning/milestones/v1.4.0-ROADMAP.md`
+
+## v1.5.0 — Next Milestone (TBD)
+
+**Status:** Planning
+
+### Potential Directions
+- Volume rendering for 3D scalar fields
+- Advanced filters (Clip, Contour, Streamlines)
+- Multi-field overlay (side-by-side case comparison)
+- Screenshot export functionality
+- trame migration research (ParaView Web v3.2.21 is in maintenance mode)
+
 ## Evolution
 
-*Last updated: 2026-04-11 — v1.4.0 started (ParaView Web 3D Visualization)*
+*Last updated: 2026-04-11 — v1.4.0 shipped (ParaView Web 3D Visualization)*
 
 **After each phase transition** (via `/gsd-transition`):
 1. Requirements invalidated? → Move to Out of Scope with reason

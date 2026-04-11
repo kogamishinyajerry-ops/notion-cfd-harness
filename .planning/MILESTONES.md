@@ -1,5 +1,19 @@
 # Milestones
 
+## v1.4.0 ParaView Web 3D Visualization (Shipped: 2026-04-11)
+
+**Phases completed:** 4 phases, 7 plans, 7 tasks
+
+**Key accomplishments:**
+
+- ParaviewWebManager service for ParaView Web Docker sidecar lifecycle: session launch with port allocation, auth key generation, and graceful shutdown via named containers
+- Visualization REST API router (4 endpoints) + idle timeout background task that auto-shuts down sessions after 30 min inactivity + job completion auto-launch
+- Viewer tab integrated into JobDetailPage with ParaViewViewer component for completed jobs
+- Step 2a-2c: Import and helper function
+- New state:
+
+---
+
 ## v1.3.0 Real-time Convergence Monitoring (Shipped: 2026-04-11)
 
 **Phases completed:** 7 phases, 20 plans, 14 tasks
