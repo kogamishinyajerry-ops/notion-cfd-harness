@@ -71,7 +71,18 @@ export default class CFDViewerBridge {
    * Send a message to the Vue iframe via postMessage.
    */
   send(msg: BridgeMessage): void {
-    this.iframe.contentWindow?.postMessage(msg, '*');
+    const target = this.iframe.contentWindow;
+    if (!target) return;
+    // Use the iframe's origin when available to avoid broadcasting to arbitrary origins.
+    // For http://localhost:{port} URLs, extract the origin; fall back to '*'.
+    try {
+      const origin = this.iframe.src.startsWith('http')
+        ? new URL(this.iframe.src).origin
+        : '*';
+      target.postMessage(msg, origin);
+    } catch {
+      target.postMessage(msg, '*');
+    }
   }
 
   /**

@@ -256,7 +256,7 @@ export default function TrameViewer({ jobId, caseDir, onError, onConnected }: Pa
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Launch failed');
       setViewerState('error');
-      if (onError) onError(errorMessage);
+      if (onError) onError(err instanceof Error ? err.message : 'Launch failed');
     }
   }, [jobId, caseDir, onError, errorMessage]);
 
