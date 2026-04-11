@@ -38,7 +38,7 @@ _last_camera_state = None
 
 
 # =============================================================================
-# GPU Detection — copied verbatim from paraview_adv_protocols.py
+# GPU Detection
 # =============================================================================
 
 _gpu_vendor_cache = None
@@ -46,10 +46,7 @@ _gpu_available_cache = None
 
 
 def _detect_gpu():
-    """Detect GPU via EGL vendor string. Returns (available, vendor).
-
-    Copied verbatim from paraview_adv_protocols.py ParaViewWebVolumeRendering._detect_gpu().
-    """
+    """Detect GPU via EGL vendor string. Returns (available, vendor)."""
     global _gpu_vendor_cache, _gpu_available_cache
     if _gpu_vendor_cache is not None:
         return _gpu_available_cache, _gpu_vendor_cache

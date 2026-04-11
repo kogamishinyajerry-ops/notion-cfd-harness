@@ -8,7 +8,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { launchVisualizationSession, sendHeartbeat } from '../services/paraview';
 import CFDViewerBridge from '../services/CFDViewerBridge';
 import AdvancedFilterPanel from './AdvancedFilterPanel';
-import './ParaViewViewer.css';
+import './TrameViewer.css';
 
 // =============================================================================
 // Types
@@ -34,6 +34,7 @@ interface FilterInfo {
     maxSteps?: number;
   };
 }
+export type { FilterInfo }; // Re-export for AdvancedFilterPanel
 
 // =============================================================================
 // Constants
@@ -319,42 +320,22 @@ export default function TrameViewer({ jobId, caseDir, onError, onConnected }: Pa
   }, [screenshotCapturing]);
 
   // ---------------------------------------------------------------------------
-  // Bridge-wrapped sender for AdvancedFilterPanel
+  // Direct filter handlers — no more paraviewProtocol / bridgeSend wrapper
   // ---------------------------------------------------------------------------
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const bridgeSend = useCallback((msg: Record<string, unknown>) => {
-    const method = msg.method as string;
-    const params = msg.params as Record<string, unknown>;
-    if (!bridgeRef.current) return;
+  const handleCreateClip = useCallback((insideOut: boolean, scalarValue: number) => {
+    bridgeRef.current?.send({ type: 'clip_create', insideOut, scalarValue });
+  }, []);
 
-    switch (method) {
-      case 'visualization.filters.clip.create':
-        bridgeRef.current.send({
-          type: 'clip_create',
-          insideOut: params.insideOut as boolean,
-          scalarValue: params.scalarValue as number,
-        });
-        break;
-      case 'visualization.filters.contour.create':
-        bridgeRef.current.send({
-          type: 'contour_create',
-          isovalues: params.isovalues as number[],
-        });
-        break;
-      case 'visualization.filters.streamtracer.create':
-        bridgeRef.current.send({
-          type: 'streamtracer_create',
-          direction: params.integrationDirection as 'FORWARD' | 'BACKWARD',
-          maxSteps: params.maxSteps as number,
-        });
-        break;
-      case 'visualization.filters.delete':
-        bridgeRef.current.send({ type: 'filter_delete', filterId: params.filterId as string });
-        break;
-      case 'visualization.filters.list':
-        bridgeRef.current.send({ type: 'filter_list' });
-        break;
-    }
+  const handleCreateContour = useCallback((isovalues: number[]) => {
+    bridgeRef.current?.send({ type: 'contour_create', isovalues });
+  }, []);
+
+  const handleCreateStreamTracer = useCallback((direction: 'FORWARD' | 'BACKWARD', maxSteps: number) => {
+    bridgeRef.current?.send({ type: 'streamtracer_create', direction, maxSteps });
+  }, []);
+
+  const handleDeleteFilter = useCallback((filterId: string) => {
+    bridgeRef.current?.send({ type: 'filter_delete', filterId });
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -601,10 +582,13 @@ export default function TrameViewer({ jobId, caseDir, onError, onConnected }: Pa
       {renderColorPresetControls()}
       {renderVolumeControls()}
       <AdvancedFilterPanel
-        sendProtocolMessage={bridgeSend}
         activeFilters={activeFilters}
         selectedField={selectedField}
         onFiltersChange={setActiveFilters}
+        onCreateClip={handleCreateClip}
+        onCreateContour={handleCreateContour}
+        onCreateStreamTracer={handleCreateStreamTracer}
+        onDeleteFilter={handleDeleteFilter}
       />
       {renderScalarRangeControls()}
       {renderTimeStepNavigator()}

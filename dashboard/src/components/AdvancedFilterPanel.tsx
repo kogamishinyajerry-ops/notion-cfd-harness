@@ -1,24 +1,36 @@
 import { useState, useCallback } from 'react';
-import {
-  createClipFilterMessage,
-  createContourFilterMessage,
-  createStreamTracerFilterMessage,
-  createDeleteFilterMessage,
-  FilterInfo,
-} from '../services/paraviewProtocol';
+
+interface FilterInfo {
+  id: string; // UUID hex string from trame backend
+  type: 'clip' | 'contour' | 'streamtracer';
+  parameters: {
+    insideOut?: boolean;
+    scalarValue?: number;
+    isovalues?: number[];
+    integrationDirection?: 'FORWARD' | 'BACKWARD';
+    maxSteps?: number;
+  };
+}
 
 interface AdvancedFilterPanelProps {
-  sendProtocolMessage: (message: object) => void;
   activeFilters: FilterInfo[];
   selectedField: string;
   onFiltersChange: (filters: FilterInfo[]) => void;
+  // Direct bridge callbacks — no more sendProtocolMessage / paraviewProtocol
+  onCreateClip: (insideOut: boolean, scalarValue: number) => void;
+  onCreateContour: (isovalues: number[]) => void;
+  onCreateStreamTracer: (direction: 'FORWARD' | 'BACKWARD', maxSteps: number) => void;
+  onDeleteFilter: (filterId: string) => void;
 }
 
 export default function AdvancedFilterPanel({
-  sendProtocolMessage,
   activeFilters,
   selectedField,
   onFiltersChange,
+  onCreateClip,
+  onCreateContour,
+  onCreateStreamTracer,
+  onDeleteFilter,
 }: AdvancedFilterPanelProps) {
   const [activeTab, setActiveTab] = useState<'clip' | 'contour' | 'streamlines'>('clip');
 
@@ -36,8 +48,8 @@ export default function AdvancedFilterPanel({
   const handleCreateClip = useCallback(() => {
     const scalarValue = parseFloat(clipScalarValue);
     if (isNaN(scalarValue)) return;
-    sendProtocolMessage(createClipFilterMessage(clipInsideOut, scalarValue));
-  }, [clipInsideOut, clipScalarValue, sendProtocolMessage]);
+    onCreateClip(clipInsideOut, scalarValue);
+  }, [clipInsideOut, clipScalarValue, onCreateClip]);
 
   const handleCreateContour = useCallback(() => {
     const values = contourIsovalues
@@ -45,21 +57,21 @@ export default function AdvancedFilterPanel({
       .map((v) => parseFloat(v.trim()))
       .filter((v) => !isNaN(v));
     if (values.length === 0) return;
-    sendProtocolMessage(createContourFilterMessage(values));
-  }, [contourIsovalues, sendProtocolMessage]);
+    onCreateContour(values);
+  }, [contourIsovalues, onCreateContour]);
 
   const handleCreateStreamTracer = useCallback(() => {
     const maxSteps = parseInt(streamMaxSteps, 10);
     if (isNaN(maxSteps) || maxSteps <= 0) return;
-    sendProtocolMessage(createStreamTracerFilterMessage(streamDirection, maxSteps));
-  }, [streamDirection, streamMaxSteps, sendProtocolMessage]);
+    onCreateStreamTracer(streamDirection, maxSteps);
+  }, [streamDirection, streamMaxSteps, onCreateStreamTracer]);
 
   const handleDeleteFilter = useCallback(
-    (filterId: number) => {
-      sendProtocolMessage(createDeleteFilterMessage(filterId));
+    (filterId: string) => {
+      onDeleteFilter(filterId);
       onFiltersChange(activeFilters.filter((f) => f.id !== filterId));
     },
-    [activeFilters, onFiltersChange, sendProtocolMessage]
+    [activeFilters, onFiltersChange, onDeleteFilter]
   );
 
   const renderClipTab = () => (
