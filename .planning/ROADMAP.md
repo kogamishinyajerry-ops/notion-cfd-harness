@@ -17,8 +17,8 @@
 
 - [x] **Phase 23: Trame Backend Skeleton** — Trame + trame-vtk + trame-vuetify in Docker, minimal sphere rendering
 - [x] **Phase 24: RPC Protocol Migration** — All 7 @exportRpc converted to @ctrl.add/@state.change, UUID filter registry
-- [ ] **Phase 25: Session Manager Adaptation** — TrameSessionManager replacing ParaViewWebManager, Docker lifecycle
-- [ ] **Phase 26: Vue Frontend + Iframe Bridge** — Vue.js viewer, CFDViewerBridge.ts, postMessage wiring
+- [x] **Phase 25: Session Manager Adaptation** — TrameSessionManager replacing ParaViewWebManager, Docker lifecycle
+- [x] **Phase 26: Vue Frontend + Iframe Bridge** — Vue.js viewer, CFDViewerBridge.ts, postMessage wiring
 - [ ] **Phase 27: Integration + Feature Parity** — End-to-end validation of all v1.4.0/v1.5.0 features
 - [ ] **Phase 28: Cleanup + Old File Removal** — Delete all ParaView Web artifacts
 
@@ -54,7 +54,7 @@
 | 24 | v1.6.0 | 1/1 | Complete    | 2026-04-12 |
 | 25 | v1.6.0 | 1/1 | Complete   | 2026-04-11 |
 | 26 | v1.6.0 | 2/2 | Complete    | 2026-04-11 |
-| 27 | v1.6.0 | 0/1 | Not started | - |
+| 27 | v1.6.0 | 0/2 | Not started | - |
 | 28 | v1.6.0 | 0/1 | Not started | - |
 
 ---
@@ -132,6 +132,7 @@
 
 **Plans:**
 2/2 plans complete
+- [x] 26-01-PLAN.md — CFDViewerBridge.ts postMessage layer + TrameViewer.tsx iframe component + JobDetailPage wiring
 - [x] 26-02-PLAN.md — trame_server.py postMessage listener, camera polling, and state handlers
 
 **UI hint:** yes
@@ -153,8 +154,8 @@
 6. Two concurrent browser tabs connected to different sessions see isolated state (no cross-contamination of filter or camera state)
 
 **Plans:**
-- [x] 26-01-PLAN.md — CFDViewerBridge.ts postMessage layer + TrameViewer.tsx iframe component + JobDetailPage wiring
-- [x] 26-02-PLAN.md — trame_server.py postMessage listener, camera polling, and state handlers
+- [ ] 27-01-PLAN.md — Backend + API integration tests (postMessage handler, filter registry, API endpoints, Docker lifecycle, session isolation)
+- [ ] 27-02-PLAN.md — Frontend integration tests + feature parity checklist (CFDViewerBridge, TrameViewer component, screenshot pipeline, manual checklist)
 
 ### Phase 28: Cleanup + Old File Removal
 
@@ -172,8 +173,7 @@
 5. All call sites in `paraviewProtocol.ts` and other API client files are updated — no `import { ... } from './paraviewProtocol'` references that would cause build failures
 
 **Plans:**
-- [x] 26-01-PLAN.md — CFDViewerBridge.ts postMessage layer + TrameViewer.tsx iframe component + JobDetailPage wiring
-- [x] 26-02-PLAN.md — trame_server.py postMessage listener, camera polling, and state handlers
+0/1 plans not yet created
 
 ---
 
