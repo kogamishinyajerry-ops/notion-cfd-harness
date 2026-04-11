@@ -20,6 +20,7 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 - **REST API Server**: FastAPI exposing all CLI functionality
 - **Web Dashboard**: React-based UI for case management
 - **Real-time Convergence Monitoring**: WebSocket residual streaming + DivergenceDetector
+- **ParaView Web 3D Visualization**: Embedded interactive CFD viewer (new in v1.4.0)
 
 ## Milestones
 
@@ -29,8 +30,12 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 | v1.1.0 | 8-9 | ✅ Shipped | 2026-04-10 |
 | v1.2.0 | 10-11 | ✅ Shipped | 2026-04-10 |
 | v1.3.0 | 12-14 | ✅ Shipped | 2026-04-11 |
+| v1.4.0 | 15-18 | 🔄 Planning | TBD |
 
 ## v1.3.0 — Real-time Convergence Monitoring ✅
+
+<details>
+<summary>Archived — shipped 2026-04-11</summary>
 
 **Goal:** 仿真运行时实时追踪收敛曲线，Dashboard 可视化
 
@@ -43,10 +48,9 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 - MON-06: DivergenceDetector with rolling 5-iteration window per variable + divergence_alert WebSocket message
 
 **Archive:** `.planning/milestones/v1.3.0-ROADMAP.md`
+</details>
 
----
-
-## v1.4.0 — ParaView Web 3D Visualization
+## v1.4.0 — ParaView Web 3D Visualization 🔄
 
 **Goal:** Embed ParaView Web viewer in Dashboard for interactive 3D CFD field visualization (velocity, pressure)
 

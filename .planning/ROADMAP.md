@@ -116,6 +116,39 @@
 
 </details>
 
+<details>
+<summary>🔄 v1.4.0 — ParaView Web 3D Visualization (planning)</summary>
+
+**Goal:** Embed ParaView Web viewer in Dashboard for interactive 3D CFD field visualization
+
+### Phase 15: ParaView Web Server Integration
+- **Goal**: PV-01 — ParaView Web launcher + lifecycle management
+- **Status**: 🔄 Planning
+- **Depends on**: Phase 11
+- **Requirements**: PV-01 (ParaView Web server launch + lifecycle)
+
+### Phase 16: Dashboard 3D Viewer
+- **Goal**: PV-02 — React component embedding ParaView Web client
+- **Status**: 🔄 Planning
+- **Depends on**: Phase 15
+- **Requirements**: PV-02 (embedded 3D viewer)
+
+### Phase 17: Case Result Loading & Field Selection
+- **Goal**: PV-03 — Load OpenFOAM case, field selection, time stepping
+- **Status**: 🔄 Planning
+- **Depends on**: Phase 16
+- **Requirements**: PV-03 (field selection + time navigation)
+
+### Phase 18: Basic Interaction
+- **Goal**: PV-04 — Rotation, zoom, slicing, color mapping
+- **Status**: 🔄 Planning
+- **Depends on**: Phase 17
+- **Requirements**: PV-04 (camera, slice, color map)
+
+**Key decisions**: ParaView Web (not trame) for v1.4.0; OpenFOAMReader native (no export); Slice only (defer Clip/Contour); 3 presets (defer custom)
+
+</details>
+
 ## Progress
 
 | Phase | Milestone | Plans | Status | Completed |
@@ -134,6 +167,10 @@
 | 12 | v1.3.0 | 3/3 | Complete   | 2026-04-11 |
 | 13 | v1.3.0 | 2/2 | Complete   | 2026-04-11 |
 | 14 | v1.3.0 | 2/2 | Complete | 2026-04-11 |
+| 15 | v1.4.0 | TBD | Planning | - |
+| 16 | v1.4.0 | TBD | Planning | - |
+| 17 | v1.4.0 | TBD | Planning | - |
+| 18 | v1.4.0 | TBD | Planning | - |
 
 ---
 
