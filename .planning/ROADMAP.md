@@ -16,7 +16,7 @@
 <summary>Phase checklist</summary>
 
 - [x] **Phase 23: Trame Backend Skeleton** — Trame + trame-vtk + trame-vuetify in Docker, minimal sphere rendering
-- [ ] **Phase 24: RPC Protocol Migration** — All 13 @exportRpc converted to @ctrl.add/@state.change, UUID filter registry
+- [x] **Phase 24: RPC Protocol Migration** — All 7 @exportRpc converted to @ctrl.add/@state.change, UUID filter registry
 - [ ] **Phase 25: Session Manager Adaptation** — TrameSessionManager replacing ParaViewWebManager, Docker lifecycle
 - [ ] **Phase 26: Vue Frontend + Iframe Bridge** — Vue.js viewer, CFDViewerBridge.ts, postMessage wiring
 - [ ] **Phase 27: Integration + Feature Parity** — End-to-end validation of all v1.4.0/v1.5.0 features
@@ -51,7 +51,7 @@
 | 21 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
 | 22 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
 | 23 | v1.6.0 | 1/1 | Complete    | 2026-04-11 |
-| 24 | v1.6.0 | 1/1 | Not started | - |
+| 24 | v1.6.0 | 1/1 | Complete    | 2026-04-12 |
 | 25 | v1.6.0 | 0/1 | Not started | - |
 | 26 | v1.6.0 | 0/1 | Not started | - |
 | 27 | v1.6.0 | 0/1 | Not started | - |
@@ -95,7 +95,7 @@
 6. Filter registry survives server restart without stale ID errors (UUID keys persist across restart)
 
 **Plans:**
-- [ ] 24-01-PLAN.md — Migrate all 7 @exportRpc handlers to @ctrl.add/@state.change with UUID registry
+- [x] 24-01-PLAN.md — Migrate all 7 @exportRpc handlers to @ctrl.add/@state.change with UUID registry
 
 ### Phase 25: Session Manager Adaptation
 

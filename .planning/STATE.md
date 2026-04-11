@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-04-11T16:09:49.893Z"
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 1
   completed_plans: 1
   percent: 100
@@ -26,9 +26,9 @@ progress:
 Phase: 24
 Plan: Not started
 **Active milestone:** v1.6.0 ParaView Web to Trame Migration
-**Active phase:** Phase 23 (Trame Backend Skeleton)
-**Status:** Ready to plan
-**Next:** `/gsd-plan-phase 23`
+**Active phase:** Phase 24 (RPC Protocol Migration)
+**Status:** Complete
+**Next:** `/gsd-plan-phase 25`
 
 ## Phase Structure
 
