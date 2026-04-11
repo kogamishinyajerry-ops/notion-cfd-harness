@@ -1,151 +1,106 @@
-# Requirements — v1.4.0 ParaView Web 3D Visualization
+# Requirements — v1.5.0 Advanced Visualization
 
-**Milestone:** v1.4.0
+**Milestone:** v1.5.0
 **Status:** Active
 **Created:** 2026-04-11
 
 ---
 
-## PV-01: ParaView Web Server Integration
+## VOL-01: Volume Rendering
+
+**Type:** Backend + Frontend
+**Priority:** MUST
+
+### Requirements
+
+| ID | Requirement | Verification |
+|----|-------------|--------------|
+| VOL-01.1 | User can toggle volume rendering on/off for a selected scalar field via ParaView Web protocol | Toggle renders volume; toggle off restores slice view |
+| VOL-01.2 | Server validates GPU availability (EGL vendor check) before enabling volume rendering | Warning shown on Apple Silicon + amd64 server without GPU |
+| VOL-01.3 | Server checks cell count and warns user if dataset > 2M cells (OOM risk) | Warning banner shown for large datasets |
+| VOL-01.4 | Volume rendering uses Smart Volume Mapper (adaptive, handles larger datasets) | Mapper type confirmed in protocol code |
+
+---
+
+## FILT-01: Advanced Filters
+
+**Type:** Backend + Frontend
+**Priority:** MUST
+
+### Requirements
+
+| ID | Requirement | Verification |
+|----|-------------|--------------|
+| FILT-01.1 | User can create a Clip filter on the current OpenFOAM reader: scalar threshold (inside/outside), apply to geometry | Clip applied and visible in viewport |
+| FILT-01.2 | User can create a Contour (isovalue) filter: select scalar field + isovalue(s) | Contour surface rendered |
+| FILT-01.3 | User can create a Streamlines filter using velocity field `U` and masking region seed | Streamlines rendered in viewport |
+| FILT-01.4 | User can delete any active filter (remove proxy from view) | Filter removed; original view restored |
+| FILT-01.5 | Filter panel shows active filter with updateable parameters (threshold value, isovalue, etc.) | Parameter change triggers re-render |
+| FILT-01.6 | Multiple filters can be active simultaneously | All active filters visible in viewport simultaneously |
+
+---
+
+## SHOT-01: Screenshot Export
+
+**Type:** Frontend
+**Priority:** MUST
+
+### Requirements
+
+| ID | Requirement | Verification |
+|----|-------------|--------------|
+| SHOT-01.1 | User can capture current viewport as PNG download | PNG file downloaded with correct scene content |
+| SHOT-01.2 | Screenshot captures at current viewport resolution, not internal buffer | Image dimensions match displayed viewport |
+| SHOT-01.3 | Screenshot operation is non-blocking (async) with loading indicator | UI remains responsive during capture |
+| SHOT-01.4 | Debounce: rapid screenshot clicks ignored for 500ms after first trigger | Multiple clicks produce single screenshot |
+
+---
+
+## CONT-01: Container Integration
 
 **Type:** Backend / Infrastructure
-**Phase:** 15
 **Priority:** MUST
 
 ### Requirements
 
 | ID | Requirement | Verification |
 |----|-------------|--------------|
-| PV-01.1 | ParaView Web Python launcher (`pvpython`) is launchable as a subprocess from the API server | Launcher starts and responds to WebSocket connection |
-| PV-01.2 | Lifecycle management: launch on first viewer request, shutdown after configurable idle timeout (default 30 min) | Process is cleaned up after idle timeout |
-| PV-01.3 | ParaView Web session is configurable for port (default 8081) | No port conflicts with existing services |
-| PV-01.4 | Each ParaView Web session is scoped to a specific job result directory | Only authorized case data is accessible |
-| PV-01.5 | Error handling: graceful failure if ParaView Web is not installed or fails to start | User sees clear error message |
-
-### Dependencies
-- `OpenFOAMReader` proxy (ParaView/VTK native, no format conversion needed)
-- Docker volume mounting for case directories
-
-### Out of Scope
-- Running ParaView Web on a remote HPC cluster
-- Multiple simultaneous sessions per user (v1.5+)
+| CONT-01.1 | Custom protocol Python file (`paraview_adv_protocols.py`) is mounted into container at `/tmp/adv_protocols.py` | File present in container filesystem |
+| CONT-01.2 | Custom protocols are registered with wslink before first WS connection accepted | New RPC methods respond (not "method not found") |
+| CONT-01.3 | Custom entrypoint wrapper script handles import ordering (adv_protocols before launcher.py) | Volume rendering RPC responds correctly on first call |
+| CONT-01.4 | Container startup failure (bad import) is caught and surfaced as user-facing error | Error message shown in Dashboard viewer area |
 
 ---
 
-## PV-02: Dashboard Embedded 3D Viewer
+## Future (Deferred)
 
-**Type:** Frontend
-**Phase:** 16
-**Priority:** MUST
-
-### Requirements
-
-| ID | Requirement | Verification |
-|----|-------------|--------------|
-| PV-02.1 | React component (`ParaViewViewer.tsx`) renders a 3D canvas using ParaView Web JS client | Viewer displays mesh geometry for a completed case |
-| PV-02.2 | Viewer is embedded within the existing Job detail page (replacing or supplementing the static image) | Navigation to job detail shows 3D viewer |
-| PV-02.3 | WebSocket connection to ParaView Web server is established automatically when viewer loads | Connection established within 3 seconds |
-| PV-02.4 | Viewer shows a loading state while ParaView Web initializes | Loading spinner/skeleton visible |
-| PV-02.5 | Viewer handles reconnection gracefully if ParaView Web session drops | Auto-reconnect with backoff |
-
-### Dependencies
-- PV-01 (server must be running before viewer connects)
-
-### Out of Scope
-- Multi-viewport layouts (side-by-side cases)
-- Custom ParaView Web UI widgets beyond basic viewer
+- **VOL-02**: Opacity transfer function editor (multi-point opacity curve)
+- **FILT-02**: Live clip plane parameter updates without recreate
+- **FILT-03**: Multi-filter composition (pipe filters)
+- **SHOT-02**: JSON state export (full viewport state + parameters)
+- **SHOT-03**: Report integration (auto-attach screenshot to generated PDF report)
 
 ---
 
-## PV-03: Case Result Loading and Field Selection
+## Out of Scope
 
-**Type:** Frontend + Backend
-**Phase:** 17
-**Priority:** MUST
-
-### Requirements
-
-| ID | Requirement | Verification |
-|----|-------------|--------------|
-| PV-03.1 | ParaView Web loads the OpenFOAM case directory via `OpenFOAMReader` | Mesh + fields are visible without manual file selection |
-| PV-03.2 | Field selection dropdown lists all available scalar fields (e.g., `p`, `U` magnitude, `k`, `epsilon`) | Dropdown shows all fields from the case |
-| PV-03.3 | Switching fields updates the color mapping immediately | No page reload needed |
-| PV-03.4 | For vector fields (e.g., `U`), component selection is available (Magnitude, X, Y, Z) | Component dropdown visible for vector fields |
-| PV-03.5 | Time step navigation: user can step through transient time directories | Time slider or prev/next buttons work |
-
-### Dependencies
-- PV-02 (viewer must be functional)
-- OpenFOAM case format (polyMesh + time directories)
-
-### Out of Scope
-- Loading cases from formats other than native OpenFOAM
-- Vector field glyph rendering (defer to PV-04 or later)
+| Feature | Reason |
+|---------|--------|
+| Interactive plane widget (drag clip plane) | Requires widget server; deferred to v2.x |
+| Animated streamlines | Requires animation player; deferred to v2.x |
+| 3D PDF / WebGL export | Requires additional library; deferred |
+| Movie export | Out of scope for v1.5 |
+| Multi-field volume rendering | Complex UX; deferred |
+| Real-time volume during solver run | Significant complexity; deferred |
+| trame migration | ParaView Web still functional; research deferred to v1.6.0 |
 
 ---
 
-## PV-04: Basic Interaction (Rotation, Zoom, Slicing, Color Mapping)
+## Traceability
 
-**Type:** Frontend
-**Phase:** 18
-**Priority:** MUST
-
-### Requirements
-
-| ID | Requirement | Verification |
-|----|-------------|--------------|
-| PV-04.1 | Mouse-based camera controls: left-drag rotate, right-drag/middle-drag pan, scroll zoom | All controls functional in browser |
-| PV-04.2 | Camera reset button returns to default orientation | Reset button works |
-| PV-04.3 | Slice filter: user can apply an axis-aligned slice (X/Y/Z plane) with adjustable origin | Slice plane visible, origin slider works |
-| PV-04.4 | Color mapping: user can select from at least 3 color presets (Viridis, Blue-Red, Grayscale) | Preset selection changes colors immediately |
-| PV-04.5 | Color scalar bar (legend) is displayed showing min/max values | Scalar bar visible with labeled ticks |
-| PV-04.6 | Scalar range can be set to Auto or Manual (user-specified min/max) | Manual input overrides auto range |
-
-### Dependencies
-- PV-03 (field selection must be working before applying slice/color filters)
-
-### Out of Scope
-- Arbitrary orientation slice (requires rotation widget, defer)
-- Volume rendering (high GPU complexity, defer)
-- Streamlines / pathlines (defer)
-- Contour iso-surfaces (defer to v1.5)
-
----
-
-## Key Architectural Decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| ParaView Web (not trame) for v1.4.0 | Already has mature JS client + Python launcher; ParaView is the CFD standard |
-| Track trame as migration target | ParaView Web v3.2.21 is in maintenance mode; trame is the vtk.js-based successor |
-| OpenFOAM native reader (no export) | `OpenFOAMReader` in ParaView/VTK reads case directories directly; no conversion step |
-| Slice only (not Clip/Contour) | Slice is the most commonly used CFD filter; Clip/Contour defer to v1.5 |
-| 3 color presets (not custom) | Spectrum editors (piecewise opacity) are complex; presets are sufficient for v1.4.0 |
-| In-process ParaView Web launcher | Not a separate microservice; launched as subprocess by API server for simplicity |
-
----
-
-## Verification Checklist
-
-- [ ] PV-01: `pvpython` launcher starts successfully as subprocess
-- [ ] PV-01: Idle timeout kills ParaView Web process after 30 min
-- [ ] PV-02: `ParaViewViewer` component renders in job detail page
-- [ ] PV-02: WebSocket connects to ParaView Web server within 3s
-- [ ] PV-03: OpenFOAM case loads with all fields in dropdown
-- [ ] PV-03: Time step navigation works for transient case
-- [ ] PV-04: Slice filter shows plane through geometry
-- [ ] PV-04: Color preset switching updates immediately
-- [ ] PV-04: Scalar bar shows correct min/max with labeled values
-
----
-
-## Deferred to Future Milestones
-
-| Feature | Reason | Target |
-|---------|--------|--------|
-| Volume rendering | GPU memory assessment needed | v1.5 |
-| Streamlines / pathlines | Seed point UI complexity | v1.5 |
-| Multi-field overlay | Multiple renderer layout | v1.5 |
-| Arbitrary orientation slice | Requires 3D rotation widget | v1.5 |
-| Screenshot export | ImageExporter API needs research | v1.5 |
-| Comparison mode (side-by-side) | Multi-session management | v1.6 |
-| trame migration | Only if ParaView Web limitations encountered | v2.0 |
+| Phase | Requirements |
+|-------|-------------|
+| 19 | CONT-01.1–01.4 |
+| 20 | VOL-01.1–01.4 |
+| 21 | SHOT-01.1–01.4 |
+| 22 | FILT-01.1–01.6 |
