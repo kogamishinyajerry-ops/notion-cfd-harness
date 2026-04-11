@@ -130,21 +130,21 @@
 
 ### Phase 16: Dashboard 3D Viewer
 - **Goal**: PV-02 — React component embedding ParaView Web client
-- **Status**: 🔄 Planning (2/2 plans)
+- **Status**: ✅ Complete (2/2 plans)
 - **Depends on**: Phase 15
 - **Requirements**: PV-02 (embedded 3D viewer)
 - **Plans**: 16-01 (API service + ParaViewViewer component + CSS), 16-02 (JobDetailPage viewer tab integration)
 
 ### Phase 17: Case Result Loading & Field Selection
 - **Goal**: PV-03 — Load OpenFOAM case, field selection, time stepping
-- **Status**: 🔄 Planning (2/2 plans)
+- **Status**: ✅ Complete (2/2 plans)
 - **Depends on**: Phase 16
 - **Requirements**: PV-03 (field selection + time navigation)
 - **Plans**: 17-01 (Field & Time Selection UI), 17-02 (ParaView Web Protocol Integration)
 
 ### Phase 18: Basic Interaction
 - **Goal**: PV-04 — Rotation, zoom, slicing, color mapping
-- **Status**: 🔄 Planning (1/1 plans)
+- **Status**: ✅ Complete (1/1 plans)
 - **Depends on**: Phase 17
 - **Requirements**: PV-04 (camera, slice, color map)
 - **Plans**: 18-01 (protocol message builders + slice/color UI + CSS)
@@ -172,9 +172,9 @@
 | 13 | v1.3.0 | 2/2 | Complete   | 2026-04-11 |
 | 14 | v1.3.0 | 2/2 | Complete | 2026-04-11 |
 | 15 | v1.4.0 | 2/2 | Complete    | 2026-04-11 |
-| 16 | v1.4.0 | 2/2 | Planning | - |
-| 17 | v1.4.0 | 2/2 | Planning | - |
-| 18 | v1.4.0 | 1/1 | Planning | - |
+| 16 | v1.4.0 | 2/2 | Complete | 2026-04-11 |
+| 17 | v1.4.0 | 2/2 | Complete | 2026-04-11 |
+| 18 | v1.4.0 | 1/1 | Complete   | 2026-04-11 |
 
 ---
 
