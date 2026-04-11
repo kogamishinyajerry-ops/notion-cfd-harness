@@ -1,6 +1,6 @@
 # AI-CFD Knowledge Harness — Project
 
-**Version:** v1.5.0 (Current)
+**Version:** v1.6.0 (Next)
 **Status:** Planning
 
 ---
@@ -20,7 +20,7 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 - **REST API Server**: FastAPI exposing all CLI functionality
 - **Web Dashboard**: React-based UI for case management
 - **Real-time Convergence Monitoring**: WebSocket residual streaming + DivergenceDetector
-- **ParaView Web 3D Visualization**: Embedded interactive CFD viewer with slice/color controls (v1.4.0)
+- **ParaView Web 3D Visualization**: Embedded interactive CFD viewer with slice/color controls, volume rendering, advanced filters, screenshot export (v1.4.0 + v1.5.0)
 
 ## Milestones
 
@@ -31,6 +31,7 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 | v1.2.0 | 10-11 | ✅ Shipped | 2026-04-10 |
 | v1.3.0 | 12-14 | ✅ Shipped | 2026-04-11 |
 | v1.4.0 | 15-18 | ✅ Shipped | 2026-04-11 |
+| v1.5.0 | 19-22 | ✅ Shipped | 2026-04-11 |
 
 ## v1.3.0 — Real-time Convergence Monitoring ✅
 
@@ -62,23 +63,29 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 
 **Archive:** `.planning/milestones/v1.4.0-ROADMAP.md`
 
-## v1.5.0 — Advanced Visualization
+## v1.5.0 — Advanced Visualization ✅
 
 **Goal:** Enhance ParaView Web 3D viewer with volume rendering, advanced filters, and screenshot export
 
-**Target features:**
-- **Volume Rendering**: GPU-based volume representation for 3D scalar fields (density, temperature, velocity magnitude)
-- **Advanced Filters**: Clip, Contour, and Streamline filters via ParaView Web protocols
-- **Screenshot Export**: PNG/JSON export of current viewport state
+**Delivered:**
+- **VOL-01**: GPU-accelerated volume rendering toggle with Apple Silicon Mesa fallback warning and 2M cell OOM guard
+- **FILT-01**: Clip, Contour, and StreamTracer filters via ParaView Web protocols with tabbed AdvancedFilterPanel UI
+- **SHOT-01**: PNG screenshot export via viewport.image.render at viewport resolution with 500ms debounce
 
-**Key context:**
-- Builds on existing ParaView Web infrastructure (Phase 15-18)
-- ParaView Web v3.2.21 still functional; trame migration deferred to v1.6.0 research
-- Apple Silicon detached-container limitation acknowledged: use `--platform linux/amd64` on amd64 servers
+**Key decisions:**
+- PID 1 entrypoint wrapper for protocol import ordering (vs CMD override)
+- Smart Volume Mapper (adaptive) for volume rendering
+- Filter registry via Python class-level dict tracking proxy id()
+
+**Archive:** `.planning/milestones/v1.5.0-ROADMAP.md`
+
+## v1.6.0 — Next Milestone (Planning)
+
+**Status:** Planning started
 
 ## Evolution
 
-*Last updated: 2026-04-11 — v1.5.0 started (Advanced Visualization)*
+*Last updated: 2026-04-11 — v1.5.0 shipped, v1.6.0 planning started*
 
 **After each phase transition** (via `/gsd-transition`):
 1. Requirements invalidated? → Move to Out of Scope with reason

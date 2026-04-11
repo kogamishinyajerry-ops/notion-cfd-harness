@@ -7,107 +7,19 @@
 - [x] **v1.2.0** — API & Web Interface (Phases 10-11, shipped 2026-04-10)
 - [x] **v1.3.0** — Real-time Convergence Monitoring (shipped 2026-04-11)
 - [x] **v1.4.0** — ParaView Web 3D Visualization (shipped 2026-04-11)
-- [ ] **v1.5.0** — Advanced Visualization (Phases 19-22, planning)
-
----
+- [x] **v1.5.0** — Advanced Visualization (Phases 19-22, shipped 2026-04-11)
 
 ## v1.5.0 — Advanced Visualization
 
-**Goal:** Enhance ParaView Web 3D viewer with volume rendering, advanced filters, and screenshot export
+<details>
+<summary>✅ v1.5.0 Advanced Visualization — SHIPPED 2026-04-11 (4 phases, 4 plans)</summary>
 
-**Phases:** 19 (Container Integration), 20 (Volume Rendering), 21 (Screenshot Export), 22 (Advanced Filters)
+- [x] Phase 19: Container Integration (1/1 plan) — PID 1 entrypoint wrapper for ParaView Web protocol registration
+- [x] Phase 20: Volume Rendering (1/1 plan) — ParaViewWebVolumeRendering protocol + GPU toggle UI
+- [x] Phase 21: Screenshot Export (1/1 plan) — PNG capture via viewport.image.render, debounce, async UX
+- [x] Phase 22: Advanced Filters (1/1 plan) — Clip, Contour, StreamTracer with tabbed panel UI
 
----
-
-### Phase 19: Container Integration
-
-**Goal:** Custom ParaView Web protocol Python file is imported and registered with wslink before the first WebSocket connection is accepted
-
-**Depends on:** Phase 18 (ParaView Web viewer) — prerequisite container infrastructure
-
-**Requirements:** CONT-01.1, CONT-01.2, CONT-01.3, CONT-01.4
-
-**Success Criteria** (what must be TRUE):
-
-1. `paraview_adv_protocols.py` is mounted into the container at `/tmp/adv_protocols.py` (file present in container after startup)
-2. Custom protocols are registered with wslink before the launcher accepts the first WebSocket connection (new RPC methods respond, not "method not found")
-3. Custom entrypoint wrapper script imports `adv_protocols.py` programmatically before `launcher.py` starts the wslink server (import ordering guaranteed)
-4. If `adv_protocols.py` has an import error, container startup fails with a user-facing error message surfaced in the Dashboard viewer area
-
-**Plans:**
-- [x] 20-01-PLAN.md — Volume Rendering: ParaViewWebVolumeRendering protocol class + frontend volume toggle UI
-
-**UI hint**: no
-
----
-
-### Phase 20: Volume Rendering
-
-**Goal:** Users can toggle GPU-accelerated volume rendering on/off for selected scalar fields with graceful degradation on Apple Silicon
-
-**Depends on:** Phase 19 (container integration enables protocol registration)
-
-**Requirements:** VOL-01.1, VOL-01.2, VOL-01.3, VOL-01.4
-
-**Success Criteria** (what must be TRUE):
-
-1. User can toggle volume rendering on/off via a UI control, and the viewport switches between surface and volume representation
-2. Server detects Apple Silicon + `--platform linux/amd64` configuration via EGL vendor check and shows an explicit user warning when volume rendering would silently fall back to Mesa software rendering
-3. Server checks cell count and shows a warning banner when dataset exceeds 2M cells (OOM risk)
-4. Volume rendering uses Smart Volume Mapper (adaptive) confirmed in protocol code
-
-**Plans:**
-- [x] 20-01-PLAN.md — Volume Rendering: ParaViewWebVolumeRendering protocol class + frontend volume toggle UI
-
-**UI hint**: yes
-
----
-
-### Phase 21: Screenshot Export
-
-**Goal:** Users can capture the current viewport as a PNG file download with responsive UI during capture
-
-**Depends on:** Phase 19 (protocols available) and Phase 20 (viewport rendering pipeline)
-
-**Requirements:** SHOT-01.1, SHOT-01.2, SHOT-01.3, SHOT-01.4
-
-**Success Criteria** (what must be TRUE):
-
-1. User clicks screenshot button and a PNG file downloads with the correct scene content (geometry, colors, scalar field)
-2. Downloaded image dimensions match the displayed viewport dimensions (not an internal buffer size)
-3. UI remains responsive during screenshot capture (button disabled + spinner, no frozen interactions)
-4. Rapid clicks within 500ms produce only one screenshot (debounce active)
-
-**Plans:**
-- [x] 21-01-PLAN.md — Screenshot Export: PNG capture via viewport.image.render, async UI, debounce
-
-**UI hint**: yes
-
----
-
-### Phase 22: Advanced Filters
-
-**Goal:** Users can create, update, and delete Clip, Contour, and StreamTracer filters on loaded CFD results, with multiple filters active simultaneously
-
-**Depends on:** Phase 19 (protocols available)
-
-**Requirements:** FILT-01.1, FILT-01.2, FILT-01.3, FILT-01.4, FILT-01.5, FILT-01.6
-
-**Success Criteria** (what must be TRUE):
-
-1. User creates a Clip filter and the clipped geometry appears in the viewport (inside/outside scalar threshold applied)
-2. User creates a Contour filter and isosurface appears at the specified isovalue(s) for the selected scalar field
-3. User creates a Streamlines filter using velocity field `U` and the streamlines render in the viewport
-4. User deletes any active filter and the filter is removed, original view restored
-5. User updates filter parameters (threshold value, isovalue) and the filter re-renders immediately
-6. Multiple filters (e.g., Clip + Contour + Streamlines) are visible simultaneously in the viewport
-
-**Plans:**
-- [ ] 22-01-PLAN.md — Advanced Filters: Clip, Contour, StreamTracer protocols + UI
-
-**UI hint**: yes
-
----
+</details>
 
 ## Progress
 
@@ -134,7 +46,7 @@
 | 19 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
 | 20 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
 | 21 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
-| 22 | v1.5.0 | 0/1 | Not started | - |
+| 22 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
 
 ---
 

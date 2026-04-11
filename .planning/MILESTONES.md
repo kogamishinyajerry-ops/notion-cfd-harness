@@ -1,5 +1,18 @@
 # Milestones
 
+## v1.5.0 Advanced Visualization (Shipped: 2026-04-11)
+
+**Phases completed:** 4 phases, 4 plans, 4 tasks
+
+**Key accomplishments:**
+
+1. **Phase 19: Container Integration** — PID 1 entrypoint wrapper for ParaView Web protocol registration before first WS connection
+2. **Phase 20: Volume Rendering** — ParaViewWebVolumeRendering protocol with eglinfo GPU detection, Apple Silicon Mesa warning, 2M cell OOM guard
+3. **Phase 21: Screenshot Export** — PNG capture via viewport.image.render at viewport resolution with 500ms debounce and async UX
+4. **Phase 22: Advanced Filters** — Clip / Contour / StreamTracer protocols with tabbed AdvancedFilterPanel UI and simultaneous multi-filter support
+
+---
+
 ## v1.4.0 ParaView Web 3D Visualization (Shipped: 2026-04-11)
 
 **Phases completed:** 4 phases, 7 plans, 7 tasks
