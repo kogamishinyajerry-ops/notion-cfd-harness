@@ -15,7 +15,7 @@
 <details>
 <summary>Phase checklist</summary>
 
-- [ ] **Phase 23: Trame Backend Skeleton** — Trame + trame-vtk + trame-vuetify in Docker, minimal sphere rendering
+- [x] **Phase 23: Trame Backend Skeleton** — Trame + trame-vtk + trame-vuetify in Docker, minimal sphere rendering
 - [ ] **Phase 24: RPC Protocol Migration** — All 13 @exportRpc converted to @ctrl.add/@state.change, UUID filter registry
 - [ ] **Phase 25: Session Manager Adaptation** — TrameSessionManager replacing ParaViewWebManager, Docker lifecycle
 - [ ] **Phase 26: Vue Frontend + Iframe Bridge** — Vue.js viewer, CFDViewerBridge.ts, postMessage wiring
@@ -51,7 +51,7 @@
 | 21 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
 | 22 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
 | 23 | v1.6.0 | 1/1 | Complete    | 2026-04-11 |
-| 24 | v1.6.0 | 0/1 | Not started | - |
+| 24 | v1.6.0 | 1/1 | Not started | - |
 | 25 | v1.6.0 | 0/1 | Not started | - |
 | 26 | v1.6.0 | 0/1 | Not started | - |
 | 27 | v1.6.0 | 0/1 | Not started | - |
@@ -94,7 +94,8 @@
 5. No `InvokeEvent` calls remain in the codebase — trame automatically pushes renders on state mutation
 6. Filter registry survives server restart without stale ID errors (UUID keys persist across restart)
 
-**Plans:** TBD
+**Plans:**
+- [ ] 24-01-PLAN.md — Migrate all 7 @exportRpc handlers to @ctrl.add/@state.change with UUID registry
 
 ### Phase 25: Session Manager Adaptation
 
