@@ -98,9 +98,9 @@
 
 ## Traceability
 
-| Phase | Requirements |
-|-------|-------------|
-| 19 | CONT-01.1–01.4 |
-| 20 | VOL-01.1–01.4 |
-| 21 | SHOT-01.1–01.4 |
-| 22 | FILT-01.1–01.6 |
+| Phase | Requirements | Status |
+|-------|-------------|--------|
+| 19 | CONT-01.1–01.4 | **COMPLETE** |
+| 20 | VOL-01.1–01.4 | Not started |
+| 21 | SHOT-01.1–01.4 | Not started |
+| 22 | FILT-01.1–01.6 | Not started |
