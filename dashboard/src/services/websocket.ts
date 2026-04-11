@@ -142,5 +142,4 @@ class WebSocketService {
 }
 
 export const wsService = new WebSocketService();
-export { ResidualMessage };
 export default wsService;

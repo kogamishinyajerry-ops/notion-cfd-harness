@@ -1,0 +1,1552 @@
+{
+  "cases": [
+    {
+      "case_id": "CASE-8F3649DB",
+      "name": "Test Case",
+      "problem_type": "ExternalFlow",
+      "description": "A test case for unit testing",
+      "status": "created",
+      "created_at": "2026-04-10T10:14:59.535698",
+      "updated_at": "2026-04-10T10:14:59.535698",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS",
+          "k-epsilon"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-54632513",
+      "name": "Minimal Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:14:59.539101",
+      "updated_at": "2026-04-10T10:14:59.539101",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-E418D9B2",
+      "name": "Case 1",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:14:59.544739",
+      "updated_at": "2026-04-10T10:14:59.544739",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-2B3CEF83",
+      "name": "Case 2",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:14:59.545420",
+      "updated_at": "2026-04-10T10:14:59.545420",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-B218F779",
+      "name": "Paginated Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:14:59.548972",
+      "updated_at": "2026-04-10T10:14:59.548972",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-5E263CB7",
+      "name": "Get Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:14:59.551983",
+      "updated_at": "2026-04-10T10:14:59.551983",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-15DB4C35",
+      "name": "Update Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:14:59.557589",
+      "updated_at": "2026-04-10T10:14:59.559484",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-5F9BC7F7",
+      "name": "Invalid Status Test",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:14:59.600670",
+      "updated_at": "2026-04-10T10:14:59.601781",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-56C0B0C0",
+      "name": "Test Case",
+      "problem_type": "ExternalFlow",
+      "description": "A test case for unit testing",
+      "status": "created",
+      "created_at": "2026-04-10T10:15:43.835670",
+      "updated_at": "2026-04-10T10:15:43.835670",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS",
+          "k-epsilon"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-EC51E630",
+      "name": "Minimal Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:15:43.839334",
+      "updated_at": "2026-04-10T10:15:43.839334",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-2C0B1672",
+      "name": "Case 1",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:15:43.845029",
+      "updated_at": "2026-04-10T10:15:43.845029",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-9242527E",
+      "name": "Case 2",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:15:43.845806",
+      "updated_at": "2026-04-10T10:15:43.845806",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-E741DEA8",
+      "name": "Paginated Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:15:43.849039",
+      "updated_at": "2026-04-10T10:15:43.849039",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-88245A30",
+      "name": "Get Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:15:43.852262",
+      "updated_at": "2026-04-10T10:15:43.852262",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-A3BF6FFD",
+      "name": "Updated Name",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "running",
+      "created_at": "2026-04-10T10:15:43.857666",
+      "updated_at": "2026-04-10T10:15:43.858961",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-A0AC262B",
+      "name": "Invalid Status Test",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:15:43.864037",
+      "updated_at": "2026-04-10T10:15:43.864037",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-C9BF3139",
+      "name": "Test Case",
+      "problem_type": "ExternalFlow",
+      "description": "A test case for unit testing",
+      "status": "created",
+      "created_at": "2026-04-10T10:17:14.155653",
+      "updated_at": "2026-04-10T10:17:14.155653",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS",
+          "k-epsilon"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-EA6CCE5B",
+      "name": "Minimal Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:17:14.159668",
+      "updated_at": "2026-04-10T10:17:14.159668",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-96F08286",
+      "name": "Case 1",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:17:14.166827",
+      "updated_at": "2026-04-10T10:17:14.166827",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-7747B448",
+      "name": "Case 2",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:17:14.168116",
+      "updated_at": "2026-04-10T10:17:14.168116",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-CAE534D3",
+      "name": "Paginated Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:17:14.172036",
+      "updated_at": "2026-04-10T10:17:14.172036",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-12988836",
+      "name": "Get Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:17:14.175772",
+      "updated_at": "2026-04-10T10:17:14.175772",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-83730A46",
+      "name": "Updated Name",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "running",
+      "created_at": "2026-04-10T10:17:14.182358",
+      "updated_at": "2026-04-10T10:17:14.184083",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-45B909AE",
+      "name": "Invalid Status Test",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:17:14.189017",
+      "updated_at": "2026-04-10T10:17:14.189017",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-C3384A2F",
+      "name": "Test Case",
+      "problem_type": "ExternalFlow",
+      "description": "A test case for unit testing",
+      "status": "created",
+      "created_at": "2026-04-10T10:30:24.699299",
+      "updated_at": "2026-04-10T10:30:24.699299",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS",
+          "k-epsilon"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-5C606686",
+      "name": "Minimal Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:30:24.703736",
+      "updated_at": "2026-04-10T10:30:24.703736",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-4BF1E61F",
+      "name": "Case 1",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:30:24.711469",
+      "updated_at": "2026-04-10T10:30:24.711469",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-5975AA1D",
+      "name": "Case 2",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:30:24.712861",
+      "updated_at": "2026-04-10T10:30:24.712861",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-514EE349",
+      "name": "Paginated Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:30:24.716689",
+      "updated_at": "2026-04-10T10:30:24.716689",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-97A96367",
+      "name": "Get Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:30:24.721265",
+      "updated_at": "2026-04-10T10:30:24.721265",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-FFF216B2",
+      "name": "Updated Name",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "running",
+      "created_at": "2026-04-10T10:30:24.726482",
+      "updated_at": "2026-04-10T10:30:24.728119",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-18517C1F",
+      "name": "Invalid Status Test",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:30:24.733505",
+      "updated_at": "2026-04-10T10:30:24.733505",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-56789669",
+      "name": "Test Case",
+      "problem_type": "ExternalFlow",
+      "description": "A test case for unit testing",
+      "status": "created",
+      "created_at": "2026-04-10T10:33:02.686868",
+      "updated_at": "2026-04-10T10:33:02.686868",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS",
+          "k-epsilon"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-FBBAF850",
+      "name": "Minimal Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:33:02.691561",
+      "updated_at": "2026-04-10T10:33:02.691561",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-E0585779",
+      "name": "Case 1",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:33:02.698473",
+      "updated_at": "2026-04-10T10:33:02.698473",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-B215EF6E",
+      "name": "Case 2",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:33:02.699982",
+      "updated_at": "2026-04-10T10:33:02.699982",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-6FF1F845",
+      "name": "Paginated Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:33:02.704067",
+      "updated_at": "2026-04-10T10:33:02.704067",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-C8380372",
+      "name": "Get Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:33:02.708004",
+      "updated_at": "2026-04-10T10:33:02.708004",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-BCDED8E6",
+      "name": "Updated Name",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "running",
+      "created_at": "2026-04-10T10:33:02.714241",
+      "updated_at": "2026-04-10T10:33:02.716082",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-23BF7DE0",
+      "name": "Invalid Status Test",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:33:02.720897",
+      "updated_at": "2026-04-10T10:33:02.720897",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-3CBD0DDE",
+      "name": "Test Case",
+      "problem_type": "ExternalFlow",
+      "description": "A test case for unit testing",
+      "status": "created",
+      "created_at": "2026-04-10T10:33:50.140071",
+      "updated_at": "2026-04-10T10:33:50.140071",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS",
+          "k-epsilon"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-B207D22E",
+      "name": "Minimal Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:33:50.144291",
+      "updated_at": "2026-04-10T10:33:50.144291",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-27371FA4",
+      "name": "Case 1",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:33:50.150694",
+      "updated_at": "2026-04-10T10:33:50.150694",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-AB9AAFB3",
+      "name": "Case 2",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:33:50.151931",
+      "updated_at": "2026-04-10T10:33:50.151931",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-96395FD7",
+      "name": "Paginated Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:33:50.155573",
+      "updated_at": "2026-04-10T10:33:50.155573",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-D42E09A6",
+      "name": "Get Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:33:50.159151",
+      "updated_at": "2026-04-10T10:33:50.159151",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-F9CDE9B0",
+      "name": "Updated Name",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "running",
+      "created_at": "2026-04-10T10:33:50.164269",
+      "updated_at": "2026-04-10T10:33:50.166228",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-1736AB33",
+      "name": "Invalid Status Test",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:33:50.171381",
+      "updated_at": "2026-04-10T10:33:50.171381",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-B7294386",
+      "name": "Test Case",
+      "problem_type": "ExternalFlow",
+      "description": "A test case for unit testing",
+      "status": "created",
+      "created_at": "2026-04-10T10:35:41.278983",
+      "updated_at": "2026-04-10T10:35:41.278983",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS",
+          "k-epsilon"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-918AAC22",
+      "name": "Minimal Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:35:41.284082",
+      "updated_at": "2026-04-10T10:35:41.284082",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-441C70EE",
+      "name": "Case 1",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:35:41.291520",
+      "updated_at": "2026-04-10T10:35:41.291520",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-2BFAFC87",
+      "name": "Case 2",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:35:41.292913",
+      "updated_at": "2026-04-10T10:35:41.292913",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-A8A2D168",
+      "name": "Paginated Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:35:41.297102",
+      "updated_at": "2026-04-10T10:35:41.297102",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-7D98907D",
+      "name": "Get Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:35:41.301319",
+      "updated_at": "2026-04-10T10:35:41.301319",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-03C78593",
+      "name": "Updated Name",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "running",
+      "created_at": "2026-04-10T10:35:41.310084",
+      "updated_at": "2026-04-10T10:35:41.312304",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-977AEB68",
+      "name": "Invalid Status Test",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T10:35:41.317858",
+      "updated_at": "2026-04-10T10:35:41.317858",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-75653855",
+      "name": "Test Case",
+      "problem_type": "ExternalFlow",
+      "description": "A test case for unit testing",
+      "status": "created",
+      "created_at": "2026-04-10T11:18:41.921231",
+      "updated_at": "2026-04-10T11:18:41.921231",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS",
+          "k-epsilon"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-7FB72B2A",
+      "name": "Minimal Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T11:18:41.925823",
+      "updated_at": "2026-04-10T11:18:41.925823",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-3C5FFD0A",
+      "name": "Case 1",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T11:18:41.933066",
+      "updated_at": "2026-04-10T11:18:41.933066",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-5838F276",
+      "name": "Case 2",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T11:18:41.934719",
+      "updated_at": "2026-04-10T11:18:41.934719",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-F91DAB8E",
+      "name": "Paginated Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T11:18:41.938744",
+      "updated_at": "2026-04-10T11:18:41.938744",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-5DD2F3DF",
+      "name": "Get Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T11:18:41.943124",
+      "updated_at": "2026-04-10T11:18:41.943124",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-719F6674",
+      "name": "Updated Name",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "running",
+      "created_at": "2026-04-10T11:18:41.949123",
+      "updated_at": "2026-04-10T11:18:41.951965",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-3D69160D",
+      "name": "Invalid Status Test",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T11:18:41.957763",
+      "updated_at": "2026-04-10T11:18:41.957763",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-B48F2960",
+      "name": "Test Case",
+      "problem_type": "ExternalFlow",
+      "description": "A test case for unit testing",
+      "status": "created",
+      "created_at": "2026-04-10T11:37:54.426407",
+      "updated_at": "2026-04-10T11:37:54.426407",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS",
+          "k-epsilon"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-E093F268",
+      "name": "Minimal Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T11:37:54.430782",
+      "updated_at": "2026-04-10T11:37:54.430782",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-F6645F45",
+      "name": "Case 1",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T11:37:54.437407",
+      "updated_at": "2026-04-10T11:37:54.437407",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-072BBE0A",
+      "name": "Case 2",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T11:37:54.439146",
+      "updated_at": "2026-04-10T11:37:54.439146",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-797E54DE",
+      "name": "Paginated Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T11:37:54.443098",
+      "updated_at": "2026-04-10T11:37:54.443098",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-802ACB1B",
+      "name": "Get Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T11:37:54.447152",
+      "updated_at": "2026-04-10T11:37:54.447152",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-90D58F4F",
+      "name": "Updated Name",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "running",
+      "created_at": "2026-04-10T11:37:54.453084",
+      "updated_at": "2026-04-10T11:37:54.455514",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-F345BB4E",
+      "name": "Invalid Status Test",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-10T11:37:54.460948",
+      "updated_at": "2026-04-10T11:37:54.460948",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-BF6D3245",
+      "name": "Test Case",
+      "problem_type": "ExternalFlow",
+      "description": "A test case for unit testing",
+      "status": "created",
+      "created_at": "2026-04-11T03:06:55.632332",
+      "updated_at": "2026-04-11T03:06:55.632332",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS",
+          "k-epsilon"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-A090265B",
+      "name": "Minimal Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T03:06:55.637258",
+      "updated_at": "2026-04-11T03:06:55.637258",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-588A9F20",
+      "name": "Case 1",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T03:06:55.648070",
+      "updated_at": "2026-04-11T03:06:55.648070",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-94B5225D",
+      "name": "Case 2",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T03:06:55.650930",
+      "updated_at": "2026-04-11T03:06:55.650930",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-832734E5",
+      "name": "Paginated Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T03:06:55.658925",
+      "updated_at": "2026-04-11T03:06:55.658925",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-E3BEF668",
+      "name": "Get Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T03:06:55.665371",
+      "updated_at": "2026-04-11T03:06:55.665371",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-13E3A953",
+      "name": "Updated Name",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "running",
+      "created_at": "2026-04-11T03:06:55.674375",
+      "updated_at": "2026-04-11T03:06:55.677174",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-30E2FBF0",
+      "name": "Invalid Status Test",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T03:06:55.684129",
+      "updated_at": "2026-04-11T03:06:55.684129",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-04BC9436",
+      "name": "Test Case",
+      "problem_type": "ExternalFlow",
+      "description": "A test case for unit testing",
+      "status": "created",
+      "created_at": "2026-04-11T03:22:39.678321",
+      "updated_at": "2026-04-11T03:22:39.678321",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS",
+          "k-epsilon"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-0D6D8C01",
+      "name": "Minimal Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T03:22:39.682510",
+      "updated_at": "2026-04-11T03:22:39.682510",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-17BF70C6",
+      "name": "Case 1",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T03:22:39.689003",
+      "updated_at": "2026-04-11T03:22:39.689003",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-4A87973F",
+      "name": "Case 2",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T03:22:39.690671",
+      "updated_at": "2026-04-11T03:22:39.690671",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-1B873D65",
+      "name": "Paginated Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T03:22:39.694544",
+      "updated_at": "2026-04-11T03:22:39.694544",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-2F566525",
+      "name": "Get Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T03:22:39.698451",
+      "updated_at": "2026-04-11T03:22:39.698451",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-277DCA3B",
+      "name": "Updated Name",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "running",
+      "created_at": "2026-04-11T03:22:39.705468",
+      "updated_at": "2026-04-11T03:22:39.707868",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-0A69C157",
+      "name": "Invalid Status Test",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T03:22:39.713516",
+      "updated_at": "2026-04-11T03:22:39.713516",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-62DD646D",
+      "name": "Test Case",
+      "problem_type": "ExternalFlow",
+      "description": "A test case for unit testing",
+      "status": "created",
+      "created_at": "2026-04-11T08:45:56.738717",
+      "updated_at": "2026-04-11T08:45:56.738717",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS",
+          "k-epsilon"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-59DEDFB5",
+      "name": "Minimal Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T08:45:56.745029",
+      "updated_at": "2026-04-11T08:45:56.745029",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-9E3C5615",
+      "name": "Case 1",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T08:45:56.756031",
+      "updated_at": "2026-04-11T08:45:56.756031",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-CCD2EB1F",
+      "name": "Case 2",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T08:45:56.758567",
+      "updated_at": "2026-04-11T08:45:56.758567",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-11003484",
+      "name": "Paginated Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T08:45:56.765571",
+      "updated_at": "2026-04-11T08:45:56.765571",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-DACFBF6D",
+      "name": "Get Test Case",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T08:45:56.771967",
+      "updated_at": "2026-04-11T08:45:56.771967",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-972D4125",
+      "name": "Updated Name",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "running",
+      "created_at": "2026-04-11T08:45:56.781374",
+      "updated_at": "2026-04-11T08:45:56.784150",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-6F819D9F",
+      "name": "Invalid Status Test",
+      "problem_type": "ExternalFlow",
+      "description": null,
+      "status": "created",
+      "created_at": "2026-04-11T08:45:56.792292",
+      "updated_at": "2026-04-11T08:45:56.792292",
+      "permission_level": "L1",
+      "metadata": {
+        "geometry_config": null,
+        "physics_models": [
+          "RANS"
+        ]
+      }
+    }
+  ]
+}

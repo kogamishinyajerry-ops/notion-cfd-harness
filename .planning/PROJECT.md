@@ -1,7 +1,7 @@
 # AI-CFD Knowledge Harness — Project
 
-**Version:** v1.4.0 (Current)
-**Status:** Shipped
+**Version:** v1.5.0 (Current)
+**Status:** Planning
 
 ---
 
@@ -62,20 +62,23 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 
 **Archive:** `.planning/milestones/v1.4.0-ROADMAP.md`
 
-## v1.5.0 — Next Milestone (TBD)
+## v1.5.0 — Advanced Visualization
 
-**Status:** Planning
+**Goal:** Enhance ParaView Web 3D viewer with volume rendering, advanced filters, and screenshot export
 
-### Potential Directions
-- Volume rendering for 3D scalar fields
-- Advanced filters (Clip, Contour, Streamlines)
-- Multi-field overlay (side-by-side case comparison)
-- Screenshot export functionality
-- trame migration research (ParaView Web v3.2.21 is in maintenance mode)
+**Target features:**
+- **Volume Rendering**: GPU-based volume representation for 3D scalar fields (density, temperature, velocity magnitude)
+- **Advanced Filters**: Clip, Contour, and Streamline filters via ParaView Web protocols
+- **Screenshot Export**: PNG/JSON export of current viewport state
+
+**Key context:**
+- Builds on existing ParaView Web infrastructure (Phase 15-18)
+- ParaView Web v3.2.21 still functional; trame migration deferred to v1.6.0 research
+- Apple Silicon detached-container limitation acknowledged: use `--platform linux/amd64` on amd64 servers
 
 ## Evolution
 
-*Last updated: 2026-04-11 — v1.4.0 shipped (ParaView Web 3D Visualization)*
+*Last updated: 2026-04-11 — v1.5.0 started (Advanced Visualization)*
 
 **After each phase transition** (via `/gsd-transition`):
 1. Requirements invalidated? → Move to Out of Scope with reason

@@ -5,8 +5,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiClient } from '../services/api';
-import wsService, { ResidualMessage } from '../services/websocket';
-import type { WebSocketMessage } from '../services/websocket';
+import wsService from '../services/websocket';
+import type { ResidualMessage, WebSocketMessage } from '../services/websocket';
 import type { Job, JobLog, JobStatus } from '../services/types';
 import ResultSummaryPanel from '../components/ResultSummaryPanel';
 import ParaViewViewer from '../components/ParaViewViewer';

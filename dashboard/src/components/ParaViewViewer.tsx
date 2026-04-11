@@ -17,7 +17,15 @@ import {
   createVolumeRenderingStatus,
   parseVolumeRenderingStatus,
   createScreenshotMessage,
+  createClipFilterMessage,
+  createContourFilterMessage,
+  createStreamTracerFilterMessage,
+  createDeleteFilterMessage,
+  createListFiltersMessage,
+  parseFilterListResponse,
+  FilterInfo,
 } from '../services/paraviewProtocol';
+import AdvancedFilterPanel from './AdvancedFilterPanel';
 import './ParaViewViewer.css';
 
 // =============================================================================
@@ -114,6 +122,9 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
 
   // Screenshot state (SHOT-01.3/SHOT-01.4)
   const [screenshotCapturing, setScreenshotCapturing] = useState<boolean>(false);
+
+  // Advanced filter state (FILT-01.5/FILT-01.6)
+  const [activeFilters, setActiveFilters] = useState<FilterInfo[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -258,6 +269,61 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
               setScreenshotCapturing(false);
               screenshotTimeoutRef.current = null;
             }, 500);
+          }
+
+          // FILT-01.4: Parse filter delete response
+          if (message.id === 'pv-filter-delete' && message.result) {
+            const r = message.result as Record<string, unknown>;
+            if (r.success === true) {
+              // Filter removed from state already via handleDeleteFilter callback
+              sendProtocolMessage(createRenderMessage());
+            }
+          }
+
+          // FILT-01.1/01.2/01.3: Parse filter create responses
+          if (message.id === 'pv-filter-clip' && message.result) {
+            const r = message.result as Record<string, unknown>;
+            if (r.success === true) {
+              const newFilter: FilterInfo = {
+                id: r.filterId as number,
+                type: 'clip',
+                parameters: {
+                  insideOut: (r.params as Record<string, unknown>)?.insideOut as boolean,
+                  scalarValue: (r.params as Record<string, unknown>)?.scalarValue as number,
+                },
+              };
+              setActiveFilters((prev) => [...prev, newFilter]);
+              sendProtocolMessage(createRenderMessage());
+            }
+          }
+          if (message.id === 'pv-filter-contour' && message.result) {
+            const r = message.result as Record<string, unknown>;
+            if (r.success === true) {
+              const newFilter: FilterInfo = {
+                id: r.filterId as number,
+                type: 'contour',
+                parameters: {
+                  isovalues: (r.params as Record<string, unknown>)?.isovalues as number[],
+                },
+              };
+              setActiveFilters((prev) => [...prev, newFilter]);
+              sendProtocolMessage(createRenderMessage());
+            }
+          }
+          if (message.id === 'pv-filter-streamtracer' && message.result) {
+            const r = message.result as Record<string, unknown>;
+            if (r.success === true) {
+              const newFilter: FilterInfo = {
+                id: r.filterId as number,
+                type: 'streamtracer',
+                parameters: {
+                  integrationDirection: (r.params as Record<string, unknown>)?.integrationDirection as 'FORWARD' | 'BACKWARD',
+                  maxSteps: (r.params as Record<string, unknown>)?.maxSteps as number,
+                },
+              };
+              setActiveFilters((prev) => [...prev, newFilter]);
+              sendProtocolMessage(createRenderMessage());
+            }
           }
 
           // Parse available time steps response
@@ -423,6 +489,12 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
             {renderSliceControls()}
             {renderColorPresetControls()}
             {renderVolumeControls()}
+            <AdvancedFilterPanel
+              sendProtocolMessage={sendProtocolMessage}
+              activeFilters={activeFilters}
+              selectedField={selectedField}
+              onFiltersChange={setActiveFilters}
+            />
             {renderScalarRangeControls()}
             {renderTimeStepNavigator()}
             <div

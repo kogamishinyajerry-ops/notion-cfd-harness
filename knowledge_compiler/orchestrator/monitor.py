@@ -10,7 +10,8 @@ import re
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+import asyncio
+from typing import List, Dict, Optional, AsyncIterator
 from enum import Enum
 
 from knowledge_compiler.orchestrator.contract import (
@@ -200,6 +201,93 @@ class Monitor:
             return ConvergenceStatus.CONVERGED
 
         return ConvergenceStatus.RUNNING
+
+    async def stream_residuals(
+        self,
+        log_lines: "AsyncIterator[str]",
+    ) -> "AsyncIterator[Dict[str, float]]":
+        """
+        Parse residuals from streaming log lines with 500ms debounce.
+
+        Args:
+            log_lines: Async iterator of log output lines from solver stdout
+
+        Yields:
+            Dict with keys: iteration (int), time_value (float), residuals (Dict[str, float])
+        """
+        import asyncio
+        import re
+
+        time_pattern = re.compile(r"Time = ([\d.]+)")
+        residual_pattern = re.compile(r"(Ux Uy Uz|p) = ([\d.e+-]+)")
+
+        current_iteration = 0
+        current_time_value = 0.0
+        current_residuals: Dict[str, float] = {}
+        last_update_time = 0.0
+        buffer: Dict[str, float] = {}
+
+        async for raw_line in log_lines:
+            line = raw_line.strip()
+
+            # Parse Time = X
+            time_match = time_pattern.search(line)
+            if time_match:
+                current_time_value = float(time_match.group(1))
+                current_iteration = int(current_time_value)
+                current_residuals = {}
+                buffer = {}
+
+            # Parse residual field lines (Ux=..., Uy=..., Uz=..., p=...)
+            # Format: "Ux = 1.23e-04" on its own line or inline
+            for field in ["Ux", "Uy", "Uz", "p"]:
+                if f"{field} =" in line or f"{field}=" in line:
+                    # Extract value after = sign
+                    match = re.search(rf"{field}\s*=\s*([\d.e+-]+)", line)
+                    if match:
+                        try:
+                            buffer[field] = float(match.group(1))
+                        except ValueError:
+                            pass
+
+            # When we see "Initial residual:" or "Final residual:" or end of iteration
+            # commit the buffered residuals
+            if buffer and ("Initial residual" in line or "Final residual" in line or "ExecutionTime" in line):
+                current_residuals = dict(buffer)
+                buffer = {}
+
+                # Debounce: yield at most every 500ms
+                now = asyncio.get_event_loop().time()
+                if now - last_update_time >= 0.5:
+                    yield {
+                        "iteration": current_iteration,
+                        "time_value": current_time_value,
+                        "residuals": dict(current_residuals),
+                    }
+                    last_update_time = now
+
+    def parse_residual_line(self, line: str) -> Optional[Dict[str, float]]:
+        """
+        Parse a single log line for residual values.
+
+        Args:
+            line: A single line from solver stdout
+
+        Returns:
+            Dict mapping field names to residual values, or None if no residual found
+        """
+        import re
+
+        result: Dict[str, float] = {}
+        # Match patterns like "Ux = 1.23e-04" or "p = 5.67e-08"
+        for field in ["Ux", "Uy", "Uz", "p"]:
+            match = re.search(rf"{field}\s*=\s*([\d.e+-]+)", line)
+            if match:
+                try:
+                    result[field] = float(match.group(1))
+                except ValueError:
+                    pass
+        return result if result else None
 
     def _create_empty_report(self, message: str) -> MonitorReport:
         """Create empty report with error message."""

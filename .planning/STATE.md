@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: — Advanced Visualization
 status: executing
-last_updated: "2026-04-11T14:35:26.538Z"
+last_updated: "2026-04-11T14:40:55.867Z"
 progress:
   total_phases: 4
-  completed_phases: 4
-  total_plans: 3
+  completed_phases: 3
+  total_plans: 4
   completed_plans: 3
-  percent: 100
+  percent: 75
 ---
 
 # State
@@ -24,9 +24,9 @@ progress:
 ## Current Position
 
 **Active milestone:** v1.5.0 Advanced Visualization
-**Active phase:** 22 — Advanced Filters (pending planning)
-**Plan:** none (planning pending)
-**Status:** planning
+**Active phase:** 22 — Advanced Filters (executing)
+**Plan:** 22-01-PLAN.md
+**Status:** executing
 
 **Progress bar:**
 

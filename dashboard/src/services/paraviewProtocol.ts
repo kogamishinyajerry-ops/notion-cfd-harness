@@ -278,3 +278,100 @@ export function createScreenshotMessage(viewportWidth: number, viewportHeight: n
     }
   };
 }
+
+/**
+ * Filter information returned from the backend.
+ */
+export interface FilterInfo {
+  id: number;
+  type: 'clip' | 'contour' | 'streamtracer';
+  parameters: {
+    insideOut?: boolean;
+    scalarValue?: number;
+    isovalues?: number[];
+    integrationDirection?: 'FORWARD' | 'BACKWARD';
+    maxSteps?: number;
+  };
+}
+
+/**
+ * Create a protocol message to create a Clip filter.
+ * Maps to FILT-01.1: scalar threshold clip with inside/outside mode.
+ */
+export function createClipFilterMessage(insideOut: boolean, scalarValue: number): object {
+  return {
+    id: "pv-filter-clip",
+    method: "visualization.filters.clip.create",
+    params: { insideOut, scalarValue }
+  };
+}
+
+/**
+ * Create a protocol message to create a Contour (isovalue) filter.
+ * Maps to FILT-01.2: isosurface extraction at specified values.
+ */
+export function createContourFilterMessage(isovalues: number[]): object {
+  return {
+    id: "pv-filter-contour",
+    method: "visualization.filters.contour.create",
+    params: { isovalues }
+  };
+}
+
+/**
+ * Create a protocol message to create a StreamTracer filter.
+ * Maps to FILT-01.3: streamline integration using velocity field U.
+ */
+export function createStreamTracerFilterMessage(
+  integrationDirection: 'FORWARD' | 'BACKWARD',
+  maxSteps: number
+): object {
+  return {
+    id: "pv-filter-streamtracer",
+    method: "visualization.filters.streamtracer.create",
+    params: { integrationDirection, maxSteps }
+  };
+}
+
+/**
+ * Create a protocol message to delete a filter by ID.
+ * Maps to FILT-01.4: filter removal.
+ */
+export function createDeleteFilterMessage(filterId: number): object {
+  return {
+    id: "pv-filter-delete",
+    method: "visualization.filters.delete",
+    params: { filterId }
+  };
+}
+
+/**
+ * Create a protocol message to list all active filters.
+ * Maps to FILT-01.5: filter state query.
+ */
+export function createListFiltersMessage(): object {
+  return {
+    id: "pv-filter-list",
+    method: "visualization.filters.list",
+    params: {}
+  };
+}
+
+/**
+ * Parse the filter list response from the server.
+ * Maps to FILT-01.5/FILT-01.6.
+ */
+export function parseFilterListResponse(
+  response: { id?: string; result?: unknown }
+): FilterInfo[] {
+  if (response && typeof response === 'object') {
+    const r = response as Record<string, unknown>;
+    if (r.result && typeof r.result === 'object') {
+      const result = r.result as Record<string, unknown>;
+      if (Array.isArray(result.filters)) {
+        return result.filters as FilterInfo[];
+      }
+    }
+  }
+  return [];
+}

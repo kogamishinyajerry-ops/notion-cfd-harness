@@ -8,10 +8,18 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
+
+from dataclasses import dataclass
 
 from .case_generator import OpenFOAMCaseGenerator
 from .solver_protocol import SolverResult
+
+
+@dataclass
+class StreamingResult:
+    container_id: Optional[str]
+    solver_result: SolverResult
 
 DEFAULT_IMAGE = "openfoam/openfoam10-paraview510"
 DEFAULT_CASE_ROOT = "/tmp/openfoam-cases"
@@ -229,3 +237,187 @@ class OpenFOAMDockerExecutor:
             "log_files_count": float(len(log_files)),
             "case_supported": float(case_id in OpenFOAMCaseGenerator.SUPPORTED_CASES),
         }
+
+    async def execute_streaming(
+        self,
+        config: dict[str, Any],
+        residual_callback: "Callable[[Dict[str, Any]], Any]",
+    ) -> SolverResult:
+        """
+        Run solver with real-time residual streaming.
+
+        Args:
+            config: Runtime configuration with case_id, solver, etc.
+            residual_callback: Async callback called with each residual dict:
+                {
+                    "iteration": int,
+                    "time_value": float,
+                    "residuals": Dict[str, float],
+                    "status": str,  # running | converged | diverged | stalled
+                }
+
+        Returns:
+            StreamingResult containing container_id (for abort) and solver_result
+        """
+        import asyncio
+
+        started_at = time.time()
+        runtime_config = {**self._config, **(config or {})}
+        captured_container_id: Optional[str] = None
+
+        try:
+            case_dir = self._prepare_case_dir(runtime_config)
+            self._ensure_image()
+            self._run_block_mesh(case_dir)
+
+            case_id = runtime_config.get("case_id") or case_dir.name
+            solver = self._get_solver_command(str(case_id))
+
+            # Run solver with streaming residual capture
+            captured_container_id, solver_result = await self._run_solver_streaming(
+                case_dir=case_dir,
+                solver=solver,
+                residual_callback=residual_callback,
+            )
+
+            # Clean up container after solver exits
+            if captured_container_id:
+                try:
+                    docker_binary = self._docker_binary()
+                    proc = await asyncio.create_subprocess_exec(
+                        docker_binary, "rm", captured_container_id,
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await proc.communicate()
+                except Exception:
+                    pass  # Best effort cleanup
+
+            return StreamingResult(
+                container_id=captured_container_id,
+                solver_result=SolverResult(
+                    success=solver_result.get("success", True),
+                    is_mock=self.is_mock,
+                    output_dir=str(case_dir),
+                    metrics=self._extract_metrics(case_dir, str(case_id)),
+                    error=solver_result.get("error"),
+                    execution_time_s=time.time() - started_at,
+                ),
+            )
+        except Exception as exc:
+            return StreamingResult(
+                container_id=captured_container_id,
+                solver_result=SolverResult(
+                    success=False,
+                    is_mock=self.is_mock,
+                    output_dir="",
+                    metrics={},
+                    error=str(exc),
+                    execution_time_s=time.time() - started_at,
+                ),
+            )
+
+    async def _run_solver_streaming(
+        self,
+        case_dir: Path,
+        solver: str,
+        residual_callback: "Callable[[Dict[str, Any]], Any]",
+    ) -> tuple[Optional[str], dict[str, Any]]:
+        """
+        Run solver asynchronously with streaming stdout parsing.
+
+        Returns:
+            Tuple of (container_id, result_dict)
+        """
+        import asyncio
+        import re
+
+        docker_binary = self._docker_binary()
+        cmd = f"source /opt/openfoam10/etc/bashrc && {solver} 2>&1"
+
+        # Start container in detached mode (no --rm so we keep container_id)
+        proc = await asyncio.create_subprocess_exec(
+            docker_binary,
+            "run",
+            "-d",  # detached
+            "-v=%s:/case" % case_dir.resolve(),
+            "-w=/case",
+            "--memory=%s" % self.memory_limit,
+            "--user=%s:%s" % (os.getuid(), os.getgid()),
+            "--platform=linux/amd64",
+            "--entrypoint=/bin/bash",
+            self.image,
+            "-c",
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            bufsize=1,  # line buffering
+        )
+
+        # Read container ID from first line of stdout (docker run -d outputs container ID)
+        container_id_bytes = await proc.stdout.readline()
+        container_id = container_id_bytes.decode().strip()
+
+        # Parse streaming output for residuals
+        time_pattern = re.compile(r"Time = ([\d.]+)")
+        residual_pattern = re.compile(r"(Ux|Uy|Uz|p)\s*=\s*([\d.e+-]+)")
+
+        current_iteration = 0
+        current_time_value = 0.0
+        current_residuals: dict[str, float] = {}
+        last_callback_time = 0.0
+
+        loop = asyncio.get_event_loop()
+
+        while True:
+            line_bytes = await proc.stdout.readline()
+            if not line_bytes:
+                break  # EOF
+
+            line = line_bytes.decode().strip()
+
+            # Parse time
+            time_match = time_pattern.search(line)
+            if time_match:
+                current_time_value = float(time_match.group(1))
+                current_iteration = int(current_time_value)
+                current_residuals = {}
+
+            # Parse residuals
+            for field in ["Ux", "Uy", "Uz", "p"]:
+                match = residual_pattern.search(line)
+                if match:
+                    field_name, field_val = match.group(1), match.group(2)
+                    try:
+                        current_residuals[field_name] = float(field_val)
+                    except ValueError:
+                        pass
+
+            # Commit residuals on solver info lines (Initial/Final residual, ExecutionTime)
+            if current_residuals and ("Initial residual" in line or "Final residual" in line or "ExecutionTime" in line):
+                now = loop.time()
+                if now - last_callback_time >= 0.5:
+                    await residual_callback({
+                        "iteration": current_iteration,
+                        "time_value": current_time_value,
+                        "residuals": dict(current_residuals),
+                        "status": "running",
+                    })
+                    last_callback_time = now
+
+            # Check for solver completion
+            if "End" in line and "ExecutionTime" in line:
+                # Solver finished — do a final callback
+                if current_residuals:
+                    await residual_callback({
+                        "iteration": current_iteration,
+                        "time_value": current_time_value,
+                        "residuals": dict(current_residuals),
+                        "status": "converged",
+                    })
+                break
+
+        # Wait for container to fully exit
+        await proc.wait()
+
+        return container_id, {"success": proc.returncode == 0}

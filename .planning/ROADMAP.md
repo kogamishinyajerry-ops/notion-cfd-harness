@@ -35,7 +35,7 @@
 4. If `adv_protocols.py` has an import error, container startup fails with a user-facing error message surfaced in the Dashboard viewer area
 
 **Plans:**
-- [ ] 19-01-PLAN.md — Container integration: custom entrypoint wrapper, adv_protocols.py mount, custom image build
+- [x] 20-01-PLAN.md — Volume Rendering: ParaViewWebVolumeRendering protocol class + frontend volume toggle UI
 
 **UI hint**: no
 
@@ -57,7 +57,7 @@
 4. Volume rendering uses Smart Volume Mapper (adaptive) confirmed in protocol code
 
 **Plans:**
-- [ ] 19-01-PLAN.md — Container integration: custom entrypoint wrapper, adv_protocols.py mount, custom image build
+- [x] 20-01-PLAN.md — Volume Rendering: ParaViewWebVolumeRendering protocol class + frontend volume toggle UI
 
 **UI hint**: yes
 
@@ -79,7 +79,7 @@
 4. Rapid clicks within 500ms produce only one screenshot (debounce active)
 
 **Plans:**
-- [ ] 19-01-PLAN.md — Container integration: custom entrypoint wrapper, adv_protocols.py mount, custom image build
+- [x] 21-01-PLAN.md — Screenshot Export: PNG capture via viewport.image.render, async UI, debounce
 
 **UI hint**: yes
 
@@ -103,7 +103,7 @@
 6. Multiple filters (e.g., Clip + Contour + Streamlines) are visible simultaneously in the viewport
 
 **Plans:**
-- [ ] 19-01-PLAN.md — Container integration: custom entrypoint wrapper, adv_protocols.py mount, custom image build
+- [ ] 22-01-PLAN.md — Advanced Filters: Clip, Contour, StreamTracer protocols + UI
 
 **UI hint**: yes
 
@@ -132,8 +132,8 @@
 | 17 | v1.4.0 | 2/2 | Complete | 2026-04-11 |
 | 18 | v1.4.0 | 1/1 | Complete   | 2026-04-11 |
 | 19 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
-| 20 | v1.5.0 | 0/1 | Not started | - |
-| 21 | v1.5.0 | 0/1 | Not started | - |
+| 20 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
+| 21 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
 | 22 | v1.5.0 | 0/1 | Not started | - |
 
 ---

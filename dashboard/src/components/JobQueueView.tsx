@@ -70,7 +70,7 @@ export default function JobQueueView({ caseId, onJobSelect }: JobQueueViewProps)
   useEffect(() => {
     const unsubscribers: (() => void)[] = [];
 
-    jobs.forEach((job) => {
+    (jobs || []).forEach((job) => {
       if (job.status === 'queued' || job.status === 'running') {
         // Connect to WebSocket
         wsService.connect(job.id);
@@ -109,9 +109,9 @@ export default function JobQueueView({ caseId, onJobSelect }: JobQueueViewProps)
     };
   }, []);
 
-  const filteredJobs = filter === 'all' ? jobs : jobs.filter((j) => j.status === filter);
+  const filteredJobs = filter === 'all' ? jobs : (jobs || []).filter((j) => j.status === filter);
 
-  const statusCounts = jobs.reduce(
+  const statusCounts = (jobs || []).reduce(
     (acc, job) => {
       acc[job.status] = (acc[job.status] || 0) + 1;
       return acc;
@@ -119,7 +119,7 @@ export default function JobQueueView({ caseId, onJobSelect }: JobQueueViewProps)
     {} as Record<JobStatus, number>
   );
 
-  if (loading && jobs.length === 0) {
+  if (loading && (jobs || []).length === 0) {
     return (
       <div className="job-queue loading">
         <div className="loading-spinner" />
@@ -160,7 +160,7 @@ export default function JobQueueView({ caseId, onJobSelect }: JobQueueViewProps)
           className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
           onClick={() => setFilter('all')}
         >
-          All ({jobs.length})
+          All ({(jobs || []).length})
         </button>
         <button
           className={`filter-btn ${filter === 'running' ? 'active' : ''}`}
@@ -188,7 +188,7 @@ export default function JobQueueView({ caseId, onJobSelect }: JobQueueViewProps)
         </button>
       </div>
 
-      {filteredJobs.length === 0 ? (
+      {(filteredJobs || []).length === 0 ? (
         <div className="empty-state">
           <p>No jobs found</p>
         </div>

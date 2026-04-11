@@ -102,3 +102,34 @@ async def cancel_job(job_id: str):
         )
 
     return service.get_job(job_id)
+
+
+@router.delete("/jobs/{job_id}/abort", tags=["jobs"])
+async def abort_job(job_id: str) -> dict:
+    """
+    Abort a running job by killing its Docker container.
+
+    Args:
+        job_id: Job identifier
+
+    Returns:
+        {"job_id": str, "aborted": bool, "message": str}
+    """
+    service = get_job_service()
+
+    # Check job exists
+    job = service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+
+    # Only pending/running jobs can be aborted
+    if job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
+        return {"job_id": job_id, "aborted": False, "message": f"Job is {job.status.value}, cannot abort"}
+
+    # Sync cancel (mark as cancelled)
+    service.cancel_job(job_id)
+
+    # Async cancel (kill container if running)
+    await service.cancel_job_async(job_id)
+
+    return {"job_id": job_id, "aborted": True, "message": "Job aborted"}

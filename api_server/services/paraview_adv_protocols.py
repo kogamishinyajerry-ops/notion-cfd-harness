@@ -163,3 +163,184 @@ class ParaViewWebVolumeRendering(ParaViewWebProtocol):
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+
+class ParaViewWebAdvancedFilters(ParaViewWebProtocol):
+    """ParaView Web protocol for advanced filters: Clip, Contour, StreamTracer.
+
+    Tracks filter proxy IDs in a class-level dict so they can be deleted by ID.
+    All filter operations call simple.Render() + InvokeEvent to push viewport updates.
+    """
+
+    # Filter registry: filterId (int) -> {"type": str, "proxy": object}
+    _filters = {}
+
+    @exportRpc("visualization.filters.clip.create")
+    def clipFilterCreate(self, insideOut: bool, scalarValue: float):
+        """Create a scalar Clip filter on the active source.
+
+        Args:
+            insideOut: If True, clip everything outside the scalar threshold
+            scalarValue: Scalar threshold value
+        """
+        try:
+            source = simple.GetActiveSource()
+            if source is None:
+                return {"success": False, "error": "No active source"}
+
+            # Validate inputs
+            if not isinstance(scalarValue, (int, float)) or not (-1e10 < scalarValue < 1e10):
+                return {"success": False, "error": "Invalid scalarValue"}
+
+            # Create clip filter
+            clip = simple.Clip(Input=source)
+            clip.ClipType = "Scalar"
+            clip.Scalar = scalarValue
+            clip.InsideOut = insideOut
+
+            # Register filter
+            filter_id = id(clip)
+            ParaViewWebAdvancedFilters._filters[filter_id] = {"type": "clip", "proxy": clip}
+
+            # Push viewport update
+            simple.Render()
+            self._app.SMApplication.InvokeEvent("UpdateEvent", ())
+
+            return {"success": True, "filterId": filter_id, "proxyId": filter_id}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @exportRpc("visualization.filters.contour.create")
+    def contourFilterCreate(self, isovalues: list):
+        """Create an isosurface Contour filter on the active source.
+
+        Args:
+            isovalues: List of scalar isovalue thresholds
+        """
+        try:
+            source = simple.GetActiveSource()
+            if source is None:
+                return {"success": False, "error": "No active source"}
+
+            # Validate: max 20 isovalues
+            if not isinstance(isovalues, list) or len(isovalues) > 20:
+                return {"success": False, "error": "isovalues must be a list with at most 20 values"}
+            for v in isovalues:
+                if not isinstance(v, (int, float)) or not (-1e10 < v < 1e10):
+                    return {"success": False, "error": "All isovalues must be finite numbers"}
+
+            # Create contour filter
+            contour = simple.Contour(Input=source)
+            contour.ContourBy = ["POINTS", " scalars"]
+            contour.Isosurfaces = isovalues
+
+            # Register filter
+            filter_id = id(contour)
+            ParaViewWebAdvancedFilters._filters[filter_id] = {"type": "contour", "proxy": contour}
+
+            # Push viewport update
+            simple.Render()
+            self._app.SMApplication.InvokeEvent("UpdateEvent", ())
+
+            return {"success": True, "filterId": filter_id, "proxyId": filter_id}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @exportRpc("visualization.filters.streamtracer.create")
+    def streamTracerFilterCreate(self, integrationDirection: str, maxSteps: int):
+        """Create a StreamTracer filter using velocity field U.
+
+        Args:
+            integrationDirection: "FORWARD" or "BACKWARD"
+            maxSteps: Maximum number of integration steps (cap at 10000)
+        """
+        try:
+            source = simple.GetActiveSource()
+            if source is None:
+                return {"success": False, "error": "No active source"}
+
+            # Validate inputs
+            if integrationDirection not in ("FORWARD", "BACKWARD"):
+                return {"success": False, "error": "integrationDirection must be FORWARD or BACKWARD"}
+            if not isinstance(maxSteps, int) or maxSteps <= 0:
+                return {"success": False, "error": "maxSteps must be a positive integer"}
+            maxSteps = min(maxSteps, 10000)  # Cap at 10000
+
+            # Create stream tracer
+            streamtracer = simple.StreamTracer(Input=source)
+            streamtracer.Vectors = ["POINTS", "U"]  # Velocity field U
+            streamtracer.IntegrationDirection = integrationDirection
+            streamtracer.MaximumSteps = maxSteps
+            streamtracer.InitialStepLength = 0.1
+            streamtracer.MinimumStepLength = 0.001
+
+            # Register filter
+            filter_id = id(streamtracer)
+            ParaViewWebAdvancedFilters._filters[filter_id] = {"type": "streamtracer", "proxy": streamtracer}
+
+            # Push viewport update
+            simple.Render()
+            self._app.SMApplication.InvokeEvent("UpdateEvent", ())
+
+            return {"success": True, "filterId": filter_id, "proxyId": filter_id}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @exportRpc("visualization.filters.delete")
+    def filterDelete(self, filterId: int):
+        """Delete a filter by its proxy ID.
+
+        Args:
+            filterId: The filter ID returned from a create RPC
+        """
+        try:
+            filter_info = ParaViewWebAdvancedFilters._filters.get(filterId)
+            if filter_info is None:
+                return {"success": False, "error": f"Filter {filterId} not found"}
+
+            filter_proxy = filter_info["proxy"]
+            simple.Delete(filter_proxy)
+
+            # Remove from registry
+            del ParaViewWebAdvancedFilters._filters[filterId]
+
+            # Push viewport update
+            simple.Render()
+            self._app.SMApplication.InvokeEvent("UpdateEvent", ())
+
+            return {"success": True}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @exportRpc("visualization.filters.list")
+    def filterList(self):
+        """Return all active filters with their types and parameters."""
+        filters = []
+        for filter_id, info in ParaViewWebAdvancedFilters._filters.items():
+            proxy = info["proxy"]
+            params = {}
+            ftype = info["type"]
+            if ftype == "clip":
+                params = {
+                    "insideOut": bool(getattr(proxy, "InsideOut", False)),
+                    "scalarValue": float(getattr(proxy, "Scalar", 0)),
+                }
+            elif ftype == "contour":
+                params = {
+                    "isovalues": list(getattr(proxy, "Isosurfaces", [])),
+                }
+            elif ftype == "streamtracer":
+                params = {
+                    "integrationDirection": str(getattr(proxy, "IntegrationDirection", "FORWARD")),
+                    "maxSteps": int(getattr(proxy, "MaximumSteps", 1000)),
+                }
+            filters.append({
+                "id": filter_id,
+                "type": ftype,
+                "parameters": params,
+            })
+        return {"filters": filters}
