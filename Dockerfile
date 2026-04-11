@@ -1,11 +1,16 @@
 FROM openfoam/openfoam10-paraview510
 
-# Copy the entrypoint wrapper script that imports adv_protocols.py before
-# starting the ParaView Web launcher. The wrapper is installed as the
-# container's ENTRYPOINT so it runs as PID 1 inside every session container.
-COPY entrypoint_wrapper.sh /entrypoint_wrapper.sh
-RUN chmod +x /entrypoint_wrapper.sh
+# Install trame stack — replaces vtk.web.launcher + wslink server stack
+# These versions are compatible with Python 3.9.18 in openfoam10-paraview510
+# trame 3.12.0 transitively brings wslink >= 2.3.3 (do NOT install wslink separately)
+RUN pip install --no-cache-dir \
+    trame==3.12.0 \
+    trame-vtk==2.11.6 \
+    trame-vuetify==3.2.1
 
-# Use exec form so the wrapper receives PID 1 and can in turn exec pvpython.
-# CMD arguments (passed at runtime) become the wrapper's $@.
-ENTRYPOINT ["/entrypoint_wrapper.sh"]
+# Copy trame server entrypoint script (replaces entrypoint_wrapper.sh + launcher.py + adv_protocols.py)
+COPY trame_server.py /trame_server.py
+
+# Direct start — no entrypoint wrapper needed.
+# The container CMD becomes: pvpython /trame_server.py --port N
+CMD ["pvpython", "/trame_server.py"]
