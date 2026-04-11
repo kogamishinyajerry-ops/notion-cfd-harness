@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.6.0
-milestone_name: — ParaView Web → Trame Migration
-status: defining_requirements
-last_updated: "2026-04-11T23:30:00.000Z"
+milestone_name: ParaView Web → Trame Migration
+status: roadmap_created
+last_updated: "2026-04-11T23:45:00.000Z"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -19,32 +19,53 @@ progress:
 - **Name**: AI-CFD Knowledge Harness
 - **Root**: /Users/Zhuanz/Desktop/notion-cfd-harness
 - **Version**: v1.6.0
-- **Milestone**: v1.6.0 — ParaView Web → Trame Migration
+- **Milestone**: v1.6.0 — ParaView Web to Trame Migration
 
 ## Current Position
 
-**Active milestone:** v1.6.0 ParaView Web → Trame Migration
-**Active phase:** Not started (defining requirements)
-**Status:** Research complete — 4/4 agents + synthesizer done
-**Next:** Requirements → Roadmap
+**Active milestone:** v1.6.0 ParaView Web to Trame Migration
+**Active phase:** Phase 23 (Trame Backend Skeleton)
+**Status:** Roadmap created — awaiting user approval to begin planning
+**Next:** `/gsd-plan-phase 23`
 
-## Research Summary
+## Phase Structure
 
-Research completed (4 agents + synthesizer, commit `291cccc`):
-- **Stack:** trame 3.12.0 + trame-vtk 2.11.6 + trame-vuetify 3.2.1, Python 3.9 compatible
-- **Key change:** @exportRpc → @ctrl.add/@state.change, React → Vue.js iframe, entrypoint_wrapper.sh → pvpython app.py
-- **Risk:** No official migration guide exists; full rewrite not port
-- **Open questions:** VtkLocalView Apple Silicon WebGL, html_view.screenshot resolution, multi-session isolation
+| Phase | Goal | Requirements |
+|-------|------|--------------|
+| 23 - Trame Backend Skeleton | Trame + Docker integration, minimal sphere rendering | TRAME-01.1–01.4 |
+| 24 - RPC Protocol Migration | 13 @exportRpc → @ctrl.add/@state.change, UUID registry | TRAME-02.1–02.6 |
+| 25 - Session Manager Adaptation | TrameSessionManager, Docker lifecycle, idle timeout | TRAME-03.1–03.4 |
+| 26 - Vue Frontend + Iframe Bridge | Vue.js viewer, CFDViewerBridge.ts, postMessage wiring | TRAME-04.1–04.6 |
+| 27 - Integration + Feature Parity | End-to-end validation, all v1.4.0/v1.5.0 features | TRAME-05.1–05.6 |
+| 28 - Cleanup + Old File Removal | Delete ParaView Web artifacts, no broken imports | TRAME-06.1–06.5 |
 
-## v1.6.0 Goals
+## Coverage
 
-- **TRAME-01**: Trame backend skeleton in Docker
-- **TRAME-02**: RPC protocol migration (all 13 RPCs)
-- **TRAME-03**: FastAPI Session Manager adaptation
-- **TRAME-04**: Vue.js frontend + React iframe bridge
-- **TRAME-05**: Integration + feature parity
-- **TRAME-06**: Cleanup + old file removal
+- **31/31** requirements mapped across 6 phases
+- **0** orphaned requirements
+- **0** duplicate mappings
+
+## Key Architecture Decisions
+
+- `@exportRpc` → `@ctrl.add`/`@state.change` (trame reactive pattern)
+- React dashboard embeds trame Vue.js viewer as iframe
+- `CFDViewerBridge.ts` uses `window.postMessage` for React-Vue communication
+- Filter registry uses UUID keys (not Python `id()`) for restart stability
+- `InvokeEvent` calls removed entirely (trame auto-pushes on state mutation)
+- Single `pvpython /trame_server.py --port N` replaces `entrypoint_wrapper.sh` + launcher
+
+## Research Notes (commit `291cccc`)
+
+- MEDIUM confidence — no official migration guide exists
+- Phase 1 must validate trame + ParaView 5.10 compatibility explicitly
+- Phase 4 must validate `VtkLocalView` Apple Silicon Safari WebGL behavior
+- `html_view.screenshot()` resolution behavior needs practical verification
+- Multi-session isolation via `get_server(name=session_id)` needs runtime test
 
 ## Blockers
 
-None — research complete, awaiting user confirmation to proceed
+None — roadmap ready for planning
+
+## Session Continuity
+
+After approval: run `/gsd-plan-phase 23` to begin Phase 23 planning
