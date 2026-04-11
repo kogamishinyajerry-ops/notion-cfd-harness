@@ -1,5 +1,23 @@
 # Milestones
 
+## v1.3.0 Real-time Convergence Monitoring (Shipped: 2026-04-11)
+
+**Phases completed:** 7 phases, 20 plans, 14 tasks
+
+**Key accomplishments:**
+
+- 11 tests
+- Core Methods:
+- GenericCaseAdapter wrapping GenericOpenFOAMCaseGenerator with CasePreset-style interface + ExecutorFactory.get_generator() integration with 5 new Wave 3 tests
+- Gap closure: 8-block hex generation for BODY_IN_CHANNEL geometry (was returning empty list)
+- Phase:
+- FastAPI REST API with case CRUD, job submission/status, knowledge registry queries, and OpenAPI/Swagger documentation - 32 tests passing
+- WebSocket endpoint `/ws/jobs/{job_id}` for real-time job progress streaming with event broadcasting and connection management - 14 tests passing
+- New State:
+- Gap:
+
+---
+
 ---
 
 ## v1.2.0 — API & Web Interface
@@ -16,16 +34,19 @@
 ### Phase Details
 
 #### Phase 10: REST API Server
+
 - 10-01: FastAPI project structure, case/job endpoints (12 tests)
 - 10-02: JWT authentication with RBAC (36 auth tests)
 - 10-03: WebSocket streaming (14 WS tests)
 
 #### Phase 11: Web Dashboard
+
 - 11-01: React + TypeScript + Vite, routing, dark/light theme
 - 11-02: Case builder UI with wizard
 - 11-03: Job queue, real-time updates, report viewer
 
 ### Stats
+
 - **LOC added:** ~5,000 (api_server/ + dashboard/)
 - **Tests:** 1905 passed, 1 skipped
 - **Tag:** v1.2.0
@@ -62,17 +83,20 @@
 ### Phase Details
 
 #### Phase 8: 通用 CaseGenerator
+
 - 08-01: Typed dataclasses (GeometrySpec, MeshSpec, PhysicsSpec, BoundarySpec)
 - 08-02: GenericOpenFOAMCaseGenerator core (blockMeshDict + BC + solver assembly)
 - 08-03: Integration tests + Docker round-trip verification
 - 08-04: Gap closure (BODY_IN_CHANNEL 8-block hex generation)
 
 #### Phase 9: Report Automation
+
 - 09-01: ReportGenerator core + Jinja2 HTML template (two-tier structure)
 - 09-02: PDF (weasyprint) + JSON output formats
 - 09-03: ReportTeachMode + CorrectionCallback + integration tests (14 tests)
 
 ### Stats
+
 - **LOC added:** ~2,200 (knowledge_compiler/)
 - **Tests:** 1823 passed, 1 skipped
 - **Tag:** v1.1.0
@@ -94,4 +118,3 @@
 5. **Phase 5: Production Readiness** — Cache, Connection Pool, Auth, RBAC, Audit, Backup
 6. **Phase 6: Operational Validation** — SSOT cleanup, Whitelist ≥50, Mock E2E, Correction闭环
 7. **Phase 7: Real Solver E2E** — OpenFOAM Docker executor, Real CFD vs literature validation
-

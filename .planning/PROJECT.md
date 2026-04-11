@@ -1,6 +1,6 @@
 # AI-CFD Knowledge Harness — Project
 
-**Version:** v1.3.0 (Next)
+**Version:** v1.4.0 (Next)
 **Status:** Planning
 
 ---
@@ -19,6 +19,7 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 - **Report Generator**: Multi-format (HTML/PDF/JSON) with literature comparison
 - **REST API Server**: FastAPI exposing all CLI functionality
 - **Web Dashboard**: React-based UI for case management
+- **Real-time Convergence Monitoring**: WebSocket residual streaming + DivergenceDetector
 
 ## Milestones
 
@@ -27,27 +28,31 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 | M1 | 1-7 | ✅ Shipped | 2026-04-07 |
 | v1.1.0 | 8-9 | ✅ Shipped | 2026-04-10 |
 | v1.2.0 | 10-11 | ✅ Shipped | 2026-04-10 |
-| v1.3.0 | TBD | 🔄 Planning | TBD |
+| v1.3.0 | 12-14 | ✅ Shipped | 2026-04-11 |
 
-## v1.3.0 — Real-time Convergence Monitoring
+## v1.3.0 — Real-time Convergence Monitoring ✅
 
 **Goal:** 仿真运行时实时追踪收敛曲线，Dashboard 可视化
 
-**Target features:**
-- **RC-01**: 仿真进程残差数据 WebSocket 推送（日志解析）
-- **RC-02**: Dashboard 实时残差曲线（Plotly，随迭代更新）
-- **RC-03**: Job detail 页面收敛监控面板
-- **RC-04**: 收敛完成后结果摘要展示
+**Delivered:**
+- MON-01: OpenFOAM residual log parsing + WebSocket streaming (500ms debounce)
+- MON-02: Dashboard real-time residual LineChart (Recharts, log-scale)
+- MON-03: Job detail page convergence monitoring panel
+- MON-04: Post-convergence ResultSummaryPanel (iteration, execution time, final residuals, Y+ placeholder)
+- MON-05: Job abort button (docker kill)
+- MON-06: DivergenceDetector with rolling 5-iteration window per variable + divergence_alert WebSocket message
 
-**Key context:**
-- 基于现有 Phase 10 WebSocket + Phase 11 Dashboard
-- OpenFOAM solver 日志解析获取残差
-- Plotly.js 前端实时图表
-- Phase 12+ 再做 3D 场可视化（ParaView Web）
+**Archive:** `.planning/milestones/v1.3.0-ROADMAP.md`
+
+---
+
+## v1.4.0 — Next Milestone (TBD)
+
+**Goal:** TBD
 
 ## Evolution
 
-This document evolves at phase transitions and milestone boundaries.
+*Last updated: 2026-04-11 after v1.3.0 milestone*
 
 **After each phase transition** (via `/gsd-transition`):
 1. Requirements invalidated? → Move to Out of Scope with reason
