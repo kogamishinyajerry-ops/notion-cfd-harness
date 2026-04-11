@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.5.0
 milestone_name: — Advanced Visualization
 status: executing
-last_updated: "2026-04-11T14:20:00.000Z"
+last_updated: "2026-04-11T14:35:26.538Z"
 progress:
   total_phases: 4
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  completed_phases: 4
+  total_plans: 3
+  completed_plans: 3
   percent: 100
 ---
 
@@ -24,15 +24,15 @@ progress:
 ## Current Position
 
 **Active milestone:** v1.5.0 Advanced Visualization
-**Active phase:** 19 — Container Integration (COMPLETE)
-**Plan:** 19-01-PLAN.md
-**Status:** executing
+**Active phase:** 22 — Advanced Filters (pending planning)
+**Plan:** none (planning pending)
+**Status:** planning
 
 **Progress bar:**
 
 ```
 [ Phase 19 ]------ Phase 20 ----- Phase 21 ----- Phase 22 -----
-  100%                 0%            0%            0%
+  100%               100%           100%            0%
 ```
 
 ## Milestone History
@@ -98,24 +98,9 @@ None — planning phase complete
 
 ### Current work
 
-- Phase 19 (Container Integration) COMPLETE — 4 tasks executed
-- Phase 19-01 plan: committed, Dockerfile + entrypoint_wrapper.sh + paraview_adv_protocols.py created, launcher updated
-- Next action: Phase 20 (Volume Rendering) planning
-
-### Before implementing Phase 19
-
-- Verify `paraview_web_launcher.py` entrypoint hook points
-- Confirm `openfoam/openfoam10-paraview510` launcher.py accepts custom entrypoint approach
-
-### Before implementing Phase 20
-
-- Test EGL vendor detection inside Docker container (NVIDIA vs Mesa strings)
-- Verify Smart Volume Mapper availability in ParaView 5.10.1
-
-### Before implementing Phase 21
-
-- Confirm `viewport.image.render` base64 response format matches expected PNG
-- Test screenshot on large CFD dataset (>1M cells) for WS loop blocking
+- Phase 21 (Screenshot Export) COMPLETE — 3 tasks executed
+- Phase 21-01 plan: committed, createScreenshotMessage() + handleScreenshot() + CSS added
+- Next action: Phase 22 (Advanced Filters) planning
 
 ### Before implementing Phase 22
 

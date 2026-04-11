@@ -16,6 +16,7 @@ import {
   createVolumeRenderingToggle,
   createVolumeRenderingStatus,
   parseVolumeRenderingStatus,
+  createScreenshotMessage,
 } from '../services/paraviewProtocol';
 import './ParaViewViewer.css';
 
@@ -111,10 +112,14 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
   const [volumeEnabled, setVolumeEnabled] = useState<boolean>(false);
   const [volumeWarning, setVolumeWarning] = useState<string | null>(null);
 
+  // Screenshot state (SHOT-01.3/SHOT-01.4)
+  const [screenshotCapturing, setScreenshotCapturing] = useState<boolean>(false);
+
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pvProxyRef = useRef<unknown>(null); // ParaView Web proxy reference
+  const screenshotTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // -------------------------------------------------------------------------
   // Cleanup on unmount
@@ -127,6 +132,7 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
       wsRef.current = null;
     }
     pvProxyRef.current = null;
+    if (screenshotTimeoutRef.current) clearTimeout(screenshotTimeoutRef.current);
   }, []);
 
   useEffect(() => {
@@ -222,6 +228,36 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
               }
               setVolumeWarning(warnings.length > 0 ? warnings.join(' ') : null);
             }
+          }
+
+          // SHOT-01.1: Parse screenshot response and trigger download
+          if (message.id === 'pv-screenshot' && message.result) {
+            const r = message.result as Record<string, unknown>;
+            const base64Data = typeof r.image === 'string' ? r.image : null;
+            if (base64Data) {
+              // Decode base64 to Blob and trigger download
+              const byteString = atob(base64Data);
+              const ab = new ArrayBuffer(byteString.length);
+              const ia = new Uint8Array(ab);
+              for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+              }
+              const blob = new Blob([ab], { type: 'image/png' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+              link.download = `cfd-screenshot-${timestamp}.png`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            }
+            // SHOT-01.4: Re-enable after 500ms debounce window
+            screenshotTimeoutRef.current = setTimeout(() => {
+              setScreenshotCapturing(false);
+              screenshotTimeoutRef.current = null;
+            }, 500);
           }
 
           // Parse available time steps response
@@ -327,6 +363,27 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
     handleLaunch();
   }, [handleLaunch]);
 
+  // SHOT-01.1/SHOT-01.2/SHOT-01.3/SHOT-01.4: Screenshot capture with debounce
+  const handleScreenshot = useCallback(() => {
+    // SHOT-01.4: Debounce — ignore if already capturing or recently captured
+    if (screenshotCapturing) return;
+    if (screenshotTimeoutRef.current) return;
+
+    // SHOT-01.3: Disable button immediately (non-blocking UX)
+    setScreenshotCapturing(true);
+
+    // SHOT-01.2: Get actual rendered viewport dimensions from the DOM element
+    const viewportEl = document.getElementById('paraview-viewport');
+    if (!viewportEl) {
+      setScreenshotCapturing(false);
+      return;
+    }
+    const { offsetWidth, offsetHeight } = viewportEl;
+
+    // SHOT-01.1: Send viewport.image.render RPC
+    sendProtocolMessage(createScreenshotMessage(offsetWidth, offsetHeight));
+  }, [screenshotCapturing, sendProtocolMessage]);
+
   // -------------------------------------------------------------------------
   // Render states
   // -------------------------------------------------------------------------
@@ -360,7 +417,8 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
 
       case 'connected':
         return (
-          <div className="viewer-canvas-container">
+          <div className="viewer-canvas-container" style={{ position: 'relative' }}>
+            {renderScreenshotButton()}
             {renderFieldSelector()}
             {renderSliceControls()}
             {renderColorPresetControls()}
@@ -532,6 +590,28 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
             </span>
           </div>
         </div>
+      </div>
+    );
+  };
+
+  // -------------------------------------------------------------------------
+  // Screenshot button (SHOT-01.1/SHOT-01.3)
+  // -------------------------------------------------------------------------
+  const renderScreenshotButton = () => {
+    return (
+      <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+        <button
+          className="screenshot-btn"
+          disabled={screenshotCapturing}
+          onClick={handleScreenshot}
+          title="Capture viewport as PNG"
+        >
+          {screenshotCapturing ? (
+            <span className="screenshot-spinner" />
+          ) : (
+            'Screenshot'
+          )}
+        </button>
       </div>
     );
   };

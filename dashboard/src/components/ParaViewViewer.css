@@ -540,3 +540,44 @@
   font-size: 12px;
   color: var(--text-secondary);
 }
+
+/* --------------------------------------------------------------------------
+   Screenshot button (SHOT-01.1/SHOT-01.3)
+   -------------------------------------------------------------------------- */
+.screenshot-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  color: #ffffff;
+  background: var(--accent-color);
+  border: 1px solid var(--accent-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  min-width: 100px;
+}
+
+.screenshot-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.screenshot-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.screenshot-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: viewer-spin 0.8s linear infinite;
+}

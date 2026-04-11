@@ -260,3 +260,21 @@ export function parseVolumeRenderingStatus(response: { id?: string; result?: unk
   }
   return null;
 }
+
+/**
+ * Create a protocol message to capture the current viewport as a PNG screenshot.
+ * Maps to SHOT-01.1/SHOT-01.2: uses viewport.image.render at current viewport resolution.
+ *
+ * @param viewportWidth  - Current rendered viewport width in pixels (SHOT-01.2)
+ * @param viewportHeight - Current rendered viewport height in pixels (SHOT-01.2)
+ */
+export function createScreenshotMessage(viewportWidth: number, viewportHeight: number): object {
+  return {
+    id: "pv-screenshot",
+    method: "viewport.image.render",
+    params: {
+      quality: 95,
+      size: [viewportWidth, viewportHeight]
+    }
+  };
+}
