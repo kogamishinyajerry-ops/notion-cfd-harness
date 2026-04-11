@@ -504,11 +504,16 @@ def on_slice_change(slice_axis, slice_origin, **kwargs):
 @_state.change("color_preset")
 def on_color_preset_change(color_preset, **kwargs):
     """Apply color lookup table preset."""
-    lut_map = {"Viridis": "Viridis", "BlueRed": "BlueRedRainbow", "Grayscale": "Grayscale"}
+    lut_map = {"Viridis": "Viridis", "BlueRed": "Blue to Red Rainbow", "Grayscale": "Grayscale"}
     try:
-        display = simple.GetDisplayProperties()
-        if display is not None:
-            # ParaView: set LookupTable via color map
+        source = simple.GetActiveSource()
+        if source is not None:
+            display = simple.GetDisplayProperties(source)
+            if display is not None:
+                lut_name = lut_map.get(color_preset, "Viridis")
+                lut = simple.GetLookupTableForArray("POINTS", 0, NanColor=[0.75, 0.75, 0.75])
+                lut.RGBPoints = simple.GetColorTransferFunction(lut_name).RGBPoints
+                display.LookupTable = lut
             simple.Render()
             _ctrl.view_update()
     except Exception:

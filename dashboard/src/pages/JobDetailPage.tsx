@@ -172,7 +172,7 @@ export default function JobDetailPage() {
       unsubscribe();
       wsService.disconnect(jobId);
     };
-  }, [jobId, job?.status]);
+  }, [jobId, job?.status, showResultSummary]);
 
   // Auto-scroll logs
   useEffect(() => {
@@ -374,7 +374,7 @@ export default function JobDetailPage() {
                 jobId={job.id}
                 caseDir={job.result.output_dir}
                 onError={(reason) => console.error('Viewer error:', reason)}
-                onConnected={() => console.log('Viewer connected')}
+                onConnected={() => {}}
               />
             ) : (
               <div className="viewer-empty">

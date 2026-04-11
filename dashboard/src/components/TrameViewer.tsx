@@ -108,6 +108,7 @@ export default function TrameViewer({ jobId, caseDir, onError, onConnected }: Pa
   const bridgeRef = useRef<CFDViewerBridge | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const screenshotTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
   // ---------------------------------------------------------------------------
   // Bridge lifecycle
@@ -182,7 +183,7 @@ export default function TrameViewer({ jobId, caseDir, onError, onConnected }: Pa
           clearTimeout(screenshotTimeoutRef.current);
         }
         screenshotTimeoutRef.current = setTimeout(() => {
-          setScreenshotCapturing(false);
+          if (mountedRef.current) setScreenshotCapturing(false);
           screenshotTimeoutRef.current = null;
         }, 500);
         break;
@@ -221,8 +222,8 @@ export default function TrameViewer({ jobId, caseDir, onError, onConnected }: Pa
     heartbeatRef.current = setInterval(async () => {
       try {
         await sendHeartbeat(sessionId);
-      } catch {
-        // Non-fatal: swallow heartbeat errors
+      } catch (err) {
+        console.warn('[TrameViewer] heartbeat failed:', err);
       }
     }, HEARTBEAT_INTERVAL_MS);
 
@@ -236,6 +237,7 @@ export default function TrameViewer({ jobId, caseDir, onError, onConnected }: Pa
   // ---------------------------------------------------------------------------
   useEffect(() => {
     return () => {
+      mountedRef.current = false;
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       if (screenshotTimeoutRef.current) clearTimeout(screenshotTimeoutRef.current);
     };
@@ -258,7 +260,7 @@ export default function TrameViewer({ jobId, caseDir, onError, onConnected }: Pa
       setViewerState('error');
       if (onError) onError(err instanceof Error ? err.message : 'Launch failed');
     }
-  }, [jobId, caseDir, onError, errorMessage]);
+  }, [jobId, caseDir, onError]);
 
   // ---------------------------------------------------------------------------
   // Retry
