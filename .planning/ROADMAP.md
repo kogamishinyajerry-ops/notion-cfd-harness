@@ -2,159 +2,108 @@
 
 ## Milestones
 
-- ✅ **M1** — Well-Harness AI-CFD OS (Phases 1-7, shipped 2026-04-07)
-- ✅ **v1.1.0** — Report Automation & CaseGenerator v2 (Phases 8-9, shipped 2026-04-10)
-- ✅ **v1.2.0** — API & Web Interface (Phases 10-11, shipped 2026-04-10)
-- ✅ **v1.3.0** — Real-time Convergence Monitoring (shipped 2026-04-11)
-- ✅ **v1.4.0** — ParaView Web 3D Visualization (shipped 2026-04-11)
+- [x] **M1** — Well-Harness AI-CFD OS (Phases 1-7, shipped 2026-04-07)
+- [x] **v1.1.0** — Report Automation & CaseGenerator v2 (Phases 8-9, shipped 2026-04-10)
+- [x] **v1.2.0** — API & Web Interface (Phases 10-11, shipped 2026-04-10)
+- [x] **v1.3.0** — Real-time Convergence Monitoring (shipped 2026-04-11)
+- [x] **v1.4.0** — ParaView Web 3D Visualization (shipped 2026-04-11)
+- [ ] **v1.5.0** — Advanced Visualization (Phases 19-22, planning)
 
-## Phases
+---
 
-<details>
-<summary>✅ M1 — Phases 1-7 (completed 2026-04-07)</summary>
+## v1.5.0 — Advanced Visualization
 
-### Phase 1: Knowledge Compiler
-- **Goal**: NL parser / Gates(G1-G2) / Gold Standards / Teach Mode
-- **Status**: ✅ Complete (Opus Approved)
+**Goal:** Enhance ParaView Web 3D viewer with volume rendering, advanced filters, and screenshot export
 
-### Phase 2a: Execution Layer — NL Parse & Gate
-- **Goal**: G1/G2 gate validation for NL parsing pipeline
-- **Status**: ✅ Complete (Score: 8.5)
+**Phases:** 19 (Container Integration), 20 (Volume Rendering), 21 (Screenshot Export), 22 (Advanced Filters)
 
-### Phase 2b: Execution Layer — Physics Planner
-- **Goal**: Physics planning from parsed NL
-- **Status**: ✅ Complete (Score: 8.5)
+---
 
-### Phase 2c: Execution Layer — Result Validator
-- **Goal**: Validation of solver results against physical constraints
-- **Status**: ✅ Complete (Score: 8.5)
+### Phase 19: Container Integration
 
-### Phase 3: Analogical Orchestrator
-- **Goal**: E1-E6 analogy reasoning engine / PermissionLevel L0-L3
-- **Status**: ✅ Complete (Score: 8.5)
+**Goal:** Custom ParaView Web protocol Python file is imported and registered with wslink before the first WebSocket connection is accepted
 
-### Phase 4: Memory Network
-- **Goal**: Versioned registry / propagation / Notion integration
-- **Status**: ✅ Complete
+**Depends on:** Phase 18 (ParaView Web viewer) — prerequisite container infrastructure
 
-### Phase 5: Production Readiness
-- **Goal**: Cache / Connection Pool / Auth / RBAC / Audit / Backup
-- **Status**: ✅ Complete
+**Requirements:** CONT-01.1, CONT-01.2, CONT-01.3, CONT-01.4
 
-### Phase 6: Operational Validation & Reliability Hardening
-- **Goal**: SSOT cleanup / Whitelist ≥50 / Mock E2E / Correction闭环
-- **Status**: ✅ Complete (Score: 9.0)
+**Success Criteria** (what must be TRUE):
 
-### Phase 7: Real Solver E2E
-- **Goal**: OpenFOAM Docker executor / Real CFD vs literature validation
-- **Status**: ✅ Complete
-- **Depends on**: Phase 6
+1. `paraview_adv_protocols.py` is mounted into the container at `/tmp/adv_protocols.py` (file present in container after startup)
+2. Custom protocols are registered with wslink before the launcher accepts the first WebSocket connection (new RPC methods respond, not "method not found")
+3. Custom entrypoint wrapper script imports `adv_protocols.py` programmatically before `launcher.py` starts the wslink server (import ordering guaranteed)
+4. If `adv_protocols.py` has an import error, container startup fails with a user-facing error message surfaced in the Dashboard viewer area
 
-</details>
+**Plans**: TBD
 
-<details>
-<summary>✅ v1.1.0 — Phases 8-9 (completed 2026-04-10)</summary>
+**UI hint**: no
 
-### Phase 8: 通用 CaseGenerator
-- **Goal**: 从 template-based preset (3个case) 进化到任意 OpenFOAM geometry 参数化生成
-- **Status**: ✅ Complete
-- **Depends on**: Phase 7
-- **Plans**: 08-01, 08-02, 08-03, 08-04
+---
 
-### Phase 9: Report Automation & Postprocess Intelligence
-- **Goal**: 从 SolverResult 自动生成结构化报告 — PostprocessPipeline + ReportGenerator + ReportTeachMode + ComparisonEngine
-- **Status**: ✅ Complete
-- **Depends on**: Phase 8
-- **Plans**: 09-01, 09-02, 09-03
+### Phase 20: Volume Rendering
 
-</details>
+**Goal:** Users can toggle GPU-accelerated volume rendering on/off for selected scalar fields with graceful degradation on Apple Silicon
 
-<details>
-<summary>✅ v1.2.0 — Phases 10-11 (shipped 2026-04-10)</summary>
+**Depends on:** Phase 19 (container integration enables protocol registration)
 
-### Phase 10: REST API Server
-- **Goal**: FastAPI-based REST API exposing all CLI functionality
-- **Status**: ✅ Complete (6/6 verification passed)
-- **Plans**: 10-01, 10-02, 10-03
+**Requirements:** VOL-01.1, VOL-01.2, VOL-01.3, VOL-01.4
 
-### Phase 11: Web Dashboard
-- **Goal**: React-based UI for case management, job monitoring, report viewing
-- **Status**: ✅ Complete (5/5 verification passed)
-- **Plans**: 11-01, 11-02, 11-03
+**Success Criteria** (what must be TRUE):
 
-**Archive:** [v1.2.0-ROADMAP.md](./milestones/v1.2.0-ROADMAP.md)
+1. User can toggle volume rendering on/off via a UI control, and the viewport switches between surface and volume representation
+2. Server detects Apple Silicon + `--platform linux/amd64` configuration via EGL vendor check and shows an explicit user warning when volume rendering would silently fall back to Mesa software rendering
+3. Server checks cell count and shows a warning banner when dataset exceeds 2M cells (OOM risk)
+4. Volume rendering uses Smart Volume Mapper (adaptive) confirmed in protocol code
 
-</details>
+**Plans**: TBD
 
-<details>
-<summary>✅ v1.3.0 — Real-time Convergence Monitoring (shipped 2026-04-11)</summary>
+**UI hint**: yes
 
-**Goal:** 仿真运行时实时追踪收敛曲线，Dashboard 可视化
+---
 
-### Phase 12: Residual Streaming Backend
-- **Goal**: OpenFOAM log residual parser + WebSocket streaming + job abort
-- **Status**: ✅ Complete
-- **Depends on**: Phase 11
-- **Plans**: 12-01, 12-02, 12-03
-- **Requirements**: MON-01 (残差数据 WS 推送), MON-05 (Job abort 按钮)
-- **Key decisions**: Remove --rm from Docker for abort; ResidualStreamer as asyncio.Task alongside solver subprocess; debounce to 500ms
+### Phase 21: Screenshot Export
 
-### Phase 13: Real-time Convergence Frontend
-- **Goal**: Dashboard real-time residual charts + Job detail page
-- **Status**: ✅ Complete (10/10 verification passed)
-- **Depends on**: Phase 12
-- **Plans**: 13-01, 13-02
-- **Requirements**: MON-02 (实时残差曲线), MON-03 (Job detail 收敛监控面板)
+**Goal:** Users can capture the current viewport as a PNG file download with responsive UI during capture
 
-### Phase 14: Convergence Intelligence
-- **Goal**: Divergence detection + result summary
-- **Status**: ✅ Complete (2/2 plans, verification passed)
-- **Depends on**: Phase 13
-- **Plans**: 14-01 (backend divergence detection), 14-02 (frontend result summary)
-- **Requirements**: MON-04 (收敛完成后结果摘要), MON-06 (收敛异常检测 + 告警)
+**Depends on:** Phase 19 (protocols available) and Phase 20 (viewport rendering pipeline)
 
-**Archive:** [v1.3.0-ROADMAP.md](./milestones/v1.3.0-ROADMAP.md)
+**Requirements:** SHOT-01.1, SHOT-01.2, SHOT-01.3, SHOT-01.4
 
-</details>
+**Success Criteria** (what must be TRUE):
 
-<details>
-<summary>✅ v1.4.0 — ParaView Web 3D Visualization (shipped 2026-04-11)</summary>
+1. User clicks screenshot button and a PNG file downloads with the correct scene content (geometry, colors, scalar field)
+2. Downloaded image dimensions match the displayed viewport dimensions (not an internal buffer size)
+3. UI remains responsive during screenshot capture (button disabled + spinner, no frozen interactions)
+4. Rapid clicks within 500ms produce only one screenshot (debounce active)
 
-**Goal:** Embed ParaView Web viewer in Dashboard for interactive 3D CFD field visualization
+**Plans**: TBD
 
-### Phase 15: ParaView Web Server Integration
-- **Goal**: PV-01 — ParaView Web launcher + lifecycle management
-- **Status**: ✅ Complete (2/2 plans)
-- **Depends on**: Phase 11
-- **Requirements**: PV-01 (ParaView Web server launch + lifecycle)
-- **Plans**: 15-01 (core manager), 15-02 (API router + idle monitor)
+**UI hint**: yes
 
-### Phase 16: Dashboard 3D Viewer
-- **Goal**: PV-02 — React component embedding ParaView Web client
-- **Status**: ✅ Complete (2/2 plans)
-- **Depends on**: Phase 15
-- **Requirements**: PV-02 (embedded 3D viewer)
-- **Plans**: 16-01 (API service + ParaViewViewer component + CSS), 16-02 (JobDetailPage viewer tab integration)
+---
 
-### Phase 17: Case Result Loading & Field Selection
-- **Goal**: PV-03 — Load OpenFOAM case, field selection, time stepping
-- **Status**: ✅ Complete (2/2 plans)
-- **Depends on**: Phase 16
-- **Requirements**: PV-03 (field selection + time navigation)
-- **Plans**: 17-01 (Field & Time Selection UI), 17-02 (ParaView Web Protocol Integration)
+### Phase 22: Advanced Filters
 
-### Phase 18: Basic Interaction
-- **Goal**: PV-04 — Rotation, zoom, slicing, color mapping
-- **Status**: ✅ Complete (1/1 plans)
-- **Depends on**: Phase 17
-- **Requirements**: PV-04 (camera, slice, color map)
-- **Plans**: 18-01 (protocol message builders + slice/color UI + CSS)
+**Goal:** Users can create, update, and delete Clip, Contour, and StreamTracer filters on loaded CFD results, with multiple filters active simultaneously
 
-**Key decisions**: ParaView Web (not trame) for v1.4.0; OpenFOAMReader native (no export); Slice only (defer Clip/Contour); 3 presets (defer custom)
+**Depends on:** Phase 19 (protocols available)
 
-**Archive:** [v1.4.0-ROADMAP.md](./milestones/v1.4.0-ROADMAP.md)
+**Requirements:** FILT-01.1, FILT-01.2, FILT-01.3, FILT-01.4, FILT-01.5, FILT-01.6
 
-</details>
+**Success Criteria** (what must be TRUE):
+
+1. User creates a Clip filter and the clipped geometry appears in the viewport (inside/outside scalar threshold applied)
+2. User creates a Contour filter and isosurface appears at the specified isovalue(s) for the selected scalar field
+3. User creates a Streamlines filter using velocity field `U` and the streamlines render in the viewport
+4. User deletes any active filter and the filter is removed, original view restored
+5. User updates filter parameters (threshold value, isovalue) and the filter re-renders immediately
+6. Multiple filters (e.g., Clip + Contour + Streamlines) are visible simultaneously in the viewport
+
+**Plans**: TBD
+
+**UI hint**: yes
+
+---
 
 ## Progress
 
@@ -178,6 +127,10 @@
 | 16 | v1.4.0 | 2/2 | Complete | 2026-04-11 |
 | 17 | v1.4.0 | 2/2 | Complete | 2026-04-11 |
 | 18 | v1.4.0 | 1/1 | Complete   | 2026-04-11 |
+| 19 | v1.5.0 | 0/1 | Not started | - |
+| 20 | v1.5.0 | 0/1 | Not started | - |
+| 21 | v1.5.0 | 0/1 | Not started | - |
+| 22 | v1.5.0 | 0/1 | Not started | - |
 
 ---
 

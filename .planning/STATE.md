@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.5.0
-milestone_name: next
-status: Ready to plan
-last_updated: "2026-04-11T12:00:00.000Z"
+milestone_name: Advanced Visualization
+status: Planning
+last_updated: "2026-04-11"
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -18,8 +18,21 @@ progress:
 
 - **Name**: AI-CFD Knowledge Harness
 - **Root**: /Users/Zhuanz/Desktop/notion-cfd-harness
-- **Version**: v1.4.0
-- **Milestone**: v1.5.0 — Planning
+- **Version**: v1.5.0
+- **Milestone**: v1.5.0 — Advanced Visualization (Planning)
+
+## Current Position
+
+**Active milestone:** v1.5.0 Advanced Visualization
+**Active phase:** 19 — Container Integration
+**Plan:** Not started
+**Status:** Not started
+
+**Progress bar:**
+```
+[ Phase 19 ]------ Phase 20 ----- Phase 21 ----- Phase 22 -----
+   0%                  0%            0%            0%
+```
 
 ## Milestone History
 
@@ -29,20 +42,75 @@ progress:
 - **v1.3.0**: Phases 12-14 (shipped 2026-04-11) — Real-time Convergence Monitoring
 - **v1.4.0**: Phases 15-18 (shipped 2026-04-11) — ParaView Web 3D Visualization
 
-## v1.4.0 Key Accomplishments
+## v1.5.0 Goals
 
-- **PV-01**: ParaView Web server Docker sidecar with lifecycle management (port allocation, auth key, idle timeout)
-- **PV-02**: React ParaViewViewer component with full state machine (idle/launching/connecting/connected/disconnected/error)
-- **PV-03**: OpenFOAM case loading via OpenFOAMReader, field selector, time step navigation with protocol messages
-- **PV-04**: Axis-aligned slice filter (X/Y/Z + origin slider), 3 color presets (Viridis/BlueRed/Grayscale), scalar range (Auto/Manual), scalar bar
+- **VOL-01**: Volume Rendering for 3D scalar fields
+- **FILT-01**: Advanced Filters (Clip, Contour, Streamlines)
+- **SHOT-01**: Screenshot Export (PNG)
 
-## Next Steps
+## What This Is
 
-Ready for v1.5.0 planning. Run `/gsd-new-milestone` to start.
+v1.5.0 adds three capability clusters to the existing ParaView Web viewer: GPU volume rendering, advanced filters (Clip/Contour/StreamTracer), and screenshot PNG export. Zero new Docker images or npm packages required. All infrastructure already exists in `openfoam/openfoam10-paraview510`.
 
-Potential directions:
-- Volume rendering for 3D scalar fields
-- Advanced filters (Clip, Contour, Streamlines)
-- Multi-field overlay (side-by-side case comparison)
-- Screenshot export functionality
-- trame migration research (ParaView Web v3.2.21 is in maintenance mode)
+## Key Constraints
+
+- Custom protocols must be registered BEFORE first WS connection (container integration is the foundation for all other phases)
+- Apple Silicon: `--platform linux/amd64` means GPU unavailable — volume rendering silently falls back to Mesa software rendering
+- GPU memory exhaustion on large datasets (>2M cells) — must check cell count before enabling volume rendering
+
+## Phase Dependencies
+
+- Phase 19 (Container Integration) unlocks all subsequent phases
+- Phase 20 (Volume Rendering) and Phase 21 (Screenshot) both depend on Phase 19
+- Phase 22 (Filters) depends on Phase 19
+- Phase 20 and Phase 21 can be planned/executed in parallel once Phase 19 is complete
+
+---
+
+## Key Decisions
+
+| Phase | Decision | Rationale |
+|-------|----------|-----------|
+| All | 4 phases (19-22) for v1.5.0 | Aligned with natural delivery boundaries: integration -> volume -> screenshot -> filters |
+| 19 | Phase 1 = container integration | Protocol registration timing is the highest-risk pitfall; solve it first as the foundation |
+| 20 | Apple Silicon graceful degradation | Cannot detect GPU reliably with `--platform linux/amd64`; show explicit user warning |
+| 20 | Smart Volume Mapper for volume rendering | Adaptive, handles larger datasets better than basic GPU ray cast |
+
+## Open Risks
+
+| Risk | Phase | Mitigation |
+|------|-------|------------|
+| Protocol import timing — must test import sequence in actual container | 19 | Custom entrypoint wrapper that imports before launcher.py |
+| Apple Silicon EGL vendor strings — need field verification | 20 | Check `eglinfo \| grep "EGL vendor"` at startup |
+| GPU memory thresholds for CFD volume — literature says ~2M cells OK, beyond unknown | 20 | Cell count check + user warning + memory limits |
+| Screenshot blocks WS event loop on large datasets | 21 | Async UX (disable + spinner), debounce, consider background thread |
+
+## Blockers
+
+None — planning phase complete
+
+---
+
+## Session Continuity
+
+**Last updated:** 2026-04-11
+
+### Current work
+- v1.5.0 roadmap creation complete
+- Next action: `/gsd-plan-phase 19` to plan Phase 19 (Container Integration)
+
+### Before implementing Phase 19
+- Verify `paraview_web_launcher.py` entrypoint hook points
+- Confirm `openfoam/openfoam10-paraview510` launcher.py accepts custom entrypoint approach
+
+### Before implementing Phase 20
+- Test EGL vendor detection inside Docker container (NVIDIA vs Mesa strings)
+- Verify Smart Volume Mapper availability in ParaView 5.10.1
+
+### Before implementing Phase 21
+- Confirm `viewport.image.render` base64 response format matches expected PNG
+- Test screenshot on large CFD dataset (>1M cells) for WS loop blocking
+
+### Before implementing Phase 22
+- Confirm `OpenFOAMReader.GetPropertyList` returns usable integer proxyId
+- Verify `simple.StreamTracer()` seed type compatibility with blockMesh geometry
