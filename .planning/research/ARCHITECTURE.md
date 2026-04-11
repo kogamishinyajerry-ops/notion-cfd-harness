@@ -1,670 +1,578 @@
-# Architecture Research — v1.5.0 Advanced Visualization
+# Architecture Research: ParaView Web to Trame Migration
 
-**Domain:** ParaView Web advanced visualization (Volume Rendering, Advanced Filters, Screenshot Export)
-**Project:** AI-CFD Knowledge Harness v1.5.0
+**Domain:** Interactive 3D CFD Visualization Server
+**Project:** AI-CFD Knowledge Harness v1.6.0 (trame migration)
 **Researched:** 2026-04-11
-**Confidence:** HIGH (verified against ParaView 5.10.0 source, existing codebase patterns, and established protocol conventions)
+**Confidence:** MEDIUM-HIGH (verified against trame source on GitHub, ParaView Web source patterns, official docs)
+
+Sources: ParaView Web source (v3.2.21), trame source (Kitware/trame, Kitware/trame-server GitHub), official docs (trame.readthedocs.io, kitware.github.io/trame)
 
 ---
 
 ## Executive Summary
 
-v1.5.0 adds three capability clusters to the existing v1.4.0 ParaView Web viewer:
+The migration from ParaView Web to trame is a full-stack rewrite, not a port. The most significant changes are:
 
-1. **Volume Rendering** -- GPU ray-cast volume representation toggle
-2. **Advanced Filters** -- Clip, Contour, and StreamTracer pipeline stages
-3. **Screenshot Export** -- Base64 PNG capture of the current viewport
+1. **Frontend**: React + raw WebSocket is replaced by Vue 3 + trame client library with automatic state synchronization. The `ParaViewViewer.tsx` component must be completely rewritten as a Vue component.
 
-The architecture extends the existing sidecar Docker container pattern with **custom wslink protocol handler classes** registered at container startup. No new Docker images, npm packages, or infrastructure components are required. All three features are implemented as:
+2. **Backend protocol registration**: The `@exportRpc` + `ParaViewWebProtocol` pattern is replaced by `@controller.add()` decorators on a `Server` instance. No global registry, no entrypoint wrapper script.
 
-- **Server-side:** Python protocol classes in `paraview_adv_protocols.py` mounted into the container at `/tmp/`
-- **Frontend-side:** TypeScript protocol message builders in `paraviewProtocol.ts` and React UI controls in `ParaViewViewer.tsx`
+3. **Docker entrypoint**: The custom `entrypoint_wrapper.sh` that imports Python files before `launcher.py` starts is eliminated. The trame application runs directly as `pvpython app.py --port N`.
+
+4. **Session model**: Container-per-session remains the recommended pattern, but lifecycle management shifts from ParaView Web's JSON config launcher to trame's native `server.start(port=N)` API.
+
+The ParaView operations (OpenFOAMReader, Clip, Contour, StreamTracer, Volume Rendering) remain unchanged -- only the wiring layer changes.
 
 ---
 
-## 1. How the Existing Architecture Works
+## Current Architecture: ParaView Web
 
-### 1.1 System Overview
+### System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  React Dashboard (Browser)                                              │
-│  ┌─────────────────┐    ┌──────────────────────────────────────────┐  │
-│  │ ParaViewViewer   │    │  WebSocket (wlink JSON-RPC bidirectional)  │  │
-│  │ .tsx            │◄──►│                                          │  │
-│  │  - state machine │    │  ┌──────────────────────────────────────┐│  │
-│  │  - UI controls  │    │  │ ParaView Web Container (Docker)       ││  │
-│  │  - WS connect   │    │  │  - vtkmodules/web/launcher.py         ││  │
-│  └────────┬────────┘    │  │  - paraview_adv_protocols.py  (new)   ││  │
-│           │ fetch       │  │  │    ↕ (Python simple API)            ││  │
-│           ▼             │  │  │ ParaView/Simple (VTK rendering)     ││  │
-│  ┌─────────────────┐   │  │  └──────────────────────────────────────┘│  │
-│  │ FastAPI Backend  │   │  └──────────────────────────────────────────┘│  │
-│  │ (uvicorn)        │   └──────────────────────────────────────────────┘  │
-│  │  - visualization  │                                                  │
-│  │    router         │                                                  │
-│  │  - paraview_web  │                                                  │
-│  │    _launcher.py   │                                                  │
-│  └─────────────────┘                                                  │
-└─────────────────────────────────────────────────────────────────────────┘
+React Dashboard (port 8080)
+        |
+        | HTTP REST (FastAPI)
+        v
+FastAPI Backend (port 3001)
+        |
+        | docker run ... -p HOST_PORT:9000
+        v
+ParaView Web Container (cfd-workbench:openfoam-v10)
+  /entrypoint_wrapper.sh (PID 1)
+    -> imports /tmp/adv_protocols.py (registers @exportRpc classes)
+    -> exec pvpython launcher.py ...
+        |
+        | wslink + JSON over WebSocket (port 9000)
+        v
+ParaView Web Server (wslink + vtk.web.protocol.ParaViewWebProtocol)
+  - ParaViewWebVolumeRendering (4 RPCs)
+  - ParaViewWebAdvancedFilters (9 RPCs)
+  - Built-in protocols (Render, OpenFOAMReader, viewport.image.render, ...)
 ```
 
-### 1.2 Existing Component Map
+### Current Component Responsibilities
 
 | Component | File | Responsibility |
 |-----------|------|----------------|
-| `ParaviewWebManager` | `api_server/services/paraview_web_launcher.py` | Docker container lifecycle, session tracking, idle timeout |
-| `visualization` router | `api_server/routers/visualization.py` | REST endpoints: launch, status, heartbeat, shutdown |
-| `ParaViewViewer` | `dashboard/src/components/ParaViewViewer.tsx` | React component: WebSocket state machine, UI controls |
-| `paraviewProtocol` | `dashboard/src/services/paraviewProtocol.ts` | JSON-RPC message builders (slice, LUT, scalar bar, render) |
-| `paraview.ts` | `dashboard/src/services/paraview.ts` | REST API client for session launch/heartbeat |
+| `ParaviewWebManager` | `paraview_web_launcher.py` | Docker container lifecycle, port allocation (`8081-8090`), session management |
+| `entrypoint_wrapper.sh` | `entrypoint_wrapper.sh` | PID 1 inside container; imports `adv_protocols.py` before wslink starts |
+| `ParaViewWebVolumeRendering` | `paraview_adv_protocols.py` | GPU detection, volume toggle RPC |
+| `ParaViewWebAdvancedFilters` | `paraview_adv_protocols.py` | Clip/Contour/StreamTracer filter RPCs |
+| `ParaViewViewer.tsx` | `ParaViewViewer.tsx` | React component; raw `WebSocket` client; 9-state machine |
+| `paraviewProtocol.ts` | `paraviewProtocol.ts` | JSON-RPC message builders/parsers |
+| `paraview.ts` | `paraview.ts` | FastAPI session lifecycle API client |
 
-### 1.3 Existing Data Flow
+### Current Protocol Pattern
+
+ParaView Web uses wslink with JSON-RPC over WebSocket:
+
+```typescript
+// Frontend sends auth key as first raw string message
+ws.send(authKey);
+
+// Then sends JSON-RPC style messages
+ws.send(JSON.stringify({
+  id: "pv-volume-toggle",
+  method: "visualization.volume.rendering.toggle",
+  params: { fieldName, enabled }
+}));
+
+// Server responds with JSON
+JSON.parse(event.data) as { id: "pv-volume-toggle", result: { success: true } }
+
+// ws.onmessage routes by message.id (lines 214-327 in ParaViewViewer.tsx)
+if (message.id === 'pv-volume-status' && message.result) { ... }
+if (message.id === 'pv-filter-clip' && message.result) { ... }
+```
+
+### Current Docker/Entrypoint Pattern
+
+```python
+# paraview_web_launcher.py _start_container():
+docker run -d \
+  --name pvweb-{session_id} \
+  -v case_dir:/data:ro \
+  -v adv_protocols.py:/tmp/adv_protocols.py:ro \
+  -p HOST_PORT:9000 \
+  --entrypoint /entrypoint_wrapper.sh \
+  cfd-workbench:openfoam-v10 \
+  pvpython launcher.py /tmp/launcher_config.json
+```
+
+```bash
+# entrypoint_wrapper.sh (lines 11-18)
+if pvpython -c "import sys; sys.path.insert(0, '/tmp'); import adv_protocols"; then
+  echo "Protocols registered with wslink."
+fi
+exec "$@"  # exec replaces shell with pvpython
+```
+
+The JSON config (lines 297-316) tells `launcher.py` to start wslink on port 9000 inside the container, with session URL `ws://${host}:{port}/ws`.
+
+### Current Session Lifecycle
+
+```
+launch_session():
+  1. validate_docker_available()
+  2. build_custom_image()        # no-op if already built
+  3. _verify_image()             # checks vtk.web.launcher exists
+  4. allocate port from 8081-8090 range
+  5. generate auth_key (secrets.token_urlsafe(16))
+  6. write JSON config to temp file
+  7. _start_container()         # docker run with entrypoint_wrapper.sh
+  8. _wait_for_ready()           # poll "Starting factory" in logs
+  9. return ParaViewWebSession { container_id, port, auth_key }
+
+shutdown_session():
+  docker kill pvweb-{session_id}
+```
+
+---
+
+## Target Architecture: Trame
+
+### System Overview
+
+```
+React Dashboard (port 8080)
+        |
+        | HTTP REST (FastAPI)
+        v
+FastAPI Backend (port 3001)
+        |
+        | docker run ... -p HOST_PORT:CONTAINER_PORT
+        v
+Trame Container (cfd-workbench:openfoam-v10 + trame installed)
+  pvpython /app/app.py --port CONTAINER_PORT
+    -> from trame.app import get_server
+    -> server = get_server(name=session_id)
+    -> @server.controller.add("rpc_name")    # RPC exposure
+    -> @state.change("var")                   # auto state sync
+    -> with SinglePageLayout(server) as layout:
+    ->     paraview.VtkRemoteView(view)       # ParaView rendering widget
+    -> server.start(port=CONTAINER_PORT)
+        |
+        | wslink + msgpack (binary) over WebSocket
+        v
+Trame Server (trame_server + aiohttp)
+  - RPC methods via @controller.add() / @trigger()
+  - ParaView via paraview.VtkRemoteView
+```
+
+### Trame Server Pattern (verified from trame source)
+
+```python
+# app.py (verified from Kitware/trame/examples/07_paraview/SimpleCone/RemoteRendering.py)
+from trame.app import get_server
+from trame.ui.vuetify import SinglePageLayout
+from trame.widgets import paraview, vuetify
+from paraview import simple
+from trame.decorators import change, controller
+
+# Server instance (singleton per name)
+server = get_server(client_type="vue3")  # vue2 or vue3
+state, ctrl = server.state, server.controller
+
+# ParaView setup
+cone = simple.Cone()
+view = simple.Render()
+
+# RPC method callable from frontend as ctrl.volume_toggle(...)
+@controller.add("volume_toggle")
+def volume_toggle(self, fieldName: str, enabled: bool):
+    display = simple.GetDisplayProperties()
+    if enabled:
+        display.SetRepresentationToVolume()
+    else:
+        display.SetRepresentationToSurface()
+    simple.Render()
+    return {"success": True}
+
+# State change reaction (auto-pushes to all clients when state.resolution changes)
+@state.change("resolution")
+def update_cone(resolution, **kwargs):
+    cone.Resolution = resolution
+    ctrl.view_update()
+
+# Layout with ParaView rendering widget
+with SinglePageLayout(server) as layout:
+    with layout.content:
+        html_view = paraview.VtkRemoteView(view)
+        ctrl.view_reset_camera = html_view.reset_camera
+        ctrl.view_update = html_view.update
+
+if __name__ == "__main__":
+    server.start(port=1234)  # blocking; port=0 for auto-allocation
+```
+
+### Key Trame Concepts (from source analysis)
+
+| Concept | Source Location | Description |
+|---------|-----------------|-------------|
+| `get_server()` | `trame/app/__init__.py` | Returns `Server` singleton from `trame_server.core`; `name` parameter for multi-server |
+| `Server.start(port=N)` | `trame_server/core.py` | Starts aiohttp server; `port=0` for auto; sets `server.port` after start |
+| `@controller.add("name")` | `trame/decorators.py` | Exposes method as RPC callable as `ctrl.name()` on client |
+| `@trigger("name")` | `trame/decorators.py` | Exposes method as `trigger("name", args)` on client |
+| `@state.change("var")` | `trame/decorators.py` | Reacts when `state.var` changes; auto-pushes delta to client |
+| `server.state` | `trame_server/state.py` | Shared `State` dict; assignment auto-syncs to client |
+| `paraview.VtkRemoteView` | `trame-vtk` package | Server-side ParaView rendering widget; sends viewport over WS |
+| `paraview.VtkLocalView` | `trame-vtk` package | Client-side VTK rendering (no server-side ParaView) |
+| `WsLinkSession` | `trame_server/client.py` | wslink session; uses msgpack binary serialization (not JSON) |
+| wslink auth | `WsLinkSession.auth()` | `wslink.hello` method with `authKey` as first message |
+
+### Trame Server Lifecycle (from `trame_server/core.py`)
+
+```python
+def start(self, port=None, ..., backend="aiohttp", exec_mode="main", ...):
+    # 1. enable_module(trame_client) if no _www set
+    # 2. Parse CLI args (--port, --host, --timeout)
+    # 3. CoreServer.bind_server(self)    # attach protocols
+    # 4. CoreServer.configure(options)  # apply server options
+    # 5. CoreServer.server_start(options, backend=backend, ...)
+    #    -> starts aiohttp server on specified port
+    # 6. For exec_mode="main": blocking run
+    #    For exec_mode="task": returns asyncio.Task
+```
+
+Important: `server.start()` is blocking in `"main"` exec_mode. For a Docker container running as a sidecar, this means the container runs as long as the server runs. The FastAPI backend manages lifecycle via `docker kill`.
+
+### Port Allocation in Trame
+
+```python
+# ParaView Web style (current)
+port = self._next_port()  # cycles 8081-8090
+
+# Trame style
+server.start(port=1234)    # fixed port
+server.start(port=0)       # auto-allocate to random open port
+# After start:
+print(server.port)         # returns actual port bound
+```
+
+---
+
+## Architecture Comparison: ParaView Web vs Trame
+
+### Protocol Layer
+
+| Aspect | ParaView Web (current) | Trame (target) |
+|--------|----------------------|----------------|
+| **WebSocket protocol** | JSON (text) over wslink | msgpack (binary) over wslink |
+| **RPC registration** | `@exportRpc("method.name")` on `ParaViewWebProtocol` subclasses | `@controller.add("method_name")` on `Server` instance |
+| **Frontend RPC calls** | `ws.send(JSON.stringify({method, params}))` + `message.id` routing | `ctrl.method_name(args)` in Vue template or `trigger("name", args)` |
+| **State sync** | Manual: client sends message, server responds | Automatic: `state.field = value` auto-pushes to all clients |
+| **Server base class** | `ParaViewWebProtocol` (from `vtk.web.protocol`) | `Server` (from `trame_server.core`) |
+| **Serialization** | JSON (human-readable) | msgpack (binary, faster) |
+| **Auth** | Auth key as raw string on first WS message | wslink `wslink.hello` with `authKey` in kwargs |
+
+### Frontend Architecture
+
+| Aspect | ParaView Web | Trame |
+|--------|--------------|-------|
+| **Framework** | React (custom WebSocket client) | Vue.js 3 (trame client library) |
+| **Component model** | `ParaViewViewer.tsx` manages raw WS connection manually | Vue components bound to `server.state` |
+| **Connection** | `new WebSocket(sessionUrl)` + manual auth + reconnect logic | `trame_client` manages connection automatically |
+| **Message routing** | Manual `message.id` switch statement | Automatic method routing via `ctrl.*` or `trigger()` |
+| **Protocol URL** | `ws://host:port/ws` + auth key as first message | `ws://host:port/` + wslink hello protocol |
+| **Rendering widget** | `#paraview-viewport` div + `viewport.image.render` RPC for updates | `<paraview-vtk-remote-view>` Vue component with auto-update |
+| **Reactivity** | Manual setState on message receipt | Vue reactive `v_model` bound to state |
+
+### Docker Container Architecture
+
+| Aspect | ParaView Web | Trame |
+|--------|--------------|-------|
+| **Entrypoint** | Custom `entrypoint_wrapper.sh` (imports Python files before wslink starts) | Direct: `pvpython /app/app.py --port N` |
+| **Protocol setup** | `launcher.py` reads JSON config, starts wslink at fixed port 9000 | `server.start(port=N)` starts aiohttp + wslink on configurable port |
+| **Port mapping** | Host port mapped to container port 9000 (fixed internal port) | Host port mapped to container port N (same, configurable) |
+| **Session identity** | Container name `pvweb-{session_id}` | Container name `trame-{session_id}` (or port-based) |
+| **Protocol file import** | Mount `adv_protocols.py` at `/tmp/adv_protocols.py`, import via wrapper | Python code is the main module; `@controller.add` decorators at import time |
+| **Ready signal** | `"Starting factory" in container logs` (polled by FastAPI) | `server.start()` is blocking call; port property available immediately |
+| **PID 1** | Bash wrapper script | `pvpython` directly (no shell wrapper) |
+
+### Session/Security Model
+
+| Aspect | ParaView Web | Trame |
+|--------|--------------|-------|
+| **Session isolation** | One Docker container per session | One Docker container per session (recommended) |
+| **Auth key** | `secrets.token_urlsafe(16)` passed via JSON config, sent as first WS message | Same key, passed as `wslink.hello` kwargs |
+| **Idle timeout** | FastAPI `ParaviewWebManager._idle_monitor()` polls sessions every 60s | FastAPI could manage same way (container-level), or use `server.start(timeout=N)` |
+
+---
+
+## Data Flow Comparison
+
+### Current Data Flow (ParaView Web)
 
 ```
 1. User clicks "Launch 3D Viewer"
-2. React calls POST /visualization/launch → FastAPI
-3. FastAPI starts Docker container (paraview_web_launcher.py)
-4. Container runs: vtkmodules/web/launcher.py + openfoam/openfoam10-paraview510
-5. WebSocket port (9000 inside, mapped to host) becomes available
-6. React receives { session_id, session_url, auth_key } → opens WebSocket
-7. React sends auth_key as first text message
-8. React sends JSON-RPC: OpenFOAMReader.Open, GetPropertyList, GetTimeSteps
-9. Server pushes rendered frames via viewport.image.push subscription
-10. User interactions (mouse, controls) send JSON-RPC → server updates view
+   -> React: launchVisualizationSession(jobId, caseDir) [paraview.ts:32]
+
+2. FastAPI POST /visualization/launch
+   -> ParaviewWebManager.launch_session() [paraview_web_launcher.py:188]
+      a. validate_docker_available()
+      b. build_custom_image()
+      c. allocate port from 8081-8090
+      d. generate auth_key
+      e. write JSON config to temp file
+      f. docker run (entrypoint_wrapper.sh)
+         - imports /tmp/adv_protocols.py -> registers @exportRpc classes
+         - exec pvpython launcher.py /tmp/launcher_config.json
+      g. poll container logs for "Starting factory"
+      h. return { session_url: ws://localhost:PORT/ws, auth_key, port }
+
+3. React: new WebSocket(sessionUrl) [ParaViewViewer.tsx:185]
+   -> ws.onopen: ws.send(authKey) // auth [line 201]
+   -> ws.onopen: sendProtocolMessage(createOpenFOAMReaderMessage(caseDir)) [line 203]
+
+4. Container: ParaViewWebProtocol.handle_request() [wslink]
+   -> routes by method name to registered handler
+
+5. Container: simple.Render() + InvokeEvent("UpdateEvent") [adv_protocols.py]
+   -> pushes viewport update to client
+
+6. React: ws.onmessage -> JSON.parse -> switch(message.id) [ParaViewViewer.tsx:209]
+   -> setAvailableFields, setVolumeEnabled, etc.
+```
+
+### Target Data Flow (Trame)
+
+```
+1. User clicks "Launch 3D Viewer"
+   -> React (or new Vue component): launchVisualizationSession(jobId, caseDir)
+      (FastAPI session endpoint unchanged)
+
+2. FastAPI POST /visualization/launch
+   -> TrameSessionManager.start_session()
+      a. docker run cfd-workbench:openfoam-v10 pvpython /app/app.py --port N
+      b. return { session_url: http://localhost:PORT/, auth_key, port }
+      (No polling needed; server.start() is synchronous)
+
+3. Vue: trame_client auto-connects to WebSocket
+   -> sends wslink.hello with authKey
+   -> server responds with clientID
+
+4. Vue: ctrl.volume_toggle(fieldName, enabled) [or v_model bound to state]
+   -> serialized via msgpack, sent over WebSocket
+
+5. Container: @controller.add("volume_toggle") handler runs
+   -> simple.Render()
+   -> ctrl.view_update() -> pushes viewport to client
+
+6. Vue: automatic state update (no manual routing)
 ```
 
 ---
 
-## 2. New Components
+## Docker/Entrypoint Changes Detail
 
-### 2.1 New Server-Side File: `paraview_adv_protocols.py`
+### Current Dockerfile
 
-This file is **mounted read-only into the ParaView Web container** at `/tmp/paraview_adv_protocols.py` and imported at server startup via the launcher config's `cmd` array. It defines three protocol classes:
+```dockerfile
+# Dockerfile
+FROM openfoam/openfoam10-paraview510
+COPY entrypoint_wrapper.sh /entrypoint_wrapper.sh
+RUN chmod +x /entrypoint_wrapper.sh
+ENTRYPOINT ["/entrypoint_wrapper.sh"]
+# Container run: pvpython launcher.py /tmp/launcher_config.json
+```
+
+### Target Dockerfile
+
+```dockerfile
+# Dockerfile
+FROM openfoam/openfoam10-paraview510
+RUN pip install trame trame-vuetify trame-vtk --quiet  # Add trame packages
+COPY app.py /app/app.py
+WORKDIR /app
+# Container run: pvpython /app/app.py --port 1234
+# No ENTRYPOINT needed; pvpython is effectively the entrypoint
+```
+
+### Current Container Run (from `paraview_web_launcher.py:337`)
 
 ```python
-# api_server/services/paraview_adv_protocols.py  (conceptual)
-
-from paraview.web.protocols import ParaViewWebProtocol
-from wslink import register as exportRpc
-from paraview import simple
-
-class ParaViewWebVolumeRendering(ParaViewWebProtocol):
-    """Volume representation toggle + opacity transfer function."""
-
-    @exportRpc("volume.representation.create")
-    def createVolumeRepresentation(self, sourceProxyId, viewId):
-        # Get the source proxy and view
-        source = self.mapIdToProxy(sourceProxyId)
-        view = self.mapIdToProxy(viewId) if viewId else simple.GetActiveView()
-
-        # Show source as Volume (activates vtkGPUVolumeRayCastMapper)
-        rep = simple.GetRepresentation(proxy=source, view=view)
-        rep.Representation = "Volume"
-
-        simple.Render()
-        self.getApplication().InvokeEvent("UpdateEvent")
-        return {"result": "success", proxyId": source.GetGlobalIDAsString()}
-
-    @exportRpc("volume.representation.surface")
-    def setSurfaceRepresentation(self, sourceProxyId, viewId):
-        source = self.mapIdToProxy(sourceProxyId)
-        view = self.mapIdToProxy(viewId) if viewId else simple.GetActiveView()
-        rep = simple.GetRepresentation(proxy=source, view=view)
-        rep.Representation = "Surface"
-        simple.Render()
-        self.getApplication().InvokeEvent("UpdateEvent")
-        return {"result": "success"}
-
-    @exportRpc("volume.opacity.set")
-    def setVolumeOpacity(self, arrayName, points):
-        # points = [x0, y0, x1, y1, ...] control point pairs
-        otf = simple.GetOpacityTransferFunction(arrayName)
-        otf.Points = points
-        simple.Render()
-        self.getApplication().InvokeEvent("UpdateEvent")
-        return {"result": "success"}
-
-
-class ParaViewWebAdvancedFilters(ParaViewWebProtocol):
-    """Clip, Contour, StreamTracer filter pipeline."""
-
-    @exportRpc("clip.create")
-    def createClip(self, sourceProxyId, normal, origin):
-        source = self.mapIdToProxy(sourceProxyId)
-        view = simple.GetActiveView()
-
-        clip = simple.Clip(Input=source, ClipType="Plane")
-        clip.ClipType.Normal = normal
-        clip.ClipType.Origin = origin
-        simple.Show(clip, view)
-        simple.Render()
-        self.getApplication().InvokeEvent("UpdateEvent")
-        return {"result": "success", "proxyId": clip.GetGlobalIDAsString()}
-
-    @exportRpc("clip.update")
-    def updateClip(self, proxyId, normal, origin):
-        proxy = self.mapIdToProxy(proxyId)
-        proxy.ClipType.Normal = normal
-        proxy.ClipType.Origin = origin
-        simple.Render()
-        self.getApplication().InvokeEvent("UpdateEvent")
-        return {"result": "success"}
-
-    @exportRpc("clip.delete")
-    def deleteClip(self, proxyId):
-        proxy = self.mapIdToProxy(proxyId)
-        simple.Delete(proxy)
-        simple.Render()
-        self.getApplication().InvokeEvent("UpdateEvent")
-        return {"result": "success"}
-
-    @exportRpc("contour.create")
-    def createContour(self, sourceProxyId, arrayName, isovalues):
-        source = self.mapIdToProxy(sourceProxyId)
-        view = simple.GetActiveView()
-
-        contour = simple.Contour(Input=source)
-        contour.ContourBy = ["POINTS", arrayName]
-        contour.Isosurfaces = isovalues
-        simple.Show(contour, view)
-        simple.Render()
-        self.getApplication().InvokeEvent("UpdateEvent")
-        return {"result": "success", "proxyId": contour.GetGlobalIDAsString()}
-
-    @exportRpc("contour.update")
-    def updateContour(self, proxyId, isovalues):
-        proxy = self.mapIdToProxy(proxyId)
-        proxy.Isosurfaces = isovalues
-        simple.Render()
-        self.getApplication().InvokeEvent("UpdateEvent")
-        return {"result": "success"}
-
-    @exportRpc("contour.delete")
-    def deleteContour(self, proxyId):
-        proxy = self.mapIdToProxy(proxyId)
-        simple.Delete(proxy)
-        simple.Render()
-        self.getApplication().InvokeEvent("UpdateEvent")
-        return {"result": "success"}
-
-    @exportRpc("streamtracer.create")
-    def createStreamTracer(self, sourceProxyId, seedType="maskingRegion"):
-        source = self.mapIdToProxy(sourceProxyId)
-        view = simple.GetActiveView()
-
-        tracer = simple.StreamTracer(Input=source, SeedType=seedType)
-        tracer.Vectors = ["POINTS", "U"]       # velocity field
-        tracer.MaximumTrackLength = 100
-        tracer.ComputeVorticity = 1
-        simple.Show(tracer, view)
-        simple.Render()
-        self.getApplication().InvokeEvent("UpdateEvent")
-        return {"result": "success", "proxyId": tracer.GetGlobalIDAsString()}
-
-    @exportRpc("streamtracer.delete")
-    def deleteStreamTracer(self, proxyId):
-        proxy = self.mapIdToProxy(proxyId)
-        simple.Delete(proxy)
-        simple.Render()
-        self.getApplication().InvokeEvent("UpdateEvent")
-        return {"result": "success"}
+docker run -d \
+  --name pvweb-{session_id} \
+  --platform linux/amd64 \
+  -v config_path:/tmp/launcher_config.json:ro \
+  -v case_path:/data:ro \
+  -v adv_protocols:/tmp/adv_protocols.py:ro \
+  -p HOST_PORT:9000 \
+  --entrypoint /entrypoint_wrapper.sh \
+  cfd-workbench:openfoam-v10 \
+  pvpython launcher.py /tmp/launcher_config.json
 ```
 
-**Key architectural note:** All three classes extend `ParaViewWebProtocol` and register RPC methods with `@exportRpc`. The `mapIdToProxy()` method (inherited from base class) converts integer proxy IDs from the frontend into ParaView `simple` proxy objects. This is the exact same pattern used by all built-in ParaView Web protocols.
+### Target Container Run
 
-### 2.2 New Frontend Protocol Message Builders
-
-These extend `dashboard/src/services/paraviewProtocol.ts`:
-
-```typescript
-// dashboard/src/services/paraviewProtocol.ts  (additions)
-
-// --- Volume Rendering ---
-
-export function createVolumeRepresentationMessage(sourceProxyId: number): object {
-  return {
-    id: "pv-volume-create",
-    method: "volume.representation.create",
-    params: { sourceProxyId, viewId: -1 }
-  };
-}
-
-export function createSurfaceRepresentationMessage(sourceProxyId: number): object {
-  return {
-    id: "pv-surface",
-    method: "volume.representation.surface",
-    params: { sourceProxyId, viewId: -1 }
-  };
-}
-
-export function createVolumeOpacityMessage(arrayName: string, points: number[]): object {
-  return {
-    id: "pv-volume-opacity",
-    method: "volume.opacity.set",
-    params: { arrayName, points }
-  };
-}
-
-// --- Clip Filter ---
-
-export function createClipCreateMessage(
-  sourceProxyId: number,
-  normal: [number, number, number],
-  origin: [number, number, number]
-): object {
-  return {
-    id: "pv-clip-create",
-    method: "clip.create",
-    params: { sourceProxyId, normal, origin }
-  };
-}
-
-export function createClipUpdateMessage(
-  proxyId: number,
-  normal: [number, number, number],
-  origin: [number, number, number]
-): object {
-  return {
-    id: "pv-clip-update",
-    method: "clip.update",
-    params: { proxyId, normal, origin }
-  };
-}
-
-export function createClipDeleteMessage(proxyId: number): object {
-  return {
-    id: "pv-clip-delete",
-    method: "clip.delete",
-    params: { proxyId }
-  };
-}
-
-// --- Contour Filter ---
-
-export function createContourCreateMessage(
-  sourceProxyId: number,
-  arrayName: string,
-  isovalues: number[]
-): object {
-  return {
-    id: "pv-contour-create",
-    method: "contour.create",
-    params: { sourceProxyId, arrayName, isovalues }
-  };
-}
-
-export function createContourUpdateMessage(proxyId: number, isovalues: number[]): object {
-  return {
-    id: "pv-contour-update",
-    method: "contour.update",
-    params: { proxyId, isovalues }
-  };
-}
-
-export function createContourDeleteMessage(proxyId: number): object {
-  return {
-    id: "pv-contour-delete",
-    method: "contour.delete",
-    params: { proxyId }
-  };
-}
-
-// --- StreamTracer ---
-
-export function createStreamTracerCreateMessage(
-  sourceProxyId: number,
-  seedType: string = "maskingRegion"
-): object {
-  return {
-    id: "pv-tracer-create",
-    method: "streamtracer.create",
-    params: { sourceProxyId, seedType }
-  };
-}
-
-export function createStreamTracerDeleteMessage(proxyId: number): object {
-  return {
-    id: "pv-tracer-delete",
-    method: "streamtracer.delete",
-    params: { proxyId }
-  };
-}
-
-// --- Screenshot Export ---
-
-export function createScreenshotMessage(
-  quality: number = 85,
-  viewId: number = -1
-): object {
-  return {
-    id: "pv-screenshot",
-    method: "viewport.image.render",
-    params: { view: viewId, quality, ratio: 1 }
-  };
-}
-
-export function parseScreenshotResponse(response: { result?: { image?: string } }): string | null {
-  return response?.result?.image ?? null;
-}
+```python
+docker run -d \
+  --name trame-{session_id} \
+  --platform linux/amd64 \
+  -v case_path:/data:ro \
+  -p HOST_PORT:CONTAINER_PORT \
+  cfd-workbench:openfoam-v10 \
+  pvpython /app/app.py --port CONTAINER_PORT
 ```
 
-### 2.3 New Backend Endpoint: Screenshot File Proxy
-
-The built-in `viewport.image.render` RPC returns the PNG as a base64 string in the WebSocket JSON-RPC response. This requires **no new REST endpoint** for the basic flow.
-
-However, if users want to save screenshots to the host filesystem (rather than download to browser), a new REST endpoint is needed:
-
-**`POST /visualization/{session_id}/screenshot`** -- proxies `pv.data.save` result from container to a project reports directory.
-
-This is deferred to v1.5.x (P3 in feature priorities).
+Key differences:
+- No `--entrypoint` override
+- No mounted protocol Python file
+- No JSON config file
+- Port is container-internal AND external (same, since no NAT)
+- Python file IS the entrypoint
 
 ---
 
-## 3. Data Flows
+## New vs Modified Components
 
-### 3.1 Volume Rendering Data Flow
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `paraview_web_launcher.py` | **REPLACE** | New `trame_session_manager.py` with `TrameSessionManager` class |
+| `paraview_adv_protocols.py` | **REPLACE** | New `app.py` inside container with `@controller.add()` patterns |
+| `entrypoint_wrapper.sh` | **DELETE** | No longer needed |
+| `paraviewProtocol.ts` | **DELETE** | Message builders replaced by Vue `ctrl.*` calls |
+| `ParaViewViewer.tsx` | **REPLACE** | New Vue component; full rewrite |
+| `paraview.ts` | **ADAPT** | Keep session launch/shutdown REST endpoints; update URL construction |
+| `Dockerfile` | **MODIFY** | Add trame packages, change entrypoint |
+| `AdvancedFilterPanel.tsx` | **ADAPT/MOVE** | Move into new Vue component as sub-component |
 
-```
-User clicks "Volume" toggle
-    │
-    ├──► React: sendProtocolMessage(createVolumeRepresentationMessage(sourceId))
-    │         → WS JSON-RPC → container
-    │
-    ▼
-Container: ParaViewWebVolumeRendering.createVolumeRepresentation()
-    ├── rep.Representation = "Volume"    ← vtkGPUVolumeRayCastMapper activates
-    ├── simple.Render()
-    ├── InvokeEvent("UpdateEvent")
-    └── Push updated frame via viewport.image.push (existing subscription)
-    │
-    ▼
-React: No explicit response handling; view updates via pushed frame
-```
-
-### 3.2 Clip Filter Data Flow
+### Component Boundaries After Migration
 
 ```
-User selects axis + origin → clicks "Apply"
-    │
-    ├──► WS JSON-RPC: clip.create { sourceProxyId, normal, origin }
-    │
-    ▼
-Container: ParaViewWebAdvancedFilters.createClip()
-    ├── clip = simple.Clip(Input=source, ClipType="Plane")
-    ├── clip.ClipType.Normal = normal
-    ├── clip.ClipType.Origin = origin
-    ├── simple.Show(clip, view)
-    ├── simple.Render()
-    ├── InvokeEvent("UpdateEvent")
-    └── return { result: "success", proxyId: "123" }
-    │
-    ▼
-React: Stores proxyId in viewer state → enables Update/Delete buttons
-```
+FastAPI Backend
+  -> /visualization/launch    -> TrameSessionManager.start_session()
+  -> /visualization/{id}      -> TrameSessionManager.get_session()
+  -> /visualization/{id}/stop -> TrameSessionManager.shutdown_session()
 
-### 3.3 Screenshot Export Data Flow
+TrameSessionManager (NEW, replaces ParaviewWebManager)
+  -> docker run trame-{session_id} pvpython /app/app.py --port N
+  -> docker kill trame-{session_id}
+  -> Tracks: session_id, container_id, port, auth_key
 
-```
-User clicks "Screenshot"
-    │
-    ├──► WS JSON-RPC: viewport.image.render { quality: 85 }
-    │
-    ▼
-Container: ParaViewWebViewPort.viewportImageRender()  ← BUILT-IN, no custom code
-    ├── Renders current view to offscreen framebuffer
-    ├── Encodes as PNG via StillRenderToString()
-    └── return { result: { image: "<base64 PNG>" } }
-    │
-    ▼
-React: parseScreenshotResponse() → base64 string
-    │
-    ▼
-React: atob(base64) → Uint8Array → Blob → URL.createObjectURL()
-    │
-    ▼
-React: <a download="cfd-result.png"> → click → browser download
-    URL.revokeObjectURL()  ← cleanup
-```
+Trame Container (NEW app.py inside container)
+  -> get_server(name=session_id)
+  -> @controller.add RPC methods (volume, clip, contour, streamtracer)
+  -> paraview.VtkRemoteView for rendering
+  -> OpenFOAM reader opened on client connect or server_ready
 
-### 3.4 State Flow (React)
-
-Each active filter tracks its server-side proxy ID for update/delete operations:
-
-```
-ParaViewViewer state (additions):
-  │
-  ├── sourceProxyId: number          // OpenFOAM reader proxy (discovered at connect)
-  │
-  ├── representation: 'Surface' | 'Volume'
-  │
-  ├── activeClip: {
-  │     proxyId: number,
-  │     normal: [number, number, number],
-  │     origin: [number, number, number]
-  │   } | null
-  │
-  ├── activeContour: {
-  │     proxyId: number,
-  │     arrayName: string,
-  │     isovalues: number[]
-  │   } | null
-  │
-  └── activeStreamTracer: {
-        proxyId: number
-      } | null
+Vue Frontend (NEW, replaces ParaViewViewer.tsx)
+  -> trame-vuetify layout components
+  -> paraview-vtk-remote-view for 3D rendering
+  -> v_model bound controls (slice, color, volume)
+  -> ctrl.filter_clip() etc. for RPC calls
 ```
 
 ---
 
-## 4. Component Map: New vs Modified
+## Suggested Migration Build Order
 
-### 4.1 New Components
+### Phase 1: Trame Backend Skeleton
+- Install trame inside existing container image (`pip install trame trame-vuetify trame-vtk`)
+- Create `app.py` with minimal trame server + `paraview.VtkRemoteView`
+- Test `pvpython /app/app.py --port 1234` manually inside container
+- Verify the ParaView cone rendering appears in browser
+- Verify `server.start(port=0)` auto-allocation works
 
-| Component | File Path | Responsibility |
-|-----------|-----------|----------------|
-| Advanced protocols handler | `api_server/services/paraview_adv_protocols.py` | Python wslink protocol classes for volume, clip, contour, streamtracer |
-| Advanced filter UI panel | `dashboard/src/components/AdvancedFilterPanel.tsx` (new file) | Collapsible panel with clip/contour/streamlines controls |
-| Volume rendering toggle | Integrated into `ParaViewViewer.tsx` (new buttons) | Surface/Volume toggle button group |
+### Phase 2: Migrate RPC Protocols
+- Convert `ParaViewWebVolumeRendering` methods to `@controller.add()` handlers
+- Convert `ParaViewWebAdvancedFilters` methods to `@controller.add()` handlers
+- Test each RPC from a simple Vue button
+- Verify ParaView state changes (resolution, clip, etc.) reflect in viewport
 
-### 4.2 Modified Components
+### Phase 3: FastAPI Launcher Adaptation
+- Create `TrameSessionManager` (mirrors `ParaviewWebManager` interface)
+- Replace Docker container run command with trame-style command
+- Remove JSON config file, entrypoint wrapper, launcher.py references
+- Verify session list, get, shutdown, idle timeout still work
+- Keep `ParaViewWebSession` model or rename to `TrameSession`
 
-| Component | Change |
-|-----------|--------|
-| `api_server/services/paraview_web_launcher.py` | `_build_launcher_config()`: add `--volume` flag to pvpython command to import `paraview_adv_protocols.py` at startup; mount `paraview_adv_protocols.py` as a volume |
-| `dashboard/src/services/paraviewProtocol.ts` | Add all new message builders (volume, clip, contour, streamtracer, screenshot) |
-| `dashboard/src/components/ParaViewViewer.tsx` | Add new React state for filter proxy IDs; add new UI sections for volume toggle, advanced filter panel, screenshot button; wire new `sendProtocolMessage` calls |
-| `dashboard/src/components/ParaViewViewer.css` | Add CSS for new UI controls |
-| `dashboard/src/services/api.ts` | Add `POST /visualization/{session_id}/screenshot` REST call (v1.5.x only) |
+### Phase 4: Vue Frontend (from scratch)
+- Create new Vue component replacing `ParaViewViewer.tsx`
+- Implement field selector, slice controls, color presets as Vue components
+- Implement volume toggle, advanced filters as Vue components
+- Implement screenshot, time step navigation
+- Test WebSocket connection and all RPC calls
 
-### 4.3 No Changes Needed
+### Phase 5: Integration
+- Connect new Vue frontend to existing FastAPI endpoints
+- Test full launch flow: API call -> container start -> Vue connects
+- Test reconnect logic with trame client
+- Test idle timeout, heartbeat
 
-- `api_server/routers/visualization.py` -- No new REST endpoints required for WebSocket-based features. Screenshot file proxy (v1.5.x) only if saving to server filesystem.
-- `api_server/models.py` -- No new Pydantic models needed.
-- `dashboard/src/services/paraview.ts` -- Session lifecycle management unchanged.
-
----
-
-## 5. Build Order (Considering Dependencies)
-
-```
-PHASE 1: Server-Side Protocol Handlers
-────────────────────────────────────────
-1. Create api_server/services/paraview_adv_protocols.py
-   - Implement ParaViewWebVolumeRendering class
-   - Implement ParaViewWebAdvancedFilters class
-   - Each method: mapIdToProxy() → simple.XXX() → simple.Render() → InvokeEvent()
-   Rationale: No frontend dependencies; pure Python. Implement and test first.
-
-2. Update paraview_web_launcher.py _build_launcher_config()
-   - Mount paraview_adv_protocols.py into container at /tmp/
-   - Add python import command to launcher startup args
-   - Add --volume flag to pvpython command
-   Rationale: Launcher must pass the new protocols to the container.
-
-3. Test: Start container, verify protocol methods appear in wslink registry
-   (Check: pvpython -c "import paraview_adv_protocols" works inside container)
-
-
-PHASE 2: Frontend Protocol Message Builders
-──────────────────────────────────────────────
-4. Extend dashboard/src/services/paraviewProtocol.ts
-   - Add all message builder functions
-   - Add parseScreenshotResponse()
-   Rationale: Pure TypeScript; depends only on the protocol method names matching server.
-
-5. Add response parsers to ParaViewViewer.tsx
-   - Parse clip.create / contour.create / streamtracer.create responses
-   - Extract and store proxyId in React state
-   Rationale: Proxy IDs must be tracked before UI controls can offer Update/Delete.
-
-
-PHASE 3: Frontend UI Controls
-────────────────────────────────
-6. Add Volume Rendering toggle to ParaViewViewer.tsx
-   - Surface / Volume button group (below existing field selector)
-   - sendProtocolMessage(createVolumeRepresentationMessage(...)) on Volume click
-   - sendProtocolMessage(createSurfaceRepresentationMessage(...)) on Surface click
-   Rationale: Simplest new feature; establishes proxy ID tracking pattern.
-
-7. Add AdvancedFilterPanel.tsx component
-   - Clip section: axis selector (X/Y/Z/Off) + origin slider
-   - Contour section: field selector + isovalues input + Apply/Delete
-   - Streamlines section: seed type dropdown + Show/Delete
-   - Wire all to sendProtocolMessage() + parse response + update state
-   Rationale: Self-contained component; clean separation from main viewer.
-
-8. Add screenshot button to ParaViewViewer.tsx
-   - Calls createScreenshotMessage() → parseScreenshotResponse()
-   - Decodes base64 → triggers browser download
-   Rationale: One-button flow; no state to track.
-
-
-PHASE 4: Integration
-────────────────────────
-9. Integration test: full flow
-   - Launch session → connect WS → discover sourceProxyId → create clip →
-     update clip origin → delete clip → create contour → screenshot → delete
-   Rationale: End-to-end validation of the complete v1.5.0 feature set.
-```
-
-**Dependency chain:** Phase 1 must complete before Phase 2 (server protocol names must exist before frontend message builders reference them). Phase 2 and 3 can proceed in parallel on different files (protocol builders vs. UI components). Phase 4 is the integration gate.
+### Phase 6: Feature Parity + Cleanup
+- Compare old and new viewer feature-by-feature
+- Delete old files: `ParaViewViewer.tsx`, `paraviewProtocol.ts`, `adv_protocols.py`, `entrypoint_wrapper.sh`, `paraview_web_launcher.py`
+- Delete old Docker build artifacts
+- Update documentation
 
 ---
 
-## 6. Architectural Patterns
+## Backward Compatibility Considerations
 
-### Pattern 1: Sidecar Protocol Registration
+### v1.4.0/v1.5.0 Viewer State
+The existing viewer state (field selection, slice axis, color preset, volume enabled, active filters) is held in React component state in `ParaViewViewer.tsx`. This state has no persistence -- it is lost on refresh. The new Vue-based viewer will have equivalent state in `server.state` which IS persisted and synced.
 
-**What:** Custom Python protocol classes are mounted as files into the ParaView Web Docker container and imported at startup via the launcher configuration.
+**Breaking change**: Users with active v1.4.0/v1.5.0 viewer sessions who update mid-session will lose their viewer state. This should be documented as a known breaking change for in-flight sessions.
 
-**When:** When the ParaView Web server needs to expose application-specific RPC methods beyond the built-in set.
+### API Compatibility
+The FastAPI REST endpoints (`/visualization/launch`, `/visualization/{id}`, `/visualization/{id}/activity`) should remain at the same paths. Only the response format may change (returning trame URLs instead of ParaView Web URLs).
 
-**Why:** This avoids forking the ParaView Web Docker image. The image is unchanged; custom behavior comes from mounted files.
-
-**Trade-offs:**
-- Pro: No image maintenance burden; upgrades to base image automatically include security patches
-- Con: File mount dependency between host and container; startup args become more complex
-- Con: Protocol file must be synchronized with base image Python library versions
-
-### Pattern 2: Proxy ID State Tracking
-
-**What:** The frontend stores the ParaView proxy integer ID (returned from create operations) in React state, then passes it back to update/delete operations.
-
-**When:** For any filter or representation that persists on the server and may be modified after creation.
-
-**Example:**
-```typescript
-// Create: server returns proxyId
-const resp = await sendAndWait(createClipMessage(sourceId, normal, origin));
-setActiveClip({ proxyId: parseInt(resp.result.proxyId), normal, origin });
-
-// Update: frontend uses stored proxyId
-sendProtocolMessage(createClipUpdateMessage(activeClip.proxyId, newNormal, newOrigin));
-
-// Delete: frontend uses stored proxyId
-sendProtocolMessage(createClipDeleteMessage(activeClip.proxyId));
-setActiveClip(null);
-```
-
-**Trade-offs:**
-- Pro: Server is the source of truth for proxy state; frontend is stateless for server objects
-- Con: Stale proxyId if server-side proxy is deleted out-of-band (e.g., container restart)
-
-### Pattern 3: Frame-Push Rendering (Existing, Unchanged)
-
-**What:** After any server-side state change (filter create/update, representation change), the server calls `InvokeEvent("UpdateEvent")` which triggers `viewport.image.push` to push a new rendered frame to all subscribed clients.
-
-**When:** After any `simple.Render()` call.
-
-**This pattern is unchanged for v1.5.0.** All new protocol methods follow it. The frontend does not poll for render completion -- it receives pushed frames.
-
-### Pattern 4: Orthogonal Feature Composition
-
-**What:** Each advanced filter (clip, contour, streamlines) is independent. Users can activate multiple simultaneously. Each `simple.Show()` adds a representation layer.
-
-**When:** When the user wants to compose multiple visualizations (e.g., clipped geometry + iso-surfaces + streamlines in one view).
-
-**Implementation:** Each filter tracks its own `proxyId` in React state. Deleting one does not affect others.
+### Docker Image
+The custom `cfd-workbench:openfoam-v10` image will need trame packages added. This is a Dockerfile change that affects build pipeline.
 
 ---
 
-## 7. Anti-Patterns to Avoid
+## Open Questions
 
-### 7.1 Do NOT Create Filters Without Tracking the Proxy ID
+1. **Multi-session within one container**: Can `get_server(name=session_id)` provide isolated sessions within one container? The `AVAILABLE_SERVERS` dict suggests named servers are singletons -- so container-per-session is likely still correct.
 
-Creating a clip (`clip.create`) and not storing the returned `proxyId` makes the filter impossible to update or delete. Every create must immediately parse the response and store the ID.
+2. **Screenshot method**: What is the trame-equivalent of `viewport.image.render`? Need to verify `paraview.VtkRemoteView` exposes a screenshot/export method.
 
-### 7.2 Do NOT Call `simple.Render()` Synchronously After Filter Creation
+3. **OpenFOAM reader lifecycle**: Currently opened after WebSocket auth (line 203 of ParaViewViewer.tsx). In trame, should this happen in `on_server_ready` callback or lazily on first client connection?
 
-ParaView's render pipeline is asynchronous. Calling `simple.Render()` in a tight loop after creating multiple filters can cause race conditions. Each filter create/update should complete its render before the next command is sent.
+4. **Idle timeout**: Currently managed by FastAPI `ParaviewWebManager._idle_monitor()`. With trame, should this remain in FastAPI (container-level), or use `server.start(timeout=N)` for server-level idle shutdown?
 
-### 7.3 Do NOT Mount Write Permissions to paraview_adv_protocols.py
+5. **Docker base image**: Does `openfoam/openfoam10-paraview510` ship with trame pre-installed? If not, `pip install trame trame-vuetify trame-vtk` adds to Dockerfile build time.
 
-The protocol file should be mounted read-only (`:ro`) to prevent container processes from modifying it. The file is configuration, not a data output.
+6. **Vue integration with React app**: The existing dashboard is React-based. How does the Vue-based trame viewer integrate? Options: (a) iframe embedding the trame server URL, (b) React component that loads trame client library directly, (c) full page navigation to trame URL.
 
-### 7.4 Do NOT Use Hard-Coded Proxy IDs
-
-Proxy IDs are assigned by the ParaView session at runtime and differ between sessions. Never hard-code a proxy ID like `426` (the pattern seen in ParaView examples). Always use the ID returned from the create operation.
-
-### 7.5 Do NOT Mix REST and WebSocket for Filter Operations
-
-All filter create/update/delete operations must go through the WebSocket JSON-RPC channel. Using REST for some and WebSocket for others introduces ordering problems (REST calls may arrive before the WebSocket state has updated the view).
+7. **Port range reuse**: Current port range is `8081-8090`. With trame, does this same range work, or does trame have its own port allocation preferences?
 
 ---
 
-## 8. Scaling Considerations
+## Anti-Patterns to Avoid
 
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| 1-5 concurrent viewers | Single ParaView Web container per session (existing pattern); each viewer = 1 container |
-| 5-20 concurrent viewers | Container orchestrator needed (Docker Compose or Kubernetes); session pooling for idle containers |
-| 20+ concurrent viewers | ParaView Web does not scale horizontally easily; pre-rendered static images as fallback |
+### "Partial migration" of frontend
+**What people do:** Try to keep React and gradually introduce trame concepts.
+**Why it's wrong:** Trame's frontend requires Vue.js; the entire viewer component must be rewritten as Vue.
+**Do this instead:** Keep existing ParaView Web viewer running in parallel until Vue version is complete and tested.
 
-**v1.5.0 is scoped for single-user sessions** (same as v1.4.0). Advanced filters and volume rendering add CPU/GPU load but do not change the session-per-user architecture.
+### "Keep the entrypoint wrapper"
+**What people do:** Adapt the existing `entrypoint_wrapper.sh` to work with trame by wrapping `server.start()`.
+**Why it's wrong:** Trame uses `server.start()` as blocking main loop; no shell wrapper needed.
+**Do this instead:** Make the Python file the direct container entrypoint with `pvpython /app/app.py`.
 
-**First bottleneck for advanced filters:** Large meshes (5M+ cells) with volume rendering can exhaust GPU memory. Mitigation: `Smart Volume Mapper` (adaptive) instead of default `GPU Volume Ray Cast Mapper` -- add as v1.5.x option.
+### "Import-time protocol registration"
+**What people do:** Try to import protocol modules at container start (like current `adv_protocols.py` mounted at `/tmp/`).
+**Why it's wrong:** Trame's `@controller.add()` decorators work at class/function definition time; no global registry pattern like ParaView Web's wslink registration.
+**Do this instead:** Define all RPC methods in the main `app.py` module.
+
+### "One server for all sessions"
+**What people do:** Try to use a single long-lived trame server with session isolation via namespaced state.
+**Why it breaks:** Unless explicitly designed for multi-tenant use, this risks state leakage between users.
+**Do this instead:** Each session is a separate container with its own trame server, using container name as session identity (same as current `pvweb-{session_id}` pattern).
 
 ---
 
-## 9. Open Questions
+## Sources
 
-1. **Container startup import timing:** The `paraview_adv_protocols.py` must be imported before the wslink server registers RPC methods. Confirm the `--volume` approach works with `vtkmodules/web/launcher.py` by testing the import sequence in the actual container.
-
-2. **Large mesh volume rendering memory:** `vtkGPUVolumeRayCastMapper` for meshes > 5M cells may exceed GPU memory. Should v1.5.0 default to `Smart Volume Mapper` to be safe, or is `GPU Volume Ray Cast Mapper` acceptable for typical OpenFOAM case sizes (100K-1M cells)?
-
-3. **Source proxy ID discovery:** The `sourceProxyId` (OpenFOAM reader proxy ID) is discovered from the `OpenFOAMReader.GetPropertyList` response. This needs validation -- confirm the response format includes the proxy's integer ID that can be passed to filter creation.
-
----
-
-## 10. Sources
-
-| Source | URL | Confidence | Verifies |
-|--------|-----|------------|---------|
-| ParaView 5.10.0 protocols.py (GitHub) | `https://raw.githubusercontent.com/Kitware/ParaView/v5.10.0/Web/Python/paraview/web/protocols.py` | HIGH | `@exportRpc` decorator pattern; `mapIdToProxy()`; `SaveScreenshot`; `ViewportImageRender` |
-| Existing `paraview_web_launcher.py` | `api_server/services/paraview_web_launcher.py` | HIGH | Container lifecycle; `_build_launcher_config()` structure; mount pattern |
-| Existing `paraviewProtocol.ts` | `dashboard/src/services/paraviewProtocol.ts` | HIGH | JSON-RPC message format; response parsing patterns |
-| Existing `ParaViewViewer.tsx` | `dashboard/src/components/ParaViewViewer.tsx` | HIGH | WebSocket state machine; `sendProtocolMessage` pattern; UI control structure |
-| Existing `visualization.py` router | `api_server/routers/visualization.py` | HIGH | REST endpoint pattern; session model |
-| FEATURES.md v1.5.0 | `.planning/research/FEATURES.md` | HIGH | Protocol message flows; feature dependencies; MVP scope |
-| STACK.md v1.5.0 | `.planning/research/STACK.md` | HIGH | Stack decisions; Python protocol handler structure |
+- **ParaView Web**: `vtk.web.protocol.ParaViewWebProtocol`, `vtk.web.launcher` (v3.2.21, from openfoam/openfoam10-paraview510)
+- **trame server core**: `Server.start()`, port allocation, `get_server()` -- `Kitware/trame-server/trame_server/core.py`
+- **trame client**: `Client`, `WsLinkSession` with msgpack -- `Kitware/trame-server/trame_server/client.py`
+- **trame decorators**: `@controller.add`, `@trigger`, `@state.change` -- `Kitware/trame/trame/decorators.py`
+- **trame ParaView example**: `RemoteRendering.py` -- `Kitware/trame/examples/07_paraview/SimpleCone/RemoteRendering.py`
+- **trame VTK docker**: `Dockerfile`, `app.py` -- `Kitware/trame/examples/deploy/docker/VtkRendering/`
+- **trame app module**: `get_server()`, `TrameApp` -- `Kitware/trame/trame/app/`
+- **trame lifecycle callbacks**: `on_server_start`, `on_server_ready`, `on_client_connected` -- `Kitware/trame/trame/app/__init__.py`

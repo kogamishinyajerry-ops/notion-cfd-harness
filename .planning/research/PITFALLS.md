@@ -1,501 +1,220 @@
-# Domain Pitfalls: ParaView Web Advanced Visualization (v1.5.0)
+# Pitfalls Research: ParaView Web to trame Migration
 
-**Domain:** ParaView Web -- Volume Rendering, Advanced Filters (Clip/Contour/Streamlines), Screenshot Export
-**Project:** AI-CFD Knowledge Harness
+**Domain:** CFD Web Visualization — ParaView Web (wslink) to trame Framework Migration
 **Researched:** 2026-04-11
-**Confidence:** MEDIUM-HIGH (verified against existing codebase patterns, Kitware docs, ParaView source)
+**Confidence:** MEDIUM
+
+> No official ParaView Web-to-trame migration guide exists. ParaViewWeb is officially in maintenance mode (no new features). Kitware directs users to trame. All findings below are synthesized from trame source code, official documentation (trame.readthedocs.io, kitware.github.io/trame), wslink protocol docs, and the ParaViewWeb GitHub README. Confidence is MEDIUM because official migration documentation does not exist and the team has no prior trame experience.
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, crashes, or integration breakage for the specific v1.5.0 features.
+### Pitfall 1: `@exportRpc` Protocol Classes Have No Direct trame Equivalent
 
----
-
-### Pitfall 1: Volume Rendering GPU Memory Exhaustion on Large CFD Datasets
-
-**What goes wrong:** Volume rendering crashes the Docker container's VTK render process or causes OOM kills, leaving the viewer in a broken state.
+**What goes wrong:**
+`ParaViewWebVolumeRendering` and `ParaViewWebAdvancedFilters` (in `paraview_adv_protocols.py`) inherit from `ParaViewWebProtocol` and register RPCs via the `@exportRpc` decorator. In trame, there are no protocol classes and no `@exportRpc`. Every RPC method must be rewritten as either a state-changing method or a server-side callback triggered by client events.
 
 **Why it happens:**
-- `vtkGPUVolumeRayCastMapper` requires loading the entire 3D scalar field into GPU memory
-- CFD datasets (e.g., 5M+ cell engine simulation) easily exceed typical GPU memory limits in a containerized environment
-- VTK falls back to `vtkSoftwareVolumeRayCastMapper` silently (no error thrown), causing 10-100x performance degradation that manifests as a frozen UI
-- The `--platform linux/amd64` detached container has no direct GPU access on Apple Silicon (already acknowledged in PROJECT.md); even on Linux with GPU, container memory limits are set at container start, not dynamically
-
-**Consequences:**
-- Container OOM kill: ParaView Web session dies, user loses visualization state
-- Silent software fallback: viewer freezes during interaction, user blames "bug" not hardware
-- Memory growth: repeated volume on/off toggles leak GPU memory references, eventually crashing
+The mental model is inverted. ParaView Web is RPC-centric: the client explicitly calls a named method on a protocol instance. trame is state-centric: the client mutates shared state; the server reacts to state changes via `@state.change` decorators or `ctrl.on_*` lifecycle callbacks. There is no class-level filter registry in trame's equivalent pattern.
 
 **How to avoid:**
-```python
-# In paraview_adv_protocols.py -- check data size before enabling volume rendering
-@exportRpc("volume.representation.create")
-def createVolumeRepresentation(self, sourceProxyId: int, viewId: int = -1):
-    source = self.mapIdToProxy(sourceProxyId)
-    dataInfo = servermanager.PropertyIterator(source)
-    # Get approximate memory footprint
-    wholeDataInfo = source.GetDataInformation()
-    numCells = wholeDataInfo.GetNumberOfCells()
-    numPoints = wholeDataInfo.GetNumberOfPoints()
-    # Warn if > 2M cells (heuristic for ~500MB GPU memory)
-    if numCells > 2_000_000:
-        # Fall back to surface representation instead of crashing
-        # Or set lower resolution for volume
-        pass
-    # ... rest of volume creation
-```
-
-```python
-# Set memory limits on the container at start (in _start_container):
-"--memory", "4g",          # Hard limit
-"--memory-reservation", "2g",  # Soft limit
-```
-
-```typescript
-// Frontend: implement progressive loading UX
-// Show "Preparing volume..." with progress, then reveal
-// Detect if volume rendering is taking > 10s and offer fallback
-```
+- Map every `@exportRpc` method to one of:
+  - A `ctrl.on_*` lifecycle callback (for server-initiated logic)
+  - A method decorated with `@state.change("varName")` (for reactive state mutations)
+  - A plain Python method called from a Vue component's `@click` handler via `server.controller`
+- Replace class-level filter registry (`ParaViewWebAdvancedFilters._filters = {}`) with trame `state.filters = {}` — a shared dict that automatically syncs to the client
+- Remove all `self._app.SMApplication.InvokeEvent("UpdateEvent", ())` calls (lines 207, 244, 285, 312 in `paraview_adv_protocols.py`) — trame's reactivity handles viewport updates automatically when state mutates
+- The `simple.Render()` calls should be retained for some operations but `InvokeEvent` must be removed
 
 **Warning signs:**
-- Container logs: `Killed` (dmesg OOM)
-- Container logs: `Abort` during `vtkGPUVolumeRayCastMapper::Render()`
-- Frontend: viewer unresponsive for > 5s after enabling volume
-- `nvidia-smi` inside container shows GPU memory at 95%+
+- Code search finds `@exportRpc` or `from wslink.decorators import exportRpc` in migrated files
+- Filter IDs returned from RPCs do not persist in `state` but in a Python class dict
+- `self._app.SMApplication.InvokeEvent` still present after migration
 
-**Phase to address:** Volume Rendering implementation phase -- must include memory estimation before enabling volume, container memory limits at launch, and software fallback path.
+**Phase to address:** Migration phase (Phase 20/22 equivalents)
 
 ---
 
-### Pitfall 2: Custom Protocol File Not Registered Before First WebSocket Connection
+### Pitfall 2: `simple.Render()` + `InvokeEvent` Pattern Breaks
 
-**What goes wrong:** User connects to the ParaView Web session but the custom protocol methods (`volume.representation.create`, `clip.create`, etc.) return "method not found" errors.
+**What goes wrong:**
+Both protocol classes call `simple.Render()` followed by `self._app.SMApplication.InvokeEvent("UpdateEvent", ())` to push viewport updates to the client (e.g., lines 206-207 in `paraview_adv_protocols.py`). In trame, there is no `InvokeEvent`. The render/update cycle is managed differently depending on the view type.
 
 **Why it happens:**
-- The current `paraview_web_launcher.py` starts the container with `vtkmodules/web/launcher.py` directly
-- The custom protocol Python file is mounted at `/tmp/adv_protocols.py` but is never imported or registered with the wslink server
-- wslink's `register` decorator adds methods to a global servermanager registry that must be populated before the server starts accepting connections
-- If the import happens too late (after the first client connects), the protocol methods are not available for that session
-
-**Consequences:**
-- All volume rendering and filter buttons fail silently or return protocol errors
-- Works on second try only if the session restarts (which it doesn't)
-- Debugging is hard because the container starts successfully and the WebSocket handshake completes
+ParaViewWeb pushes viewport updates by explicitly invoking the UpdateEvent on the server's application object. trame's `VtkLocalView` widget auto-manages render windows — scene mutations via `simple.*` proxies automatically reflect in the client's rendered view once the render window is configured. There is no equivalent to `InvokeEvent`.
 
 **How to avoid:**
-```python
-# The custom entrypoint MUST import and register protocols BEFORE
-# the launcher starts the wslink server.
-# This means a custom entrypoint wrapper script, NOT just mounting a .py file.
-
-# /tmp/paraview_entrypoint.sh (mounted and set as entrypoint):
-#!/bin/bash
-set -e
-cd /tmp
-
-# Pre-import and register all custom protocols
-pvpython -c "
-import sys
-sys.path.insert(0, '/tmp')
-from paraview_adv_protocols import ParaViewWebVolumeRendering, ParaViewWebAdvancedFilters
-# Import registers @exportRpc decorators with wslink
-print('Custom protocols registered')
-"
-
-# Now run the standard launcher (which picks up the registered methods)
-exec pvpython lib/site-packages/vtkmodules/web/launcher.py /tmp/launcher_config.json
-```
-
-```python
-# In _start_container, change entrypoint:
-"--entrypoint", "/tmp/paraview_entrypoint.sh",  # NOT pvpython directly
-```
-
-**Verification test:** After container starts, connect a test WebSocket client and call `volume.representation.create` -- it must respond within 100ms with a valid result or `{"result": {"code": 1, "message": "..."}}`, NOT a transport-level error.
+- For `VtkLocalView`: scene mutations via `simple.*` proxies automatically propagate to the client. Explicit `simple.Render()` is still needed for some operations but `InvokeEvent` is replaced by relying on auto-state-push when `state` dict is mutated inside a server method, or calling `server.update()` explicitly
+- For `VtkRemoteView`: render is triggered automatically on state change
+- Remove all `self._app.SMApplication.InvokeEvent` calls — they raise `AttributeError` in trame context
+- Test viewport updates after every filter operation to confirm the scene refreshes
 
 **Warning signs:**
-- Frontend console: `RPC method not found: volume.representation.create`
-- Container logs: no Python import of `paraview_adv_protocols` at startup
-- The `/tmp/adv_protocols.py` file exists inside the container but is never executed
+- After filter create/delete, the viewport freezes or shows stale geometry
+- `AttributeError: '_Protocol' object has no attribute '_app'` in logs
+- `AttributeError: 'NoneType' object has no attribute 'InvokeEvent'`
+- `self._app` used anywhere in trame-native code
 
-**Phase to address:** Container integration phase for advanced protocols -- the custom protocol registration must be verified at container startup, not at first use.
+**Phase to address:** Migration phase (Phase 20/22 equivalents)
 
 ---
 
-### Pitfall 3: Apple Silicon `--platform linux/amd64` Volume Rendering Falls Back to Software
+### Pitfall 3: `ParaviewWebManager` Session/Container Architecture Is Replaced Entirely
 
-**What goes wrong:** Volume rendering appears to work but is extremely slow (1-5 FPS) or crashes because it runs via Mesa software rasterization on Apple Silicon.
+**What goes wrong:**
+`ParaviewWebManager.launch_session()` in `paraview_web_launcher.py` uses the `vtk.web.launcher` multi-session launcher with a JSON config, Docker sidecar containers per session, port allocation, idle timeout monitoring, and a custom `entrypoint_wrapper.sh` that imports `adv_protocols.py` before launching. trame does not use the ParaView Web launcher at all. The container architecture, port allocation, entrypoint approach, and idle monitoring all need redesign.
 
 **Why it happens:**
-- The PROJECT.md explicitly notes `--platform linux/amd64` is required for Apple Silicon
-- However, `--platform linux/amd64` on Apple Silicon (M1/M2/M3) uses Rosetta 2 x86 emulation AND the Docker virtiofs/guestfs graphics stack cannot access the Apple GPU
-- Volume rendering via `vtkGPUVolumeRayCastMapper` in this configuration typically uses `vtkOpenGLGPUVolumeRayCastMapper` which tries to use GPU but fails to initialize, falling back to CPU rendering
-- This fallback is silent -- there is no error thrown, only a performance degradation that makes the UI unusable
-
-**Consequences:**
-- Volume rendering of any non-trivial dataset freezes the UI during interaction
-- Users on Apple Silicon Macs get a broken experience that works fine on Linuxamd64 servers
-- Appears as a bug in the code rather than a platform limitation
+trame applications are self-hosted Python apps. There is no `vtk.web.launcher` multi-session manager. Each trame app runs as a single process (or can be scaled via gunicorn/uvicorn). The concept of "named Docker containers per session" does not map to trame's architecture.
 
 **How to avoid:**
-```python
-# In paraview_adv_protocols.py -- detect GPU availability before enabling volume:
-@exportRpc("volume.representation.create")
-def createVolumeRepresentation(self, sourceProxyId: int, viewId: int = -1):
-    # Check if we have real GPU support
-    from vtkmodules.vtkRenderingOpenGL2 import *
-    from paraview.vtk import vtkRenderingOpenGL2
-
-    # If not on a real GPU, surface is the only reliable option
-    # Detect software fallback by checking if GPU context is real
-    # (This is hard to detect reliably, so be conservative)
-    pass  # Fall through to normal path but log the limitation
-
-# In paraview_web_launcher.py -- set explicit OpenGL flags:
-"--env", "VTK_DEFAULT_SOFTWARE_RENDERING=0",
-"--env", "DISPLAY=:0",
-# AND ensure EGL is initialized
-```
-
-```typescript
-// Frontend: detect software rendering and warn user
-// Check renderer string for "llvmpipe" or "Software" which indicates no GPU
-// Show a warning banner: "Volume rendering requires a server with GPU.
-// Current server uses software rendering, which may be slow."
-```
+- Replace `ParaviewWebManager` with a trame-native session management approach:
+  - Option A: Single trame server with `server.start()` using its built-in WebSocket handling (simpler, scales to hundreds of concurrent users via asyncio)
+  - Option B: Multiple gunicorn workers with sticky sessions if isolation is required
+- Drop the `entrypoint_wrapper.sh` pattern entirely — adv_protocols.py RPCs are replaced by `server.controller` methods
+- Remove the Docker image requirement for `vtk.web.launcher` module verification (line 75 in `paraview_web_launcher.py`)
+- The `--platform linux/amd64` constraint remains relevant for Apple Silicon (Mesa software rendering), but the Docker container no longer needs to run the ParaView Web launcher
+- The `_verify_image()` method and its `pvpython -c "import vtk.web.launcher"` check become unnecessary
+- The idle monitor task (`_idle_monitor`, `_shutdown_idle_sessions`) must be replaced with trame's `ctrl.on_server_bind` or a separate async background task
 
 **Warning signs:**
-- Container inside: `eglinfo | grep "EGL vendor"` returns "Mesa Project" not "NVIDIA"
-- `viewport.image.render` takes > 10s to return (software rendering is slow)
-- Frontend detects "SwiftShader" or "Software" in WebGL renderer string
+- `Dockerfile` still installs or references `vtk.web.launcher`
+- `launch_session()` still tries to run `pvpython ... launcher.py`
+- Session containers named `pvweb-{session_id}` still appear in `docker ps` after migration
+- `PARAVIEW_WEB_PORT_RANGE_START/END` configuration still used
 
-**Phase to address:** Volume Rendering implementation phase -- must include GPU capability detection, explicit EGL vendor verification at startup, and user-facing warning on software fallback.
+**Phase to address:** Infrastructure/migration phase (Phase 20)
 
 ---
 
-### Pitfall 4: Screenshot `viewport.image.render` Blocks the WebSocket Event Loop
+### Pitfall 4: Filter ID (`id(clip)`) Is Not Stable Across Server Restarts
 
-**What goes wrong:** Calling `viewport.image.render` freezes the entire viewer for the duration of the render, sometimes 10-30 seconds on large datasets.
+**What goes wrong:**
+`paraview_adv_protocols.py` uses `filter_id = id(clip)` (lines 202, 239, 280) as the filter registry key. `id()` returns the Python object's memory address, which is not reproducible across server restarts. If a client caches a filter ID from a previous session and the server restarts, the IDs will mismatch.
 
 **Why it happens:**
-- `viewport.image.render` is a synchronous RPC call -- it blocks the wslink server event loop until the render completes and the base64 image is sent over the wire
-- A full-resolution screenshot of a volume-rendered CFD model at 1920x1080 can be 5-10MB base64-encoded
-- During this time, no other protocol messages (camera updates, filter changes) can be processed
-- The user sees a completely frozen UI with no feedback
-
-**Consequences:**
-- User clicks "Screenshot" and UI freezes -- user may click again, triggering another blocking call
-- Multiple rapid clicks queue up multiple blocking renders
-- If the render takes too long, the WebSocket may time out (60s default) and the session appears dead
+In ParaView Web, filter IDs are Python `id()` values returned to the client and stored there. On server restart, new filters get new addresses. The client still holds old IDs from the previous session.
 
 **How to avoid:**
-```python
-# Server-side: use a background thread for screenshot rendering
-@exportRpc("viewport.image.render")
-def render_viewport(self, viewId: int = -1, quality: int = 85, **kwargs):
-    import threading
-    def render_in_background():
-        # VTK render + base64 encode happens here
-        # Result is pushed via self.getApplication().InvokeEvent("UpdateEvent")
-        pass
-    thread = threading.Thread(target=render_in_background)
-    thread.start()
-    return {"status": "rendering"}  # Immediate return, non-blocking
-```
+- Generate stable filter IDs using a UUID or incremental integer counter stored in `state`:
+  ```python
+  from trame.app import get_server
+  server = get_server()
+  state = server.state
+  state._filter_id_counter = 0
+  state.filters = {}
 
-```typescript
-// Frontend: show loading state and disable button during capture
-async function takeScreenshot() {
-  setIsCapturing(true);
-  disableButton();
-  try {
-    await sendProtocolMessage(createScreenshotMessage(quality));
-    // Show brief "Capturing..." state
-  } finally {
-    setIsCapturing(false);
-    enableButton();
-  }
-}
-```
-
-**Phase to address:** Screenshot Export phase -- must implement async capture UX and debounce/throttle screenshot requests.
-
----
-
-## Moderate Pitfalls
-
-Issues causing significant debugging but with clear workarounds.
-
----
-
-### Pitfall 5: Clip/Contour Filter Proxy IDs Not Tracked Across Server Restarts
-
-**What goes wrong:** User creates a clip, then restarts the visualization session. The clip proxy ID from the old session is still stored in frontend state, causing `clip.update` to operate on the wrong (or non-existent) proxy.
-
-**Why it happens:**
-- Proxy IDs are assigned by the VTK session on the server and are only valid within that session
-- When the container restarts (idle timeout, crash), all proxy IDs become invalid
-- The frontend may have a list of "active" filters in React state that still holds the old proxy IDs
-
-**How to avoid:**
-```typescript
-// Frontend: track filter state with session ID binding
-interface ActiveFilter {
-  sessionId: string;  // Must match current session
-  proxyId: number;
-  type: 'clip' | 'contour' | 'streamtracer';
-}
-
-// On session change/restart, clear all active filter state
-function onSessionChange(newSessionId: string) {
-  setActiveFilters([]);
-}
-```
+  def _next_filter_id():
+      state._filter_id_counter += 1
+      return f"filter_{state._filter_id_counter}"
+  ```
+- Client should use the string ID returned by the server, not the `id()` of the Python object
+- Add server-side validation: reject filter IDs that are not in `state.filters`
 
 **Warning signs:**
-- `clip.update` returns `{"result": "error", "message": "Proxy not found"}`
-- Filter controls in UI stop responding after a session reconnect
-- Multiple clips appear when only one is expected (ID collision across sessions)
+- After server restart, deleting or operating on a filter returns "Filter not found" even though it exists
+- Filter list RPC returns IDs that the client cannot match to its internal state
 
-**Phase to address:** Advanced Filters phase -- must handle session lifecycle for filter state.
+**Phase to address:** Migration phase (Phase 22 equivalent)
 
 ---
 
-### Pitfall 6: Volume Opacity Transfer Function Points Format Mismatch
+### Pitfall 5: GPU Vendor Detection (`_detect_gpu`) Has No trame Equivalent
 
-**What goes wrong:** User sets an opacity transfer function but the rendered volume appears fully opaque or fully transparent regardless of the scalar values.
+**What goes wrong:**
+`ParaViewWebVolumeRendering._detect_gpu()` (lines 46-74 in `paraview_adv_protocols.py`) runs `eglinfo` as a subprocess to detect NVIDIA vs Mesa. In trame, GPU detection is handled differently — `VtkLocalView` renders client-side (no GPU needed on server), while `VtkRemoteView` renders server-side with whatever GPU is available.
 
 **Why it happens:**
-- `volumeProperty.Points` expects a flat list `[x1, y1, x2, y2, ...]` where x is scalar value and y is opacity (0-1)
-- If the frontend sends `[[x1,y1], [x2,y2]]` (nested arrays), VTK silently fails to apply the transfer function
-- If the scalar range of the CFD field doesn't match the x-values in the transfer function, the result looks wrong
-- `simple.GetOpacityTransferFunction(arrayName).Points` format documentation is sparse
+In the current architecture, the ParaView Web session container must detect its own GPU to choose between GPU ray cast and software ray cast. trame decouples rendering from the server for `VtkLocalView`, making server-side GPU detection unnecessary for that path.
 
 **How to avoid:**
-```typescript
-// Frontend: always send flat list
-function createVolumeOpacityMessage(
-  arrayName: string,
-  points: Array<[number, number]>  // [[x,y], [x,y], ...]
-): object {
-  // Flatten to 1D array before sending
-  const flatPoints: number[] = points.flat();
-  return {
-    id: "pv-volume-opacity",
-    method: "volume.opacity.set",
-    params: { arrayName, points: flatPoints }
-  };
-}
-```
-
-```python
-# Server-side: validate points format before applying
-@exportRpc("volume.opacity.set")
-def setVolumeOpacity(self, arrayName: str, points: list):
-    if not isinstance(points, list):
-        return {"result": "error", "message": "points must be a flat list"}
-    if len(points) % 2 != 0:
-        return {"result": "error", "message": "points must be flat [x1,y1,x2,y2,...]"}
-    # Validate x values are in ascending order
-    x_vals = points[::2]
-    if x_vals != sorted(x_vals):
-        return {"result": "error", "message": "x values must be strictly increasing"}
-```
+- For `VtkLocalView`: GPU detection is irrelevant — geometry is serialized and rendered in the browser via WebGL. No `eglinfo` call needed.
+- For `VtkRemoteView`: If server-side rendering is needed, implement GPU detection via `vtkGraphicsFactory.GetBackEnd()` or similar VTK API instead of shelling out to `eglinfo`
+- Move `volumeRenderingStatus` response data to `state.gpu_vendor`, `state.gpu_available` — trame's state sync replaces the RPC call
+- The `smartVolumeMapper` logic (`simple._create_vtkSmartVolumeMapper()`) is ParaView-specific and may need review for trame compatibility
 
 **Warning signs:**
-- Volume appears fully opaque regardless of opacity function settings
-- `volume.opacity.set` returns success but rendering doesn't change
-- VTK warning in container logs about "Transfer function points out of range"
+- `subprocess.run(["eglinfo"]...)` still present in migrated code
+- `VtkRemoteView` configured without GPU fallback for Apple Silicon
+- Volume rendering toggle fails silently on Apple Silicon because the renderer is not configured for Mesa
 
-**Phase to address:** Volume Rendering implementation phase -- validate input format server-side.
+**Phase to address:** Migration phase (Phase 20 equivalent)
 
 ---
 
-### Pitfall 7: StreamTracer Seed Type Mismatch with CFD Data Geometry
+### Pitfall 6: OpenFOAM Case Directory Mounting Changes
 
-**What goes wrong:** Streamlines appear broken, incomplete, or crash when the seed type does not match the actual CFD mesh geometry.
+**What goes wrong:**
+`ParaviewWebManager._start_container()` mounts the case directory at `/data` inside the container (line 344 in `paraview_web_launcher.py`). In trame, the case directory must be accessible to the trame server process. The mounting path and mechanism differ.
 
 **Why it happens:**
-- `StreamTracer` with `SeedType="maskingRegion"` requires the input to have a valid "masking region" (a common issue with clipped/blockMesh-generated geometry)
-- `StreamTracer` with `SeedType="point"` needs a valid seed point that exists within the domain
-- Many OpenFOAM cases (especially those from blockMesh) have irregular geometry where the default seed regions fall outside the fluid domain
-- The `MaximumTrackLength` default of 100 may be too small for large domains or too large for small ones, causing truncated or runaway traces
+Each ParaView Web session had its own container with the case mounted. trame runs as a long-running server process, not a per-session container. File paths and mounts are managed differently.
 
 **How to avoid:**
-```python
-@exportRpc("streamtracer.create")
-def createStreamTracer(self, sourceProxyId: int, seedType: str = "maskingRegion",
-                        seedPoint: list = None, viewId: int = -1):
-    source = self.mapIdToProxy(sourceProxyId)
-    tracer = simple.StreamTracer(Input=source, SeedType=seedType)
-    tracer.Vectors = ["POINTS", "U"]  # Default to velocity field
-
-    # Validate that the seed point is within the domain bounds
-    if seedPoint:
-        bounds = source.GetDataInformation().GetBounds()
-        if not (bounds[0] <= seedPoint[0] <= bounds[1] and
-                bounds[2] <= seedPoint[1] <= bounds[3] and
-                bounds[4] <= seedPoint[2] <= bounds[5]):
-            return {"result": "error",
-                    "message": f"Seed point {seedPoint} outside domain bounds {bounds}"}
-
-    # Set reasonable defaults but allow override
-    tracer.MaximumTrackLength = 200  # Increased default for CFD
-    tracer.IntegrationStepUnit = "CellLength"  # More stable than PointLength
-    tracer.MaximumSteps = 1000
-    # ... show and render
-```
+- Mount the case directory at the trame server host level, not per-session
+- Pass the case directory path via `state.case_dir` and initialize OpenFOAM reader in a `ctrl.on_server_start` callback
+- If per-session isolation is still required (multi-tenant security), use the trame app's multi-session capabilities or separate processes behind a reverse proxy
+- Verify the OpenFOAM reader can access the mounted path from the trame server's context
 
 **Warning signs:**
-- Streamlines appear to stop at domain boundaries prematurely
-- `streamtracer.create` returns success but no streamlines are visible
-- VTK warning about "Seed point outside data bounds"
+- OpenFOAM reader cannot find boundary file `/data/constant/polyMesh/boundary`
+- Case directory not visible to trame server process
+- Multiple users see each other's case data (isolation breach)
 
-**Phase to address:** Advanced Filters (Streamlines) phase -- validate seed geometry against mesh bounds before creating tracer.
+**Phase to address:** Migration phase (Phase 20 equivalent)
 
 ---
 
-### Pitfall 8: Container Memory Grows Unboundedly with Filter Creation/Deletion Cycles
+### Pitfall 7: Multi-Client Session Isolation Requires Redesign
 
-**What goes wrong:** Each clip/contour/streamline creation allocates VTK objects. Deletion via `simple.Delete()` does not immediately free GPU memory. Over time, repeated filter creation cycles exhaust GPU or system memory.
+**What goes wrong:**
+`ParaViewWebManager` spawns a named Docker container (`pvweb-{session_id}`) per session, achieving hard isolation. trame's default mode shares the same server process (and thus `simple` state) across all connected clients. Without explicit isolation, one user's filter operations could affect another user's viewport.
 
 **Why it happens:**
-- VTK's reference counting means objects are not freed immediately when `simple.Delete()` is called
-- GPU resources (textures, buffers for each filter's representation) persist until the next `Render()`
-- On Apple Silicon with `--platform linux/amd64`, GPU memory management is especially fragile
-- Without an explicit `simple.Render()` after delete, the memory is not reclaimed
+ParaView Web's launcher spawns a separate ParaView server process per session. trame's `VtkLocalView` is designed for multi-user but requires explicit configuration to prevent state leakage between clients.
 
 **How to avoid:**
-```python
-@exportRpc("clip.delete")
-def deleteClip(self, proxyId: int):
-    proxy = self.mapIdToProxy(proxyId)
-    if proxy:
-        simple.Delete(proxy)
-    # CRITICAL: explicitly render to free GPU resources
-    simple.Render()
-    self.getApplication().InvokeEvent("UpdateEvent")
-    # Force garbage collection periodically
-    import gc
-    gc.collect()
-```
-
-```typescript
-// Frontend: limit number of simultaneous filters
-const MAX_ACTIVE_FILTERS = 5;
-function canCreateNewFilter(): boolean {
-  return activeFilters.length < MAX_ACTIVE_FILTERS;
-}
-```
+- Use trame's `server.enableSession()` or per-client state isolation patterns
+- Register client-specific state using `ctrl.on_client_connected()` to initialize per-client `state` entries
+- For `VtkLocalView`, each client gets its own scene object but the server's `simple` state is global — add client ID prefixes to filter keys in `state.filters`
+- For `VtkRemoteLocalView`, ensure render window configuration is per-client
+- Test with two browser tabs connected to the same session: operations in tab A must not change tab B's viewport
 
 **Warning signs:**
-- Container memory steadily increases with each filter operation
-- After 10+ clip/contour cycles, container becomes sluggish
-- `docker stats` shows increasing memory usage that never stabilizes
+- Opening a clip filter in one browser tab creates it in another tab's view
+- Filter list RPC returns filters from other users' sessions
+- Camera reset in one tab resets it for all tabs
 
-**Phase to address:** Advanced Filters phase -- must include memory management (gc.collect, render after delete) and filter count limits.
-
----
-
-## Minor Pitfalls
-
-Easily worked-around issues.
-
----
-
-### Pitfall 9: Screenshot Resolution Rounds Down Unexpectedly
-
-**What goes wrong:** User requests 1920x1080 screenshot but gets a smaller image.
-
-**Why it happens:**
-- `viewport.image.render` uses the current view size, not an arbitrary requested size
-- The `ratio: 1` parameter multiplies the current size but if the view is smaller than expected, the output is smaller
-- The render quality is also tied to the current viewport's on-screen size
-
-**How to avoid:**
-```python
-# Before calling viewport.image.render, resize the view programmatically:
-@exportRpc("screenshot.capture")
-def captureScreenshot(self, viewId: int = -1, width: int = 1920, height: int = 1080,
-                       quality: int = 90):
-    view = self.getView(viewId)
-    # Save current size
-    orig_width, orig_height = view.ViewSize
-    # Force render at requested size
-    view.ViewSize = [width, height]
-    simple.Render()
-    # Capture...
-    # Restore original size
-    view.ViewSize = orig_width, orig_height
-    simple.Render()
-```
-
-**Phase to address:** Screenshot Export phase.
-
----
-
-### Pitfall 10: Color Lookup Table Reset Wipes User's Custom Volume Opacity
-
-**What goes wrong:** User carefully adjusts opacity transfer function for volume rendering, then switches the scalar field. The `UpdateLUT` protocol resets the opacity function to default, losing the user's work.
-
-**Why it happens:**
-- `UpdateLUT` operates on the lookup table but does not preserve the separate opacity transfer function
-- The opacity transfer function is stored per-array and switching fields loads the new field's opacity defaults
-- The frontend may not track opacity settings per field
-
-**How to avoid:**
-```typescript
-// Frontend: save opacity state per field before switching
-const opacityState: Map<string, number[]> = new Map();
-
-function onFieldChange(newField: string) {
-  // Save current opacity
-  if (currentField) {
-    opacityState.set(currentField, currentOpacityPoints);
-  }
-  // Switch field
-  sendProtocolMessage(createFieldDisplayMessage(newField));
-  // Restore opacity if previously set
-  const saved = opacityState.get(newField);
-  if (saved) {
-    sendProtocolMessage(createVolumeOpacityMessage(newField, saved));
-  }
-}
-```
-
-**Phase to address:** Volume Rendering phase -- handle opacity state per field.
+**Phase to address:** Migration phase (Phase 20/22 equivalent) — must be verified before multi-user testing
 
 ---
 
 ## Technical Debt Patterns
 
-Shortcuts that seem reasonable but create long-term problems.
-
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Hardcode `MaximumTrackLength=100` for streamlines | Works for most cases | CFD domains vary widely; wrong default makes streamlines useless | Never -- make it configurable |
-| Skip memory check before volume rendering | Faster to ship | OOM crash in production | Only in MVP with explicit "may crash" warning |
-| Reuse proxy IDs in filter delete/recreate | Simpler frontend state | ID collision across session restart | Only with session ID binding |
-| Mount custom protocols as `.py` file without entrypoint wrapper | Works locally in dev | Silent registration failure in prod | Only during initial development |
-| `simple.Render()` after every filter operation | Simpler code | Performance hit with many filters | Never in production -- batch renders |
+| Keep `@exportRpc` classes and wrap them in trame | Avoid rewriting RPC methods | The entire trame state model is bypassed; creates a hybrid architecture that is harder to debug and maintain | Never — this defeats the migration purpose |
+| Keep global Python dict for filter registry without client ID prefix | Simpler code | Cross-client state leakage in multi-user scenarios | Only in single-user MVP |
+| Keep Docker container per session instead of trame server | Preserves existing infra | Loses trame's async benefits; adds container overhead; complicates deployment | Only if strict process isolation is a hard requirement |
+| Skip stable filter ID generation | Avoid extra state management | Filter operations fail silently after server restart | Only in MVP with short-lived sessions |
+| Implement volume rendering as server-side only (`VtkRemoteView`) | Simpler initial implementation | On Apple Silicon without GPU, server-side rendering is CPU-only and slow | Only for NVIDIA GPU deployments |
+| Keep `simple.Render()` + `InvokeEvent` pattern (undetected) | Works in ParaViewWeb | `InvokeEvent` raises `AttributeError` in trame; silent failures | Never — must be replaced |
 
 ---
 
 ## Integration Gotchas
 
-Common mistakes when connecting the new features to the existing infrastructure.
-
-| Integration Point | Common Mistake | Correct Approach |
-|------------------|----------------|------------------|
-| Container startup | Mounting `.py` file but not importing it | Custom entrypoint that imports before launcher starts |
-| Protocol registration | Assuming `@exportRpc` auto-registers globally | Must import module to trigger decorator |
-| WebSocket message | Sending nested array `[[x,y]]` instead of flat `[x,y]` | Always flatten opacity points |
-| Filter state | Storing proxyId without sessionId | Include sessionId for cross-session validity |
-| GPU detection | Checking if container starts, not if GPU is used | Explicitly check `EGL vendor string` or use `eglinfo` |
-| Memory management | `simple.Delete()` without `simple.Render()` | Always render after delete to free GPU memory |
-| Screenshot | Blocking `viewport.image.render` call | Async with loading state and debounce |
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|-----------------|
+| OpenFOAM reader | Assuming ParaView reader path `/data` works the same in trame | Verify reader path resolves from trame server context; use absolute paths |
+| WebSocket port | Reusing ParaView Web port range (8081-8090) for trame | trame defaults to port 8080; configure explicitly; ensure no port conflicts |
+| React frontend | Keeping the existing WebSocket RPC router (`message.id` routing) | Replace with trame's `server.controller` — the frontend RPC pattern changes fundamentally |
+| Docker daemon | Building image with `vtk.web.launcher` dependency | Remove launcher dependency from Dockerfile; use `pip install trame trame-vtk` |
+| Apple Silicon | Expecting GPU ray cast to work with `VtkRemoteView` | Use `VtkLocalView` (client-side WebGL rendering) so server GPU is irrelevant; or use `VtkRemoteView` with Mesa fallback |
+| Container startup | Assuming entrypoint_wrapper.sh import pattern still applies | trame initializes server in Python directly; no launcher entrypoint needed |
+| Image verification | `verify_paraview_web_image()` checking `vtk.web.launcher` | Remove this check; verify `trame` package is installed instead |
+| Idle monitoring | `_idle_monitor` task using `docker kill` | trame has no per-session containers; implement idle timeout as a state TTL or asyncio task |
 
 ---
 
@@ -503,11 +222,11 @@ Common mistakes when connecting the new features to the existing infrastructure.
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Volume rendering without memory check | OOM kill or frozen UI | Pre-check cell count, set container memory limits | Datasets > 2M cells |
-| Synchronous screenshot | UI freeze > 5s | Background thread + progressive loading | Large viewports |
-| Many simultaneous filters without GC | Memory leak, degraded performance | `gc.collect()` after delete, limit filter count | > 5 filter cycles |
-| Software fallback volume | 1-5 FPS interaction | EGL vendor check at startup, warn user | Apple Silicon + amd64 container |
-| Large base64 screenshot over WS | WS frame drops, timeout | Compress before send, chunk if needed | Viewport > 4K |
+| Large mesh sent to `VtkLocalView` without LOD | Browser tab freezes during geometry transfer | Use `VtkLocalView` with appropriate geometry decimation; limit mesh complexity before transfer | Meshes with >5M cells |
+| `VtkRemoteView` image quality too high | 100+ ms latency on camera orbit | Set appropriate `quality` and `ratio` parameters on `VtkRemoteView` | >3 concurrent users or slow client devices |
+| `simple.Render()` called on every filter parameter change | Server CPU spikes | Debounce state changes; batch updates; only render on explicit commit | Interactive slider manipulation |
+| Filter registry iteration over `state.filters` on every RPC | Slow RPC responses as filter count grows | Use `state.filters` as a dict with O(1) lookups; do not iterate for filter operations | >100 filters in session |
+| Serializing full mesh on every state change | Network saturation, UI lag | `VtkLocalView` only sends geometry delta; configure appropriately |
 
 ---
 
@@ -515,10 +234,11 @@ Common mistakes when connecting the new features to the existing infrastructure.
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| No proxy ID validation | User could reference another user's filter via ID | Validate proxyId belongs to current session's sessionId |
-| Arbitrary file write via screenshot path | Path traversal if screenshot path is user-controlled | Screenshot always goes to `/tmp`, proxied via REST endpoint |
-| Unbounded filter count | DoS via creating thousands of filters | Enforce MAX_ACTIVE_FILTERS server-side |
-| No auth on WebSocket connection | Unauthorized visualization access | AuthKey validation at WebSocket handshake (already implemented) |
+| No authentication on trame WebSocket endpoint | Any user can execute server-side filter operations | Use trame's built-in authentication or add a reverse proxy auth layer |
+| OpenFOAM case files accessible via predictable paths | Data leakage between users | Validate case path ownership before mounting; use user-specific subdirectories |
+| `subprocess.run` with unsanitized inputs (future extensions) | Command injection | Never pass user input directly to subprocess; use VTK API instead of shell commands |
+| No rate limiting on filter RPCs | DoS from rapid filter creation | Add throttling in `ctrl.on_*` callbacks using `asyncio.sleep` or a token bucket |
+| No session isolation between multi-users | Users can affect each other's visualization state | Use client-ID-scoped state with `ctrl.on_client_connected()` |
 
 ---
 
@@ -526,11 +246,11 @@ Common mistakes when connecting the new features to the existing infrastructure.
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Volume rendering silently uses software fallback | User thinks "buggy software", doesn't know about hardware limitation | Show explicit banner when GPU not available |
-| Clip/contour dialog with no feedback | User clicks "Apply" and nothing happens | Show loading state + result/error feedback |
-| Screenshot button with no loading state | User clicks, UI freezes, clicks again | Disable + spinner during capture |
-| Streamlines fail silently with irregular mesh | User sees nothing, doesn't know why | Show explicit error with bounds diagnostic |
-| Opacity function lost on field switch | User carefully sets opacity, loses it | Persist opacity per field in React state |
+| Viewport does not update after filter apply | User creates filter but sees no change — assumes it failed | Always return confirmation with visual feedback; verify viewport updates in test |
+| Volume rendering toggle shows no feedback on Apple Silicon | User clicks Enable Volume but nothing happens | Check GPU availability and show informative message if GPU unavailable |
+| Filter list does not update after delete | User deletes filter but it still appears in the list | Trigger UI refresh via `state.filters` mutation after every delete |
+| Session timeout is invisible | User's session dies silently during long analysis | Show connection status indicator; implement client-side reconnect logic |
+| Filter operations block WebSocket | User's camera freezes while clip is being created | Move filter creation to async handler; show progress in UI |
 
 ---
 
@@ -538,16 +258,18 @@ Common mistakes when connecting the new features to the existing infrastructure.
 
 Verify these during implementation, not just during demo:
 
-- [ ] **Volume Rendering:** Container starts with EGL GPU (not Mesa) -- verify with `eglinfo | grep "EGL vendor"` in startup logs
-- [ ] **Volume Rendering:** Memory check prevents OOM -- test with > 5M cell dataset, verify container survives
-- [ ] **Volume Rendering:** Opacity function persists correctly -- verify flat array format with multiple points
-- [ ] **Advanced Filters:** Custom entrypoint imports protocols BEFORE launcher starts -- verify in container logs
-- [ ] **Advanced Filters:** Filter delete actually frees memory -- verify with `docker stats` after 5 create/delete cycles
-- [ ] **Advanced Filters:** Proxy IDs are invalid after session restart -- verify with reconnect test
-- [ ] **Screenshot:** Does not block UI -- verify UI remains responsive during capture (send camera move while capturing)
-- [ ] **Screenshot:** Resolution matches request -- verify output dimensions against requested dimensions
-- [ ] **Protocol Registration:** All new methods respond to `RPC.list` -- verify `volume.representation.create` and others appear in protocol list
-- [ ] **Apple Silicon:** Volume rendering shows warning when using software fallback -- verify banner appears on M1/M2/M3
+- [ ] **RPC methods:** `@exportRpc` decorator fully replaced — verify no `from wslink.decorators import exportRpc` in migrated files
+- [ ] **`InvokeEvent` removed:** Verify no `self._app.SMApplication` or `InvokeEvent` references in trame codebase
+- [ ] **Filter IDs stable:** Server restart does not break existing client-side filter references
+- [ ] **Multi-client isolation:** Two simultaneous users do not see each other's filters or camera changes
+- [ ] **Viewport updates:** Clip/contour/stream tracer operations visibly update the 3D view
+- [ ] **Docker cleanup:** Old `pvweb-{session_id}` containers are not created; old launcher image verification removed
+- [ ] **Apple Silicon rendering:** Volume rendering toggle produces visible output via `VtkLocalView` (WebGL) or graceful fallback
+- [ ] **OpenFOAM reader:** Case directory resolves correctly; boundary file found at expected path
+- [ ] **Frontend RPC router:** React components use trame state/callback pattern, not wslink `message.id` routing
+- [ ] **Idle monitoring:** Replaced `_idle_monitor` with trame-compatible timeout mechanism
+- [ ] **Image verification:** `verify_paraview_web_image()` replaced with `pip show trame` equivalent
+- [ ] **Filter registry:** `ParaViewWebAdvancedFilters._filters` class dict replaced with `state.filters`
 
 ---
 
@@ -555,30 +277,28 @@ Verify these during implementation, not just during demo:
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| OOM during volume rendering | MEDIUM | Container auto-restarts; user reconnects; implement session state recovery |
-| Protocol not registered | LOW | Restart container with fixed entrypoint; no data loss |
-| Filter state lost on restart | MEDIUM | Frontend detects session change; prompts user to re-apply filters |
-| Memory leak from filter cycles | MEDIUM | Container restart clears GPU memory; periodic `docker exec` gc.collect |
-| Software fallback on Apple Silicon | HIGH (no fix possible) | Detect at startup; show user warning; disable volume rendering gracefully |
+| `@exportRpc` classes not migrated | HIGH | Roll back frontend to ParaView Web temporarily; re-plan migration as a full rewrite |
+| Filter state leakage between clients | HIGH | Immediately enable client ID prefixes on filter keys; deploy hotfix; audit all state mutations |
+| `InvokeEvent` causing `AttributeError` | MEDIUM | Wrap in try/except during migration; systematically replace with state mutation |
+| Docker container leaks (old containers not cleaned) | LOW | Run `docker rm $(docker ps -aq -f name=pvweb)` to clean up; update cleanup code |
+| Apple Silicon volume rendering silent failure | MEDIUM | Switch to `VtkLocalView`; remove server-side GPU detection; verify WebGL support in client |
+| `vtk.web.launcher` dependency still in Dockerfile | MEDIUM | Remove launcher from Dockerfile; rebuild image; remove verification code |
 
 ---
 
 ## Pitfall-to-Phase Mapping
 
-How the v1.5.0 roadmap phases should address these pitfalls.
-
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| GPU memory exhaustion (Pitfall 1) | Volume Rendering (VR-01) -- memory estimation + container limits | Test with 5M+ cell case; container must survive |
-| Protocol registration timing (Pitfall 2) | Container Integration (CI-01) -- custom entrypoint | Container logs must show import before "Starting factory" |
-| Apple Silicon software fallback (Pitfall 3) | Volume Rendering (VR-01) -- EGL detection + warning | Verify `EGL vendor: NVIDIA` in container; banner on fallback |
-| Screenshot blocks WS loop (Pitfall 4) | Screenshot Export (SS-01) -- async capture | UI remains interactive during capture |
-| Filter proxy ID reset (Pitfall 5) | Advanced Filters (AF-01) -- session-bound state | Reconnect test: filters cleared on session change |
-| Opacity TF format mismatch (Pitfall 6) | Volume Rendering (VR-02) -- server-side validation | Unit test with malformed input returns error |
-| StreamTracer seed mismatch (Pitfall 7) | Advanced Filters (AF-02) -- bounds validation | Test with blockMesh case; validate error returned |
-| Memory growth from filter cycles (Pitfall 8) | Advanced Filters (AF-01) -- gc + render after delete | `docker stats` memory stable after 10 cycles |
-| Screenshot resolution mismatch (Pitfall 9) | Screenshot Export (SS-01) -- programmatic resize | Verify output PNG dimensions |
-| Opacity lost on field switch (Pitfall 10) | Volume Rendering (VR-02) -- per-field opacity state | Switch field twice; opacity preserved |
+| `@exportRpc` protocol rewrite | Phase 20 (ParaView Web protocol migration) | No `exportRpc` imports; all RPCs mapped to `ctrl.on_*` or `@state.change` |
+| `InvokeEvent` removal | Phase 20 | No `_app.SMApplication` references; viewport updates verified in test |
+| Container architecture replacement | Phase 20 (infrastructure) | Docker containers named `pvweb-*` are not created; trame server process handles sessions |
+| Stable filter IDs | Phase 22 (advanced filters) | Server restart does not break filter operations in existing session |
+| GPU detection refactor | Phase 20 | `VtkLocalView` renders correctly on Apple Silicon; no `eglinfo` subprocess calls |
+| OpenFOAM path mounting | Phase 20 | Reader initializes without path errors; case geometry loads in view |
+| Multi-client isolation | Phase 20/22 (before multi-user testing) | Two-tab test passes; no cross-client state leakage |
+| Frontend RPC router rewrite | Phase 20 | React components use trame state/callback pattern, not wslink `message.id` routing |
+| Idle monitoring replacement | Phase 20 | Sessions time out correctly via trame-compatible mechanism |
 
 ---
 
@@ -586,20 +306,26 @@ How the v1.5.0 roadmap phases should address these pitfalls.
 
 | Source | URL | Confidence | Verifies |
 |--------|-----|------------|---------|
-| Kitware ParaView Web GitHub - protocols.py | `https://raw.githubusercontent.com/Kitware/ParaView/v5.10.0/Web/Python/paraview/web/protocols.py` | HIGH | Protocol registration pattern |
-| Kitware ParaView Web GitHub - viewport.py | `https://raw.githubusercontent.com/Kitware/ParaView/v5.10.0/Web/Python/paraview/web/viewport.py` | HIGH | Screenshot protocol implementation |
-| VTK GPU Volume Ray Cast Mapper docs | `https://vtk.org/doc/nightly/html/classvtkGPUVolumeRayCastMapper.html` | HIGH | Memory behavior |
-| Existing paraview_web_launcher.py | `api_server/services/paraview_web_launcher.py` | HIGH | Container integration pattern |
-| Existing paraviewProtocol.ts | `dashboard/src/services/paraviewProtocol.ts` | HIGH | Protocol message patterns |
-| Existing PITFALLS.md | `.planning/research/PITFALLS.md` (v1.4.0) | HIGH | Prior pitfalls context |
-| openfoam/openfoam10-paraview510 | Docker Hub | HIGH | Image capabilities |
-| Kitware Discussions - AMD GPU Docker | Community | MEDIUM | Apple Silicon + amd64 limitations |
+| ParaViewWeb GitHub README | https://github.com/Kitware/paraviewweb | HIGH | ParaViewWeb maintenance mode status; trame recommendation |
+| trame documentation (trame.readthedocs.io) | https://trame.readthedocs.io/en/latest/index.html | HIGH | State management, VTK widgets, server callbacks, life cycle callbacks |
+| trame.widgets.paraview | https://trame.readthedocs.io/en/latest/trame.widgets.paraview.html | HIGH | `VtkLocalView`, `VtkRemoteView`, `VtkRemoteLocalView` API |
+| trame main module | https://trame.readthedocs.io/en/latest/trame.html | HIGH | `get_server()`, `state`, `ctrl`, server initialization |
+| trame.widgets.client | https://trame.readthedocs.io/en/latest/trame.widgets.client.html | HIGH | `ClientStateChange`, `ClientTriggers`, `JSEval` widgets |
+| wslink GitHub README | https://github.com/Kitware/wslink | HIGH | wslink is actively maintained as trame's underlying protocol |
+| trame PyPI page | https://pypi.org/project/trame/ | HIGH | v3.12.0, Python >= 3.9 requirement |
+| Kitware/trame GitHub discussions | https://github.com/Kitware/trame/discussions/840 | MEDIUM | ParaView 6.1+ bundle planned for trame/vtk-local |
+| `paraview_adv_protocols.py` | `api_server/services/paraview_adv_protocols.py` | HIGH | Existing `@exportRpc` implementations (Phase 20/22 work products) |
+| `paraview_web_launcher.py` | `api_server/services/paraview_web_launcher.py` | HIGH | Existing Docker sidecar launcher (Phase 20 work product) |
+| `Dockerfile` | `Dockerfile` | HIGH | Existing `openfoam/openfoam10-paraview510` image dependency |
+
+**Confidence notes:**
+- No official migration guide from Kitware exists (MEDIUM confidence on all recommendations)
+- Team has no prior trame experience — requires validation during migration
+- Some trame APIs (e.g., `VtkLocalView` geometry export) not fully documented — may require source code review during migration
+- ParaView support for trame is still evolving (Discussion #840 notes ParaView 6.1 bundle is "hoped for")
 
 ---
 
-## Research Gaps
-
-- Specific memory thresholds for `vtkGPUVolumeRayCastMapper` with CFD data (tested only up to ~2M cells in literature; beyond is unknown)
-- Whether `vtkOpenGLGPUVolumeRayCastMapper` actually detects software fallback gracefully on Apple Silicon Rosetta2
-- Exact format of opacity transfer function `Points` property in ParaView 5.10.1 (ParaView docs are sparse)
-- Whether wslink `viewport.image.render` can be made truly async via event-driven push rather than blocking RPC
+*Pitfalls research for: ParaView Web to trame migration*
+*Researched: 2026-04-11*
+*Confidence: MEDIUM — no official migration guide exists; findings synthesized from trame docs, wslink protocol docs, and codebase analysis*

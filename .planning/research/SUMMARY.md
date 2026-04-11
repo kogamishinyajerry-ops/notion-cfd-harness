@@ -1,165 +1,185 @@
-# Research Summary -- v1.5.0 Advanced Visualization
+# Project Research Summary
 
-**Project:** AI-CFD Knowledge Harness
-**Milestone:** v1.5.0 Advanced Visualization (Volume Rendering, Advanced Filters, Screenshot Export)
-**Synthesized:** 2026-04-11
-**Confidence:** HIGH (verified against ParaView 5.10.0 source, existing codebase patterns, Docker image)
+**Project:** AI-CFD Knowledge Harness v1.6.0 — ParaView Web to trame Migration
+**Domain:** Server-side 3D CFD visualization web framework
+**Researched:** 2026-04-11
+**Confidence:** MEDIUM
 
 ---
 
 ## Executive Summary
 
-v1.5.0 adds three capability clusters -- Volume Rendering, Advanced Filters (Clip/Contour/StreamTracer), and Screenshot Export -- to the existing ParaView Web viewer. The research confirms **zero new Docker images, npm packages, or Python packages are required**. All infrastructure already exists in `openfoam/openfoam10-paraview510` (ParaView 5.10.1). Implementation is entirely custom wslink protocol handler classes (Python, ~150 LOC) registered at container startup, plus TypeScript protocol message builders (~80 LOC) in the frontend.
+This is a **full-stack rewrite** of the ParaView Web visualization layer, not a port. The entire server protocol stack (`wslink` + `vtkmodules.web`), Docker entrypoint pattern (`entrypoint_wrapper.sh` + JSON launcher config), and frontend viewer component (`ParaViewViewer.tsx` + custom WebSocket RPC) must be replaced. The target framework is trame 3.12.0 (Kitware's official ParaView Web successor), which runs ParaView in a single `pvpython` process with a Vue.js frontend served alongside the Python server. The most significant changes are: (1) `@exportRpc` decorators become `@state.change` reactive handlers, (2) the React WebSocket RPC layer becomes a Vue.js application served by trame, and (3) the Docker container launches a single Python file directly rather than a multi-process launcher with a bash wrapper.
 
-The highest-risk aspect is not feature complexity but **container integration timing**: the custom Python protocol file must be imported and registered with wslink before the first WebSocket connection is accepted. If the import happens too late, all new RPC methods silently return "method not found." The second risk is GPU memory exhaustion on large CFD datasets (>2M cells) when volume rendering is enabled without pre-check. The third risk is Apple Silicon software fallback (Mesa/llvmpipe) when using `--platform linux/amd64`, which silently degrades performance to unusable levels without throwing errors.
-
-Architecture flows from existing patterns: `ParaViewWebProtocol` subclass with `@exportRpc` decorators on server, raw JSON-RPC message builders on frontend, frame-push rendering (unchanged), and proxy ID state tracking for filter lifecycle management.
+The recommended approach is a phased migration: establish the trame backend skeleton and Docker integration first, then migrate RPC protocol handlers, then adapt the FastAPI session manager, then build the Vue frontend, then integrate and validate feature parity. The core ParaView operations (OpenFOAMReader, Clip, Contour, StreamTracer, Volume Rendering) are unchanged -- only the wiring layer changes. The primary risk is that no official ParaView Web-to-trame migration guide exists; the team has no prior trame experience, so phase 1 must include significant manual testing and verification before committing to the approach.
 
 ---
 
 ## Key Findings
 
-### From STACK.md
+### Recommended Stack
 
-- **Zero new dependencies.** `openfoam/openfoam10-paraview510` already ships `vtkGPUVolumeRayCastMapper`, built-in filters (`Clip`, `Contour`, `StreamTracer`), and `viewport.image.render` RPC.
-- **Server-side:** Single new file `api_server/services/paraview_adv_protocols.py` (~150 lines) with two protocol classes: `ParaViewWebVolumeRendering` (4 RPCs) and `ParaViewWebAdvancedFilters` (9 RPCs).
-- **Frontend:** Add ~14 message builder functions to `paraviewProtocol.ts` (~80 lines), plus `downloadScreenshot()` utility.
-- **Container integration is the main complexity.** Custom protocols must be mounted at `/tmp/adv_protocols.py` and imported via a custom entrypoint wrapper script before `launcher.py` starts the wslink server. Mounting the file alone is insufficient -- the import must happen programmatically in the container entrypoint.
-- **Docker image:** No change. Existing `openfoam/openfoam10-paraview510` is the correct target.
-- **Anti-patterns explicitly rejected:** `trame` (deferred to v1.6.0), `@kitware/vtk.js` (client-side VTK not needed), new Docker image (not needed), `pv.proxy.manager.create` (too low-level), screenshot via container file path + HTTP (use base64 over WS instead).
+The migration installs three pip packages into the existing `openfoam/openfoam10-paraview510` image: `trame==3.12.0`, `trame-vtk==2.11.6`, and `trame-vuetify==3.2.1`. The meta-package `trame` transitively brings `wslink >= 2.3.3`, so `wslink` must NOT be installed separately. Python 3.9.18 (shipped with ParaView 5.10) satisfies all version requirements. The Dockerfile replaces the `entrypoint_wrapper.sh` + `launcher.py` pattern with `pvpython /trame_server.py --port N`. The frontend Vue.js application is served automatically by trame at the same URL as the server itself.
 
-### From FEATURES.md
+**Core technologies:**
+- `trame 3.12.0`: Python web framework -- replaces `vtk.web.launcher`, `wslink.decorators`, and `ParaViewWebProtocol` base class entirely
+- `trame-vtk 2.11.6`: `VtkRemoteView` / `VtkLocalView` widgets -- replaces custom WebSocket image streaming (`ParaViewWebViewPortImageDelivery`)
+- `trame-vuetify 3.2.1`: Vue.js Vuetify component bindings -- replaces React custom UI controls; use this (Vuetify 2), NOT `trame-vuetify3` (Vuetify 3)
+- `pvpython`: Runs trame server directly -- single process, no multi-process launcher, no JSON config
+- `openfoam/openfoam10-paraview510`: Unchanged Docker base image; ParaView 5.10, Python 3.9.18
 
-- **Table stakes (P1):** Volume Rendering toggle, Clip Filter (create/delete), Contour Filter (create/delete), Streamlines (create/delete), Screenshot PNG export.
-- **MVP scope:** Volume toggle only (no opacity editor), static-plane clip only (no interactive widget), masking-region streamlines only (no seed type selection), isovalue list input (no range slider).
-- **Differentiators (P2):** Opacity transfer function editor, live clip/contour parameter updates, multi-filter composition, JSON state export.
-- **Anti-features explicitly deferred:** Real-time volume during solver run, multi-field volume rendering, interactive plane widget (drag), animated streamlines, 3D PDF/WebGL export, movie export.
-- **Feature dependencies:** All filters require existing `sourceProxyId` (from v1.4.0 OpenFOAM Reader). StreamTracer additionally requires vector field `U` (velocity). Volume Rendering additionally requires scalar field selection (v1.4.0 PV-03). Screenshot is orthogonal to all filters.
-- **Apple Silicon note:** `--platform linux/amd64` means GPU is unavailable; volume rendering falls back to Mesa software rasterization silently.
+### Expected Features
 
-### From ARCHITECTURE.md
+**Must have (table stakes -- all ParaView Web features must be preserved):**
+- OpenFOAM case loading (`simple.OpenDataFile`) -- same ParaView API, different invocation pattern
+- Field selection, slice controls (X/Y/Z/Off), color presets (Viridis/BlueRed/Grayscale), scalar range auto/manual, scalar bar visibility
+- Volume rendering toggle with GPU detection (eglinfo subprocess) -- same detection logic, result stored in `state` instead of RPC response
+- Clip, Contour, StreamTracer filters (create/delete) -- same `simple.*` API, registry pattern preserved as Python dict
+- Screenshot export (`html_view.screenshot()`) -- different method than `viewport.image.render` RPC
+- Time step navigation -- same `animation_scene.TimeKeeper` API
+- **Remove entirely**: manual heartbeat, reconnect backoff logic, `@exportRpc` decorator classes, React viewer state machine
 
-- **New components:** `paraview_adv_protocols.py` (server), `AdvancedFilterPanel.tsx` (new file), additions to `paraviewProtocol.ts` and `ParaViewViewer.tsx`.
-- **Modified components:** `paraview_web_launcher.py` (_build_launcher_config + _start_container to mount and import the protocol file), `ParaViewViewer.tsx` (new state + new UI sections), `ParaViewViewer.css`.
-- **Phase build order:** Server protocols (Phase 1) before frontend message builders (Phase 2) before UI controls (Phase 3) before integration (Phase 4). Phase 2 and Phase 3 can run in parallel on different files.
-- **State tracking:** Each filter (clip, contour, streamlines) stores its `proxyId` in React state for update/delete. Proxy IDs are session-bound -- invalid after container restart.
-- **Render flow unchanged:** All server-side state changes call `simple.Render()` + `InvokeEvent("UpdateEvent")` which triggers `viewport.image.push` (existing subscription).
-- **Scaling:** v1.5.0 scoped to single-user sessions (1:1 container:user, same as v1.4.0).
-- **Open questions confirmed:** Container startup import timing (must test), large mesh fallback (suggest `Smart Volume Mapper` for >2M cells), source proxy ID discovery (confirmed from `OpenFOAMReader.GetPropertyList`).
+**Should have (differentiators trame unlocks):**
+- Native Vuetify UI (professional look, zero custom CSS) -- rewrite React viewer controls as Vuetify Python components
+- Local rendering mode (`VtkLocalView`) -- WebGL in browser, no server GPU needed on Apple Silicon
+- Hot reload during development -- trame watches Python files, no Docker rebuild needed
+- Async time playback (`@asynchronous.task` decorator) -- animated stepping without blocking server
+- Filter parameter live editing (in-place update of clip origin, isovalues) -- deferred from v1.5.0 anti-feature
 
-### From PITFALLS.md
+**Defer (v2+):**
+- State persistence / shareable links (serialize `server.state` to JSON)
+- Multiple viewports for side-by-side case comparison
+- Opacity transfer function editor
 
-**Critical pitfalls (4):**
+### Architecture Approach
 
-1. **GPU memory exhaustion on large datasets** -- `vtkGPUVolumeRayCastMapper` silently falls back to software rendering on OOM, freezing the UI. Prevention: pre-check cell count, set container memory limits (`--memory 4g --memory-reservation 2g`), offer surface fallback.
+The current system is a React dashboard (port 8080) that launches ParaView Web Docker sidecar containers (port 9000 per session) via FastAPI `ParaviewWebManager`. Each sidecar runs `entrypoint_wrapper.sh` importing `adv_protocols.py` to register `@exportRpc` handlers, then starts `launcher.py` with a JSON config. The React frontend communicates via raw WebSocket with a custom JSON-RPC router.
 
-2. **Protocol file not registered before first WebSocket connection** -- Silent "method not found" errors. Prevention: custom entrypoint wrapper script that imports `paraview_adv_protocols.py` before launcher.py starts. Not just a volume mount -- must be programmatic import in entrypoint.
+The target system replaces the Docker sidecar launch mechanism with a simpler `pvpython /trame_server.py` invocation and replaces the React WebSocket viewer with a Vue.js application served by trame. The React dashboard will embed the trame viewer as an iframe, communicating via `window.postMessage`. FastAPI session management remains but is simplified: no JSON config, no entrypoint wrapper, no port range restrictions beyond standard allocation. Session isolation stays at the container level (one container per session), matching current security posture.
 
-3. **Apple Silicon software fallback** -- `--platform linux/amd64` + Docker virtiofs cannot access Apple GPU; volume rendering silently uses Mesa/llvmpipe at 1-5 FPS. Prevention: detect EGL vendor (`eglinfo | grep "EGL vendor"`) at startup; show explicit user warning; disable volume rendering gracefully.
+**Major components:**
+1. `trame_server.py` (NEW, replaces `adv_protocols.py` + `entrypoint_wrapper.sh`): Contains `get_server()`, `VtkRemoteView`, `@state.change` handlers for all ParaView operations, and a Vuetify UI layout
+2. `TrameSessionManager` (NEW, replaces `ParaviewWebManager`): Docker container lifecycle -- `docker run ... pvpython /trame_server.py --port N` instead of JSON config + launcher; uses `docker kill` for shutdown
+3. `CFDViewerBridge.ts` (NEW, replaces `ParaViewViewer.tsx` + `paraviewProtocol.ts`): React iframe bridge using `window.postMessage`; communicates with Vue frontend inside iframe
+4. `Dockerfile` (MODIFY): Adds `pip install trame trame-vtk trame-vuetify`; removes `entrypoint_wrapper.sh` and launcher references
 
-4. **Screenshot blocks WebSocket event loop** -- Synchronous `viewport.image.render` freezes UI for 10-30s on large datasets. Prevention: async UX (disable button + spinner), debounce rapid clicks, consider background thread rendering.
+### Critical Pitfalls
 
-**Moderate pitfalls (5):**
+1. **`@exportRpc` protocol classes have no direct trame equivalent** -- The mental model inverts: ParaView Web is RPC-centric (client calls named method), trame is state-centric (client mutates shared state, server reacts). Every `@exportRpc` handler must be rewritten as either a `@state.change` reactive handler or a `@controller.add` callback. No class-level filter registry exists in trame; use `state.filters` dict instead. All `self._app.SMApplication.InvokeEvent("UpdateEvent")` calls must be removed -- trame handles render push automatically on state mutation.
 
-5. Filter proxy IDs invalid after session restart (session-bound; must track `sessionId` alongside `proxyId`).
-6. Opacity transfer function expects flat `[x1,y1,x2,y2,...]` array; nested arrays silently fail (server-side validation required).
-7. StreamTracer seed type mismatch with irregular blockMesh geometry (bounds validation needed).
-8. Memory grows unboundedly with filter create/delete cycles (`simple.Delete()` without `simple.Render()` + periodic `gc.collect()`).
-9. Screenshot resolution rounds down to current viewport size (programmatic resize before capture).
+2. **Docker container architecture is replaced entirely** -- `ParaviewWebManager.launch_session()` with its JSON config launcher, port allocation (8081-8090), entrypoint wrapper, and idle monitor is replaced by a simple `docker run ... pvpython /trame_server.py --port N`. The container name changes from `pvweb-{session_id}` to `trame-{session_id}`. The `_verify_image()` method checking for `vtk.web.launcher` is replaced by `pip show trame`. No polling for "Starting factory" -- `server.start()` is blocking and port is immediately available.
 
-**Minor pitfalls (2):**
+3. **Filter IDs using `id(proxy)` are not stable across server restarts** -- `id()` returns memory addresses that change on restart. Client-side filter references break after server restart. Use a UUID or incremental counter stored in `state.filters` as stable string keys.
 
-10. Opacity settings lost when switching scalar fields (persist per-field in React state).
-11. Color LUT reset wipes custom volume opacity (save/restore opacity state on field switch).
+4. **Multi-client session isolation requires explicit design** -- ParaView Web's per-container process model provides hard isolation. trame's default mode shares the server process across all connected clients. One user's filter operations could leak into another user's viewport. Use client-ID-prefixed filter keys in `state.filters` and `ctrl.on_client_connected()` to initialize per-client state.
+
+5. **GPU detection (`_detect_gpu`) using eglinfo subprocess is unnecessary for `VtkLocalView`** -- With local rendering, geometry serializes to the browser and renders via WebGL -- server has no GPU involvement. For `VtkRemoteView` (server-side rendering), use VTK API (`vtkGraphicsFactory.GetBackEnd()`) instead of shelling out to `eglinfo`. Volume rendering toggle will fail silently on Apple Silicon without proper view type selection.
 
 ---
 
 ## Implications for Roadmap
 
-### Recommended Phase Structure (4 phases)
+### Suggested Phase Structure
 
-**Phase 1: Container Integration + Protocol Foundation**
-- Register custom protocol Python file at container startup (custom entrypoint wrapper)
-- Verify `paraview_adv_protocols.py` import before wslink server starts
-- Mount file as volume with read-only flag
-- **Delivers:** Protocol registration timing solved for all subsequent phases
-- **Pitfalls to avoid:** Pitfall 2 (protocol registration timing), integration with `paraview_web_launcher.py` changes
-- **Research flags:** Test import sequence in actual container; confirm `launcher.py` accepts custom entrypoint approach
+#### Phase 1: Trame Backend Skeleton + Docker Integration
+**Rationale:** Must verify trame runs correctly inside the existing Docker image before committing to the full migration. This is the foundation all other phases depend on.
+**Delivers:** `trame_server.py` with minimal server (`VtkRemoteView` rendering a cone), updated `Dockerfile`, manual browser verification of 3D rendering.
+**Implements:** `get_server()`, basic layout, `pvpython /trame_server.py --port N` inside container.
+**Avoids:** "Looks done but isn't" -- verify rendering before building features on top.
+**Research flag:** MEDIUM -- no official migration guide; validate trame + ParaView 5.10 compatibility during this phase.
 
-**Phase 2: Volume Rendering + GPU Safety**
-- Implement `ParaViewWebVolumeRendering` class
-- Frontend: volume toggle (Surface/Volume) + opacity message builders
-- Add GPU detection: check EGL vendor at container startup (NVIDIA = real GPU; Mesa = software)
-- Add cell count check before enabling volume; container memory limits
-- Show user-facing warning when software fallback detected
-- **Delivers:** Volume rendering toggle with graceful degradation on Apple Silicon
-- **Pitfalls to avoid:** Pitfall 1 (GPU memory), Pitfall 3 (Apple Silicon fallback), Pitfall 6 (opacity format)
-- **Research flags:** GPU detection in Docker container environment; EGL vendor string verification
+#### Phase 2: RPC Protocol Migration
+**Rationale:** All `@exportRpc` handlers in `adv_protocols.py` must be converted to trame's `@state.change` / `@controller.add` pattern before the frontend can drive any ParaView operations.
+**Delivers:** Full `trame_server.py` with all 13 RPC equivalents: volume rendering toggle/status, clip/contour/streamtracer create/delete, filter list, GPU detection.
+**Implements:** All `@state.change` handlers, filter registry as `state.filters` dict with stable UUID keys, removal of all `InvokeEvent` calls.
+**Avoids:** Pitfalls 1, 3, 5.
 
-**Phase 3: Screenshot Export**
-- `viewport.image.render` base64 decode + browser download
-- Frontend: screenshot button, loading state, debounce
-- Optional: programmatic resize for requested resolution
-- **Delivers:** One-click PNG export
-- **Pitfalls to avoid:** Pitfall 4 (WS loop blocking), Pitfall 9 (resolution mismatch)
+#### Phase 3: FastAPI Session Manager Adaptation
+**Rationale:** `ParaviewWebManager` must be replaced with `TrameSessionManager` before the React frontend can launch trame sessions. This is the integration point between FastAPI and the Docker container.
+**Delivers:** `trame_session_manager.py` with `start_session()`, `get_session()`, `shutdown_session()`, idle monitoring. Updated `paraview.ts` API client. Image verification replaced.
+**Implements:** `docker run ... pvpython /trame_server.py --port N`, port allocation, container lifecycle.
+**Avoids:** Pitfall 2 (container architecture replacement). Must verify `server.start()` is blocking with port immediately available vs. polling for "Starting factory".
 
-**Phase 4: Advanced Filters (Clip + Contour + StreamTracer)**
-- Implement `ParaViewWebAdvancedFilters` class
-- Frontend: `AdvancedFilterPanel.tsx` (clip/contour/streamlines sections)
-- Proxy ID state management with session binding
-- Bounds validation for streamtracer seeds
-- Memory management: render after delete + periodic gc
-- **Delivers:** Full filter pipeline (create/update/delete for all three filter types)
-- **Pitfalls to avoid:** Pitfall 5 (proxy ID reset), Pitfall 7 (seed mismatch), Pitfall 8 (memory growth)
-- **Research flags:** blockMesh geometry seed validation; filter cycle memory behavior
+#### Phase 4: Vue Frontend + React Iframe Bridge
+**Rationale:** The React dashboard must embed the trame Vue application. This phase builds the replacement for `ParaViewViewer.tsx` and `paraviewProtocol.ts`.
+**Delivers:** `CFDViewerBridge.ts` (postMessage bridge), iframe embedding of trame viewer URL, all React controls (field selector, slice, color, volume toggle, filter panel) wired to bridge.
+**Avoids:** "Keep React + ParaView Web protocol layer" anti-pattern. The Vue frontend is the viewer -- React does not drive ParaView directly.
+**Research flag:** MEDIUM -- `VtkLocalView` WebGL rendering on Apple Silicon Safari needs validation if local rendering mode is pursued.
 
-**Phase 5 (v1.5.x): Opacity Editor + Live Filter Updates**
-- Opacity transfer function control point editor
-- Live clip origin sliders (no recreate)
-- Live contour isovalue adjustment
-- JSON state export via `pv.data.save` + REST proxy
-- **Delivers:** Professional-grade control over advanced features
-- **Research flags:** Control point UI design; REST endpoint security
+#### Phase 5: Integration + Feature Parity Validation
+**Rationale:** Must verify the full launch flow (API call -> container start -> Vue connects -> all RPCs work -> screenshot captures -> time steps navigate) before considering migration complete.
+**Delivers:** End-to-end test of all P1 features from FEATURES.md. Multi-client isolation test (two browser tabs).
+**Avoids:** Pitfalls 2 (session isolation), OpenFOAM path mounting, multi-client state leakage.
+
+#### Phase 6: Cleanup + v1.7.0 Additions
+**Rationale:** Delete all old ParaView Web files only after migration is verified. Add v1.7.0 differentiators.
+**Delivers:** Deleted files: `adv_protocols.py`, `entrypoint_wrapper.sh`, `ParaViewViewer.tsx`, `paraviewProtocol.ts`, `paraview_web_launcher.py`. Added: filter parameter live editing, local rendering mode toggle, async time playback.
+**Avoids:** "Partial migration" anti-pattern -- old files must be removed to prevent accidental use.
+
+### Phase Ordering Rationale
+
+- **Phase 1 before 2**: Cannot migrate RPCs without a running trame server to test against.
+- **Phase 2 before 3**: Session manager must launch the correct trame command (not the old launcher); this requires knowing what the server entrypoint looks like.
+- **Phase 3 before 4**: Frontend needs a session manager that can start/stop trame containers to test against.
+- **Phase 4 before 5**: Integration testing requires the full stack.
+- **Phase 5 before 6**: Old files deleted only after verified feature parity.
 
 ### Research Flags
 
-| Phase | Needs Research | Standard Patterns |
-|-------|----------------|-------------------|
-| Phase 1 | Custom entrypoint with `launcher.py` compatibility | Protocol subclass pattern (already established) |
-| Phase 2 | EGL vendor detection in Docker; GPU memory thresholds for CFD data | Volume rendering via `rep.Representation = "Volume"` (confirmed) |
-| Phase 3 | Async screenshot rendering feasibility | `viewport.image.render` base64 (confirmed built-in) |
-| Phase 4 | blockMesh irregular geometry bounds; filter memory behavior at scale | Clip/Contour/StreamTracer `simple.XXX()` API (confirmed) |
+**Phases needing deeper research during planning:**
+- **Phase 1 (Skeleton)**: No official ParaView Web-to-trame migration guide exists. Must validate `VtkRemoteView` vs `VtkLocalView` rendering behavior with actual OpenFOAM mesh inside the container. Also: confirm `server.start(port=0)` auto-allocation works inside Docker.
+- **Phase 4 (Vue Frontend)**: `VtkLocalView` WebGL browser rendering on Apple Silicon needs testing -- Safari WebGL limitations are undocumented in trame. Also: `html_view.screenshot()` resolution behavior must be verified against actual viewport size.
 
-### Confidence Assessment
-
-| Area | Confidence | Notes |
-|------|------------|-------|
-| Stack | HIGH | All tech verified against ParaView 5.10.0 source and existing Docker image. Zero new dependencies confirmed. |
-| Features | HIGH | MVP scope clear; P1 priorities are all low-cost/low-risk. Anti-features explicitly deferred. |
-| Architecture | HIGH | Existing codebase patterns fully confirmed. Build order validated. Open questions are minor (container timing, mesh thresholds). |
-| Pitfalls | MEDIUM-HIGH | 4 critical pitfalls identified with prevention strategies. Moderate pitfalls have workarounds. Apple Silicon fallback behavior needs field validation. |
-
-### Gaps to Address
-
-1. **Apple Silicon + amd64 + GPU detection:** Exact EGL vendor strings when running in Docker with `--platform linux/amd64` on Apple Silicon. Need to verify `eglinfo | grep "EGL vendor"` returns "Mesa Project" not "NVIDIA" in this configuration.
-2. **GPU memory thresholds for CFD volume rendering:** Literature confirms `vtkGPUVolumeRayCastMapper` works well up to ~2M cells. Beyond 5M cells, behavior is unknown -- need empirical testing with real CFD datasets.
-3. **Custom entrypoint compatibility with `vtkmodules/web/launcher.py`:** The proposed approach (custom entrypoint that imports then execs `launcher.py`) needs verification against the actual container image.
-4. **Opacity transfer function format:** ParaView docs are sparse. The flat `[x1,y1,x2,y2,...]` format is inferred from VTK conventions, not ParaView documentation -- needs unit test verification.
-5. **Source proxy ID format:** Confirm `OpenFOAMReader.GetPropertyList` response includes integer proxy ID usable as `sourceProxyId` in filter create calls.
+**Phases with standard patterns (skip research-phase):**
+- **Phase 2 (RPC Migration)**: Official Kitware examples (`trame/examples/07_paraview/`) provide verified patterns for all filter types. `@state.change` decorator behavior is documented.
+- **Phase 3 (Session Manager)**: Docker container lifecycle is unchanged from current implementation; only the `docker run` command arguments change.
 
 ---
 
-## Sources (Aggregated)
+## Confidence Assessment
 
-| Source | Confidence | Key Information |
-|--------|------------|-----------------|
-| ParaView 5.10.0 `protocols.py` (GitHub) | HIGH | Full `@exportRpc` method list; `mapIdToProxy()` pattern |
-| ParaViewWeb API `api.md` (paraviewweb) | HIGH | Available protocol names |
-| `openfoam/openfoam10-paraview510` (Docker Hub) | HIGH | ParaView 5.10.1 + VTK GPU volume rendering confirmed |
-| Existing `paraviewProtocol.ts` | HIGH | Protocol message builder pattern |
-| Existing `paraview_web_launcher.py` | HIGH | Container lifecycle; `_build_launcher_config()` structure |
-| Existing `ParaViewViewer.tsx` | HIGH | WebSocket state machine; `sendProtocolMessage` pattern |
-| Existing `visualization.py` router | HIGH | REST endpoint pattern; session model |
-| VTK `vtkGPUVolumeRayCastMapper` docs | HIGH | Memory behavior; software fallback |
-| ParaView `simple.py` API | MEDIUM | `Clip()`, `Contour()`, `StreamTracer()` parameters |
-| Kitware Discussions (Apple Silicon) | MEDIUM | `--platform linux/amd64` GPU limitation |
+| Area | Confidence | Notes |
+|------|------------|-------|
+| Stack | MEDIUM-HIGH | PyPI release data verified; Kitware official docs and GitHub examples confirmed; Python 3.9 compatibility verified via paraview.web.venv docs; no known version conflicts |
+| Features | MEDIUM-HIGH | Official Kitware trame/paraview examples verified; all ParaView `simple.*` API calls are unchanged; team has implemented all P1 features in current system |
+| Architecture | MEDIUM-HIGH | Verified against trame source on GitHub (Kitware/trame, Kitware/trame-server); ParaView Web source patterns confirmed in existing codebase; no official migration guide (MEDIUM uncertainty) |
+| Pitfalls | MEDIUM | No official migration guide from Kitware exists; team has no prior trame production experience; some trame APIs (`VtkLocalView` geometry export) incompletely documented |
+
+**Overall confidence:** MEDIUM
+
+### Gaps to Address
+
+- **No official migration guide**: All recommendations are synthesized from trame source code, official docs, and wslink protocol docs. Phase 1 must include explicit verification that the approach works before proceeding to later phases.
+- **`VtkLocalView` Apple Silicon WebGL**: Safari WebGL limitations for trame's local rendering mode are not documented. If local rendering is prioritized (P2 differentiator), Phase 1 must test this explicitly.
+- **`html_view.screenshot()` resolution**: Needs verification against actual viewport DOM size. Research notes this is unclear in current docs.
+- **OpenFOAM reader `Fields` property**: `paraview_adv_protocols.py` uses `props.Fields = fieldName` for the OpenFOAM reader. Must verify this works identically when called from trame state listener.
+- **Dashboard auth integration**: React dashboard uses JWT for API auth. trame `--auth` flag compatibility with existing JWT flow (cookie vs header) needs verification in Phase 3/4.
+- **Multi-session within one container**: Conflicting signals in research -- `get_server(name=session_id)` may be a singleton per name. If true, container-per-session is still correct. Must verify during Phase 3.
+
+---
+
+## Sources
+
+### Primary (HIGH confidence)
+- **Kitware/trame GitHub** (https://github.com/Kitware/trame) -- v3.12.0 confirmed; wslink as dependency confirmed; `@controller.add`, `@state.change` patterns verified
+- **trame PyPI** (https://pypi.org/pypi/trame/3.12.0/json) -- package metadata, dependencies, trame-client version verified
+- **trame-vtk PyPI** (https://pypi.org/pypi/trame-vtk/2.11.6/json) -- Python >= 3.9 requirement, trame-client version constraint confirmed
+- **Kitware/trame examples** (`examples/07_paraview/`) -- official verified patterns for RemoteRendering, ContourGeometry, DynamicLocalRemoteRendering, TimeAnimation, StateViewer
+- **trame.readthedocs.io** -- `get_server()`, `server.start()`, `VtkRemoteView`, `VtkLocalView`, lifecycle callbacks
+- **ParaViewWeb GitHub README** -- maintenance mode status confirmed; trame as official successor confirmed
+- **openfoam/openfoam10-paraview510 Docker image** -- image name, ParaView 5.10, Python 3.9 confirmed
+
+### Secondary (MEDIUM confidence)
+- **trame GitHub discussions** (https://github.com/Kitware/trame/discussions/840) -- ParaView 6.1+ bundle "hoped for" but not confirmed; ParaView version compatibility gap noted
+- **Architecture source code analysis** -- `get_server()` singleton behavior, `AVAILABLE_SERVERS` dict, `Server.start()` blocking behavior inferred from source; needs runtime verification
+- **Integration gotchas** -- compiled from documented trame behavior, ParaView Web source, and cross-source synthesis; no single authoritative source
+
+### Tertiary (LOW confidence)
+- **Session isolation in multi-user scenario** -- `get_server(name=session_id)` singleton claim is inferred from source; may need explicit runtime test
+- **`html_view.screenshot()` resolution behavior** -- not documented in current sources; needs practical verification
+- **Apple Silicon Safari WebGL compatibility for `VtkLocalView`** -- not documented; requires hardware testing
+
+---
+
+*Research completed: 2026-04-11*
+*Ready for roadmap: yes -- with MEDIUM overall confidence and explicit research flags for Phases 1 and 4*

@@ -1,376 +1,244 @@
-# Feature Research — v1.5.0 Advanced Visualization
+# Feature Research: ParaView Web to trame Migration
 
-**Domain:** ParaView Web advanced visualization features (Volume Rendering, Clip/Contour/Streamlines, Screenshot Export)
-**Project:** AI-CFD Knowledge Harness v1.5.0
+**Domain:** Scientific visualization — CFD field visualization via ParaView
+**Project:** AI-CFD Knowledge Harness v1.6.0
 **Researched:** 2026-04-11
-**Confidence:** HIGH (protocol patterns verified against existing codebase; features confirmed in ParaView 5.10.0 source and openfoam/openfoam10-paraview510 Docker image)
+**Confidence:** MEDIUM-HIGH (official Kitware/trame GitHub examples verified; documented patterns from `examples/07_paraview/`)
 
 ---
 
 ## 1. Feature Landscape
 
-### Table Stakes (Users Expect These)
+### Table Stakes (Existing ParaView Web Features — Must Preserve)
 
-Features users assume exist in any professional CFD visualization tool. Missing these = product feels broken or incomplete for advanced use cases.
+These are the features from v1.4.0/v1.5.0 that must have trame equivalents. Every row maps a specific `@exportRpc` method or WebSocket message pattern to its trame state-driven replacement.
 
-| Feature | Why Expected | Complexity | Dependencies | Notes |
-|---------|--------------|------------|--------------|-------|
-| **Volume Rendering** | 3D scalar fields (density, temperature, velocity magnitude) cannot be fully understood from 2D slices alone | MEDIUM | Requires GPU in container (`--gpus all` or Mesa fallback); existing ParaView Web session | `vtkGPUVolumeRayCastMapper` is in the Docker image; enabled by `rep.Representation = "Volume"` |
-| **Clip Filter** | Cutting a mesh to see internal structure is a fundamental CFD operation | LOW | Existing reader/proxy infrastructure | Half-space cut via plane equation (normal + origin); ParaView built-in `Clip()` filter |
-| **Contour Filter** | Iso-surfaces at specific scalar values are standard for understanding flow features | LOW | Existing scalar field selection | Iso-surface extraction; ParaView built-in `Contour()` filter |
-| **Streamlines / StreamTracer** | Visualizing flow direction and velocity paths is core to CFD | MEDIUM | Requires vector field (velocity `U`); seed type configuration | Particle traces along velocity vectors; ParaView built-in `StreamTracer()` |
-| **Screenshot Export** | Users need to include visualizations in reports and presentations | LOW | Built-in `viewport.image.render` RPC | Base64 PNG over WebSocket; no new libraries needed |
+| Feature | ParaView Web RPC / Message | trame Equivalent | Migration Complexity |
+|---------|---------------------------|------------------|---------------------|
+| OpenFOAM case loading | Manual WS message to `file.server.reader.openfoam` | `simple.OpenDataFile(caseDir)` / `simple.OpenFOAMReader()` | LOW — same ParaView API |
+| Field selection (scalar) | `file.server.reader.properties` + `visualization.representation.colorby` | `simple.ColorBy(rep, array)` triggered by `state.change("field")` | LOW — same ParaView API |
+| Slice controls (X/Y/Z/Off) | `visualization.slice.*` (manual WS message handler) | `simple.Slice(Input=source)` + `state.change("slice_axis")` / `state.change("slice_origin")` | MEDIUM — state listener replaces WS message dispatch |
+| Color preset (Viridis/BlueRed/Grayscale) | `visualization.colors.preset` | `simple.GetColorTransferFunction()` with preset lookup | LOW — same ParaView API |
+| Scalar range (auto/manual) | `visualization.scalar.range` | `representation.RescaleTransferFunctionToDataRange()` / `lut.RescaleTransferFunction(min, max)` | LOW — same ParaView API |
+| Scalar bar visibility | `visualization.scalar.bar` toggle | State variable `show_scalar_bar` → `ScalarBarWidget` visibility property | LOW |
+| Time step navigation | `visualization.time.step` | `animation_scene.TimeKeeper` API with `state.change("time_index")` | LOW — same ParaView API |
+| Volume rendering toggle | `visualization.volume.rendering.toggle` | `representation.Representation = "Volume"` driven by `state.change("volume_enabled")` | MEDIUM — ParaView API identical; pattern is state-driven |
+| Volume rendering status (GPU detection) | `visualization.volume.rendering.status` | In-process `subprocess.run(["eglinfo"])` + state initialization on `on_server_ready` | LOW — `eglinfo` subprocess unchanged, result stored in `state` |
+| Clip filter create | `visualization.filters.clip.create` | `simple.Clip(Input=source)` + Python dict registry + `state.change("clip_*")` | MEDIUM — same `simple.Clip()` API; `@state.change` replaces `@exportRpc` |
+| Clip filter delete | `visualization.filters.delete` | `simple.Delete(proxy)` from registry | LOW |
+| Contour filter create | `visualization.filters.contour.create` | `simple.Contour(Input=source)` + registry | MEDIUM — same pattern as Clip |
+| Contour filter delete | `visualization.filters.delete` | `simple.Delete(proxy)` from registry | LOW |
+| StreamTracer filter create | `visualization.filters.streamtracer.create` | `simple.StreamTracer(Input=source)` + registry | MEDIUM — same pattern |
+| StreamTracer filter delete | `visualization.filters.delete` | `simple.Delete(proxy)` from registry | LOW |
+| Filter list view | `visualization.filters.list` | Python dict → push to `state.active_filters` on change | LOW |
+| Viewport render (push to client) | `viewport.image.render` RPC | Automatic on state change via `VtkRemoteView`; explicit: `html_view.update_image()` | LOW — automatic push; no manual trigger needed |
+| Screenshot export | `viewport.image.render` (same RPC, but triggered manually) | `html_view.screenshot()` → base64 PNG → download | MEDIUM — method differs: `html_view.screenshot()` vs RPC call |
+| Heartbeat | Manual `wslink.protocol.register_method("heartbeat")` + 60s interval in React | NOT NEEDED — `TRAME_WS_HEART_BEAT` env var (default 30s) handles keepalive internally | N/A — remove entirely |
+| Reconnect logic | Manual 5-attempt backoff (`RECONNECT_DELAYS`) in React `ws.onclose` | Built-in — trame manages WebSocket lifecycle | N/A — remove entirely |
 
-### Differentiators (Competitive Advantage)
+### Differentiators (New Capabilities trame Unlocks)
 
-Features that set the product apart from basic viewers and justify the engineering investment.
+Features not currently implemented but enabled by the migration.
 
-| Feature | Value Proposition | Complexity | Dependencies | Notes |
-|---------|-------------------|------------|--------------|-------|
-| **Opacity Transfer Function Editor** | Default linear opacity is often suboptimal; letting users tune opacity for specific scalar ranges is a professional feature | MEDIUM | Volume Rendering | Custom protocol `volume.opacity.set` with control point editor UI; high user value for CFD analysis |
-| **Filter Parameter Updates (live)** | Users want to adjust clip plane or contour values without recreating the filter | LOW | Clip/Contour filters already built | `clip.update` and `contour.update` protocol methods allow real-time parameter changes |
-| **Multi-filter Composition** | Combining volume + clip + streamlines in a single view enables rich analysis | MEDIUM | All three filter types + UI panel | Users can toggle each filter independently; clean composition of representations |
-| **JSON State Export** | Archiving the exact visualization state (camera, filters, colors) enables reproducible analysis | MEDIUM | `pv.data.save` built-in + REST proxy | File written inside container; proxied to client via new REST endpoint |
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Native Vuetify UI | Full Vuetify component library (VSlider, VSwitch, VBtn, VContainer) instead of custom HTML/CSS controls + React state machine. Professional look with zero additional styling. | MEDIUM | Rewrite `ParaViewViewer.tsx` React component as Vuetify layout in Python |
+| Local rendering mode (`VtkLocalView`) | WebGL rendering in browser without server round-trips. Camera rotation/zoom is local. ParaView geometry is sent once; interaction is local. | MEDIUM-HIGH | `DynamicLocalRemoteRendering.py` example shows auto/local/remote toggle |
+| Dashboard integration | React dashboard can serve trame via `server.start()` on a sub-route (`/viewer/$jobId`). JWT auth can be passed via cookie or header. | MEDIUM | Requires verifying `--auth` flag compatibility with existing JWT flow |
+| Async time playback | `@asynchronous.task` decorator for animated time stepping without blocking the server. Background `while state.play` loop in `TimeAnimation` example. | LOW | Already demonstrated in official trame examples |
+| State persistence / shareable links | `server.state` is serializable. Visualization state (camera, filters, colors) can be saved as JSON and restored. Enables "share this view" feature. | MEDIUM | `ctrl.on_server_ready` loads state; state is URL-serializable |
+| Hot reload (dev) | Trame watches Python files; server reloads on save. No Docker rebuild during development. Dev loop is `save file → browser auto-updates. | LOW | Significant developer experience improvement |
+| Multiple viewports | Single server can manage multiple `paraview.VtkRemoteView()` instances for side-by-side case comparison. | MEDIUM | Each view is a separate region in the Vuetify layout |
+| Accelerated filters | `simple.LoadDistributedPlugin("AcceleratedAlgorithms")` enables `FlyingEdges3D` and other fast contour algorithms (shown in `ContourGeometry` example). | LOW | One-line addition to pipeline setup |
 
-### Anti-Features (Commonly Requested, Often Problematic)
+### Anti-Features (Don't Migrate As-Is)
 
-Features that seem good but create problems or are out of scope for v1.5.0.
+Features from the existing implementation that should NOT be carried over to trame in their current form.
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|-------------|-----------------|-------------|
-| **Real-time volume rendering during solver run** | "See results as they compute" | Requires time-step streaming architecture; adds complexity for marginal benefit (convergence monitoring is more useful) | Use existing MON-03/MON-04 convergence monitoring while solver runs; volume render after completion |
-| **Multiple simultaneous volume rendered fields** | "Show temperature AND pressure at once" | ParaView volume rendering is per-source; compositing multiple volumes is complex and GPU-intensive | Use clip/contour to show different fields on different cross-sections; use side-by-side views (future) |
-| **Interactive plane widget for clip (drag to move)** | "Move the clip plane by dragging" | Requires ParaView's interactive plane widget which has complex WebSocket state sync; exceeds v1.5.0 scope | Numeric input for origin (X/Y/Z sliders) is sufficient for most use cases |
-| **Animated streamlines (time-varying)** | "See flow evolution over time" | Requires time-step looping + seed tracking; complex state management | Show streamlines at final time step; animate by stepping through time manually |
-| **3D PDF / WebGL export** | "Embed interactive 3D in a PDF" | Requires additional libraries (vtk.js, export frameworks); not core to CFD report workflow | Screenshot PNG is sufficient for reports; consider Three.js export in v2.x |
-| **Movie export (MP4/GIF)** | "Export an animation as MP4" | Requires ffmpeg inside container + encoding compute + file transfer; adds significant complexity | Screenshot sequence export + client-side GIF/video creation is a v2.x item |
+| Anti-Pattern | Why Problematic | Alternative |
+|-------------|----------------|-------------|
+| Keep React + ParaView Web protocol layer | Doubles the communication stack (React WS client → ParaView Web RPC → ParaView). trame removes this — Python UI binds directly to state. | Replace `ParaViewViewer.tsx` React component with trame Python UI; Dashboard serves trame app |
+| Keep Docker sidecar (`ParaViewWebManager`) | ParaView Web requires a separate container with special entrypoint wrapper + `adv_protocols.py` import ordering. trame runs ParaView in the same Python process via `pvpython app.py`. | Single-process: `trame.server.start()` with ParaView initialized inside |
+| Keep manual heartbeat | Added complexity in React (`sendHeartbeat()` every 60s); wslink heartbeat is a workaround for connection drops. trame handles this via `TRAME_WS_HEART_BEAT` (default 30s). | Remove `sendHeartbeat()` entirely |
+| Keep reconnect backoff logic | ParaView Web's 5-attempt exponential backoff is required because the WS protocol is stateless. trame manages WebSocket lifecycle internally. | Remove `RECONNECT_DELAYS`, `MAX_RECONNECT_ATTEMPTS`, and all reconnect state |
+| Keep `viewport.image.render` as render loop | ParaView Web sends images only on explicit RPC call. trame automatically pushes updates on any state change via `VtkRemoteView`. | Remove manual render triggering; rely on automatic state → render push |
+| Keep `@exportRpc` decorator classes | wslink RPC decorators don't exist in trame. State-driven callbacks (`@state.change`) replace request-response RPC. | Convert protocol classes to `@state.change` handlers |
+| Keep React `ViewerState` machine | The `idle/launching/connecting/connected/disconnected/reconnect-exhausted/error` state machine is necessitated by ParaView Web's session launch pattern. trame connects immediately on `server.start()`. | Simplified: `loading` (initializing) + `ready` (rendering) |
 
 ---
 
 ## 2. Feature Dependencies
 
 ```
-OpenFOAM Reader (existing v1.4.0)
+OpenFOAM Reader (simple.OpenDataFile / simple.OpenFOAMReader)
     │
-    ├──► [Volume Rendering] ──requires──► Scalar field selection (existing)
-    │                                    └──requires──► Opacity transfer function (new)
+    ├──► Field Selection ──requires──► ColorBy(rep, array) on active reader
+    │                              └──enhances──► Scalar Range (auto-computes from field data)
     │
-    ├──► [Clip Filter] ──requires──► Plane normal + origin parameters (new)
-    │                       └─────► Delete clip (new)
+    ├──► Slice Controls ──requires──► Active Source
+    │                        └──conflicts──► Volume Rendering (mutually exclusive representations)
     │
-    ├──► [Contour Filter] ──requires──► Scalar array + isovalues (new)
-    │                          └─────► Delete contour (new)
+    ├──► Volume Rendering ──requires──► Active Source + Field Selection
+    │                           └──requires──► GPU detection (eglinfo) → state.gpu_available
+    │                           └──conflicts──► Slice (can't slice a volume representation)
     │
-    ├──► [StreamTracer] ──requires──► Vector field (velocity U) ──requires──► OpenFOAM Reader (existing)
-    │                    └──requires──► Seed type configuration (new)
+    ├──► Advanced Filters (Clip/Contour/StreamTracer)
+    │    ├──requires──► Active Source
+    │    ├──requires──► Filter Registry (Python dict keyed by `id(proxy)`)
+    │    └──enhances──► Filter List UI (registry → state.active_filters)
     │
-    └──► [Screenshot Export] ──no additional deps──► Built-in viewport.image.render
+    ├──► Screenshot ──requires──► VtkRemoteView (must have rendered frame)
+    │                     └──enhances──► Any state change (volume/slice/filters affect what is captured)
+    │
+    └──► Time Step Navigation ──requires──► OpenFOAM Reader with time steps
+         └──enhances──► Async Playback (@asynchronous.task decorator)
 
-[Multi-filter Composition] ──enhances──► Each individual filter (clip + contour + streamlines + volume)
+GPU Detection ──enhances──► Volume Rendering Toggle (disables if Mesa detected)
 ```
-
-### Dependency Notes
-
-- **Volume Rendering requires scalar field selection:** The user must first select a scalar field (e.g., velocity magnitude, pressure) before volume rendering is meaningful. This is already implemented in v1.4.0 (PV-03 field selection).
-- **Opacity transfer function requires volume rendering to be active:** The `volume.opacity.set` RPC modifies the transfer function for the currently volume-rendered source. If no volume representation is active, the RPC still succeeds but has no visible effect.
-- **Clip/Contour/StreamTracer all require an existing reader proxy:** They take `sourceProxyId` as input. The delete/update operations require tracking proxy IDs returned at creation time.
-- **StreamTracer requires velocity field (`U`):** Unlike clip/contour which work on any scalar, streamlines need a vector field. The protocol defaults to `["POINTS", "U"]` (velocity magnitude). If the case has different field names, the protocol would need extension.
-- **Screenshot is orthogonal:** `viewport.image.render` works regardless of active filters or representation type. It captures whatever is currently displayed.
 
 ---
 
 ## 3. MVP Definition
 
-### Launch With (v1.5.0 — this milestone)
+### Launch With (trame migration — v1.6.0)
 
-Essential features to validate the advanced visualization concept.
+Core: full parity with existing ParaView Web functionality, via trame patterns.
 
-- [ ] **Volume Rendering toggle** -- One-button switch between Surface and Volume representation. No opacity editing in v1.5.0 (defer to v1.5.x). Why: Core differentiator; GPU volume rendering is the main new capability.
-- [ ] **Clip Filter (static plane)** -- Create a clip with X/Y/Z axis-aligned normal + numeric origin input. No interactive widget. Delete clip. Why: Fundamental CFD operation; straightforward protocol implementation.
-- [ ] **Contour Filter (iso-surfaces)** -- Create iso-surfaces by selecting scalar field and entering one or more isovalues. Delete contour. Why: Standard post-processing feature; builds on existing field selection.
-- [ ] **Streamlines (masking region seeds)** -- Create streamlines with default "masking region" (seeds throughout volume). Uses velocity field `U`. Delete streamlines. Why: Flow visualization core feature.
-- [ ] **Screenshot Export (PNG download)** -- Capture current viewport as base64 PNG, decode in browser, trigger download. Why: Low cost, high value for reports.
+- [ ] **OpenFOAM reader** — `simple.OpenDataFile(caseDir)` on `on_server_ready`
+- [ ] **Field selection** — `simple.ColorBy()` + Vuetify `VSelect` bound to `state.field`
+- [ ] **Slice controls** — Vuetify `VBtnToggle` (X/Y/Z/Off) + `VSlider` origin → `simple.Slice()` via `state.change("slice_axis")`
+- [ ] **Color presets** — Viridis / BlueRed / Grayscale via `simple.GetColorTransferFunction()` with preset map
+- [ ] **Scalar range** — auto (`RescaleTransferFunctionToDataRange()`) / manual (`lut.RescaleTransferFunction(min, max)`) with Vuetify `VSlider`
+- [ ] **Scalar bar** — `show_scalar_bar` state → `ScalarBarWidget` visibility
+- [ ] **Time step navigation** — Previous/Next `VBtn` → `animation_scene.TimeKeeper` via `state.change("time_index")`
+- [ ] **Volume rendering toggle** — Vuetify `VSwitch` → `representation.Representation = "Volume"` via `state.change("volume_enabled")`
+- [ ] **GPU detection + warning** — `subprocess.run(["eglinfo"])` in-process → `state.gpu_vendor` + `state.gpu_available`; warning banner via `vuetify.VAlert`
+- [ ] **Screenshots** — `html_view.screenshot()` → base64 → Vuetify file download; debounced `500ms`
+- [ ] **Filter registry** — Python `dict` keyed by `id(proxy)` (identical to current `ParaViewWebAdvancedFilters._filters`)
+- [ ] **Clip filter** — create/delete with Vuetify `VChip` delete buttons; state-bound parameters
+- [ ] **Contour filter** — create/delete with isovalues `VTextField`; up to 20 values
+- [ ] **StreamTracer filter** — create/delete with integration direction `VBtnToggle` (FORWARD/BACKWARD)
+- [ ] **Filter list panel** — `AdvancedFilterPanel` rewritten as Vuetify `VList` with delete actions
 
-### Add After Validation (v1.5.x — incremental)
+### Add After Validation (v1.7.0)
 
-Features to add once core is working and user feedback guides priorities.
+- [ ] **Filter parameter update** — live edit of clip origin, contour isovalues, streamtracer max steps (currently only create/delete; in-place update not in v1.5.0)
+- [ ] **Local rendering mode** — `VtkLocalView` with auto/local/remote toggle (see `DynamicLocalRemoteRendering.py`)
+- [ ] **Time playback** — `@asynchronous.task` for animated stepping (`while state.play:` loop)
+- [ ] **Scalar bar position** — configurable scalar bar placement via `state.scalar_bar_position`
 
-- [ ] **Opacity Transfer Function Editor** -- Add control points to customize opacity curve. Trigger: User feedback requesting "can only see outer shell, need to look inside."
-- [ ] **Clip plane parameter update** -- Sliders to adjust clip origin in real-time without deleting/recreating. Trigger: User workflow study showing repeated clip operations.
-- [ ] **Contour value update** -- Adjust isovalues without deleting/recreating. Trigger: Same as above.
-- [ ] **JSON state export** -- `pv.data.save` + REST endpoint proxying file from container. Trigger: User request for reproducible visualization state.
+### Future Consideration (v2.0)
 
-### Future Consideration (v2.x)
-
-Features to defer until product-market fit is established.
-
-- [ ] **Interactive clip plane widget (drag to move)** -- Requires ParaView interactive plane widget which is complex in WebSocket context.
-- [ ] **Animated streamlines** -- Time-step looping for particle animation.
-- [ ] **Multi-field volume rendering** -- Side-by-side or composited volume rendering for multiple scalar fields.
-- [ ] **Movie export (MP4/GIF)** -- Server-side ffmpeg encoding of animation sequence.
+- [ ] **State persistence** — serialize `server.state` to JSON; restore on load for shareable links
+- [ ] **Multiple viewports** — `paraview.VtkRemoteView()` x2 for side-by-side case comparison
+- [ ] **Opacity transfer function editor** — `vuetify.VSlider` control points → `volumeProperty.GetGrayTransferFunction()` (deferred from v1.5.0 anti-feature)
+- [ ] **JSON state export** — `pv.data.save` + REST endpoint for reproducible visualization state
 
 ---
 
 ## 4. Feature Prioritization Matrix
 
-| Feature | User Value | Implementation Cost | Risk | Priority |
-|---------|-----------|---------------------|------|----------|
-| Volume Rendering toggle | HIGH | LOW | LOW | **P1** |
-| Screenshot Export | HIGH | LOW | LOW | **P1** |
-| Clip Filter (create/delete) | HIGH | LOW | LOW | **P1** |
-| Contour Filter (create/delete) | MEDIUM | LOW | LOW | **P1** |
-| Streamlines (create/delete) | MEDIUM | MEDIUM | MEDIUM | **P2** |
-| Clip plane parameter update | MEDIUM | LOW | LOW | **P2** |
-| Contour value update | MEDIUM | LOW | LOW | **P2** |
-| Opacity transfer function editor | HIGH | MEDIUM | MEDIUM | **P2** |
-| JSON state export | MEDIUM | MEDIUM | LOW | **P3** |
-| Interactive clip plane widget | MEDIUM | HIGH | HIGH | **P3** |
-| Animated streamlines | MEDIUM | HIGH | HIGH | **P3** |
-| Multi-field volume | LOW | HIGH | HIGH | **P3** |
+| Feature | User Value | Migration Cost | Priority |
+|---------|------------|----------------|----------|
+| OpenFOAM reader | HIGH | LOW | P1 |
+| Field selection | HIGH | LOW | P1 |
+| Slice controls | HIGH | MEDIUM | P1 |
+| Color presets | MEDIUM | LOW | P1 |
+| Volume rendering toggle | HIGH | MEDIUM | P1 |
+| Advanced filters (Clip/Contour/StreamTracer) | MEDIUM | MEDIUM | P1 |
+| Screenshot export | MEDIUM | MEDIUM | P1 |
+| Time step navigation | MEDIUM | LOW | P1 |
+| GPU detection + warning banner | MEDIUM | LOW | P1 |
+| Scalar bar visibility | LOW | LOW | P2 |
+| Filter parameter update (live edit) | MEDIUM | HIGH | P2 |
+| Local rendering mode | MEDIUM | MEDIUM-HIGH | P2 |
+| Async time playback | LOW | LOW | P2 |
+| State persistence / shareable links | LOW | MEDIUM | P3 |
+| Multiple viewports | LOW | MEDIUM | P3 |
+| Opacity transfer function editor | HIGH | MEDIUM | P3 (was P2 in v1.5.0 anti-feature) |
 
 **Priority rationale:**
-- **P1 features are all LOW cost/LOW risk** and provide immediate user value. No excuse to defer.
-- **P2 features have slightly higher cost or uncertainty** but are well-understood. Add after P1s ship.
-- **P3 features involve significant complexity or uncertain payoff.** Defer to v2.x based on user feedback.
+- **P1 = must have for launch.** All ParaView Web features must be preserved. The `simple.*` ParaView API is unchanged — the migration cost is in the state-binding pattern, not the ParaView logic itself.
+- **P2 = should add if time permits.** Filter parameter update and local rendering are high-value additions that follow naturally from the state-driven architecture.
+- **P3 = defer to v2.** These require more design work or significant new UI surface area.
 
 ---
 
-## 5. Competitor Feature Analysis
+## 5. Architecture Comparison: ParaView Web vs trame
 
-| Feature | ParaView GUI | VisIt | Our Approach |
-|---------|-------------|-------|-------------|
-| Volume Rendering | Full GPU ray cast with opacity/palette editing | GPU volume rendering | MVP: simple Surface/Volume toggle; P2: opacity TF editor |
-| Clip Filter | Interactive plane widget + box/sphere clip types | Interactive clip plane | MVP: axis-aligned clip with numeric origin; P2: live update sliders |
-| Contour Filter | Iso-surface generation with range slider | Multiple iso-values at once | MVP: single array + list of isovalues; P2: live update |
-| Streamlines | Point/line/plane/radius seed sources; animated | Multiple algorithm choices | MVP: masking region (volume seeds), default velocity; P2: seed type selection |
-| Screenshot Export | Save as PNG/PS/EPS | Active viewport capture | MVP: `viewport.image.render` base64 PNG download; P2: JSON state |
-| UI Model | Desktop application (full interactive) | Desktop application | Web dashboard embedded viewer (less interactive than desktop, but accessible) |
+| Concern | ParaView Web (current) | trame (target) |
+|---------|----------------------|----------------|
+| RPC mechanism | `@exportRpc("method.name")` decorator → WebSocket JSON-RPC | `@state.change("var_name")` decorator → shared state → automatic render push |
+| Base class | `ParaViewWebProtocol` | `trame.app.get_server()` |
+| Server instantiation | `launcher.py` + separate Docker container | `get_server(client_type="vue2")` + same process |
+| Render push | `viewport.image.render` RPC (on-demand) | `VtkRemoteView` automatically pushes on any state change |
+| UI framework | Custom HTML/CSS + React state machine | Vuetify (Vue.js) components bound to state |
+| Protocol registration | `entrypoint_wrapper.sh` imports `adv_protocols.py` → `@exportRpc` classes register | `server.state.change("x")` decorators register handlers |
+| Connection management | Manual heartbeat, reconnect backoff | `TRAME_WS_HEART_BEAT` (default 30s), built-in |
+| Multi-session | `ParaViewWebManager` Docker sidecar with lifecycle | Each `get_server()` call is its own session |
+| File loading | WS message → `simple.OpenDataFile()` | Direct `simple.OpenDataFile()` in `on_server_ready` |
+| Filter pipeline | Python dict registry + `@exportRpc` methods | Same Python dict registry + `@state.change` handlers |
 
-**Key insight:** The web-based approach intentionally trades some interactivity (no drag-to-move clip plane) for accessibility (no desktop app install). The priority should be on features that work well in the web model (one-click toggles, numeric inputs, screenshot export) rather than mimicking all desktop interactions.
+### Key Migration Pattern: `@exportRpc` -> `@state.change`
 
----
-
-## 6. Protocol Message Flows
-
-### 6.1 Volume Rendering Flow
-
-```
-User clicks "Volume" toggle
-    │
-    ├──► Frontend: createVolumeRepresentationMessage(sourceId)
-    │         → WS JSON-RPC: { method: "volume.representation.create", params: { sourceProxyId, viewId } }
-    │
-    ▼
-Server: ParaViewWebVolumeRendering.createVolumeRepresentation()
-    ├── rep.Representation = "Volume"       ← vtkGPUVolumeRayCastMapper activates
-    ├── simple.Render()
-    └── InvokeEvent("UpdateEvent")          ← triggers frame push to client
-    │
-    ▼
-Client: Rendered view updates with volume rendering
-    (No explicit response handling needed; server pushes updated frame)
+**ParaView Web (current) — `paraview_adv_protocols.py`:**
+```python
+@exportRpc("visualization.volume.rendering.toggle")
+def volumeRenderingToggle(self, fieldName: str, enabled: bool):
+    display.SetRepresentationToVolume() if enabled else display.SetRepresentationToSurface()
+    simple.Render()
+    self._app.SMApplication.InvokeEvent("UpdateEvent", ())
+    return {"success": True}
 ```
 
-**Opacity tuning flow:**
-```
-User adjusts opacity TF control points
-    │
-    ├──► Frontend: createVolumeOpacityMessage("U", [0, 0, 1, 0.2, 5, 1.0])
-    │         → WS JSON-RPC: { method: "volume.opacity.set", params: { arrayName, points } }
-    │
-    ▼
-Server: setVolumeOpacity()
-    ├── simple.GetOpacityTransferFunction(arrayName).Points = points
-    ├── simple.Render()
-    └── InvokeEvent("UpdateEvent")
+**trame equivalent:**
+```python
+@state.change("volume_enabled", "field_name")
+def update_volume_rendering(volume_enabled, field_name, **kwargs):
+    if volume_enabled:
+        rep.Representation = "Volume"
+    else:
+        rep.Representation = "Surface"
+    ctrl.view_update()   # triggers render push to client
 ```
 
-### 6.2 Clip Filter Flow
-
-```
-User sets clip axis + origin → clicks "Apply"
-    │
-    ├──► Frontend: createClipMessage(sourceId, axis, origin)
-    │         → WS JSON-RPC: { method: "clip.create", params: { sourceProxyId, normal, origin } }
-    │
-    ▼
-Server: ParaViewWebAdvancedFilters.createClip()
-    ├── clip = simple.Clip(Input=source, ClipType="Plane")
-    ├── clip.ClipType.Normal = normal        ← e.g., [1, 0, 0] for X-axis
-    ├── clip.ClipType.Origin = origin        ← e.g., [0.5, 0, 0]
-    ├── simple.Show(clip, view)
-    ├── simple.Render()
-    ├── InvokeEvent("UpdateEvent")
-    └── return { result: "success", proxyId: "123" }    ← proxyId stored in frontend state
-    │
-    ▼
-Client: Rendered view shows half of mesh removed
-
-User adjusts origin → clicks "Update"
-    │
-    ├──► Frontend: createClipUpdateMessage(proxyId, normal, origin)
-    │         → WS JSON-RPC: { method: "clip.update", params: { proxyId, normal, origin } }
-    │
-    ▼
-Server: updateClip()
-    ├── proxy.ClipType.Normal = normal
-    ├── proxy.ClipType.Origin = origin
-    ├── simple.Render()
-    └── InvokeEvent("UpdateEvent")
-
-User clicks "Delete Clip"
-    │
-    ├──► Frontend: createClipDeleteMessage(proxyId)
-    │         → WS JSON-RPC: { method: "clip.delete", params: { proxyId } }
-    │
-    ▼
-Server: deleteClip()
-    ├── simple.Delete(proxy)
-    ├── simple.Render()
-    └── InvokeEvent("UpdateEvent")
-```
-
-### 6.3 Contour Filter Flow
-
-```
-User selects scalar field + enters isovalues → clicks "Apply"
-    │
-    ├──► Frontend: createContourMessage(sourceId, "p", [101325, 100000])
-    │         → WS JSON-RPC: { method: "contour.create", params: { sourceProxyId, arrayName, isovalues } }
-    │
-    ▼
-Server: ParaViewWebAdvancedFilters.createContour()
-    ├── contour = simple.Contour(Input=source)
-    ├── contour.ContourBy = ["POINTS", "p"]
-    ├── contour.Isosurfaces = [101325, 100000]
-    ├── simple.Show(contour, view)
-    ├── simple.Render()
-    ├── InvokeEvent("UpdateEvent")
-    └── return { result: "success", proxyId: "456" }
-
-User updates isovalues → "Update"
-    │
-    ├──► Frontend: createContourUpdateMessage(proxyId, isovalues)
-    │         → WS JSON-RPC: { method: "contour.update", params: { proxyId, isovalues } }
-    │
-    ▼
-Server: updateContour()
-    ├── proxy.Isosurfaces = isovalues
-    ├── simple.Render()
-    └── InvokeEvent("UpdateEvent")
-```
-
-### 6.4 Streamlines Flow
-
-```
-User clicks "Show Streamlines"
-    │
-    ├──► Frontend: createStreamTracerMessage(sourceId, "maskingRegion")
-    │         → WS JSON-RPC: { method: "streamtracer.create", params: { sourceProxyId, seedType } }
-    │
-    ▼
-Server: ParaViewWebAdvancedFilters.createStreamTracer()
-    ├── tracer = simple.StreamTracer(Input=source, SeedType="maskingRegion")
-    ├── tracer.Vectors = ["POINTS", "U"]     ← velocity field
-    ├── tracer.MaximumTrackLength = 100
-    ├── tracer.ComputeVorticity = 1
-    ├── simple.Show(tracer, view)
-    ├── simple.Render()
-    ├── InvokeEvent("UpdateEvent")
-    └── return { result: "success", proxyId: "789" }
-
-User clicks "Delete Streamlines"
-    │
-    ├──► Frontend: createStreamTracerDeleteMessage(proxyId)
-    │         → WS JSON-RPC: { method: "streamtracer.delete", params: { proxyId } }
-    │
-    ▼
-Server: deleteStreamTracer()
-    ├── simple.Delete(proxy)
-    ├── simple.Render()
-    └── InvokeEvent("UpdateEvent")
-```
-
-### 6.5 Screenshot Export Flow
-
-```
-User clicks "Screenshot"
-    │
-    ├──► Frontend: createScreenshotMessage(quality=85, viewId=-1)
-    │         → WS JSON-RPC: { method: "viewport.image.render", params: { view: -1, quality: 85, ratio: 1 } }
-    │
-    ▼
-Server: ParaViewWebViewPortImageDelivery.viewportImageRender()  ← built-in, no custom code
-    ├── Renders current view to offscreen framebuffer
-    ├── Encodes as PNG
-    └── return { result: { image: "<base64 PNG string>" } }
-    │
-    ▼
-Frontend: parseScreenshotResponse(response) → base64 string
-    │
-    ▼
-Frontend: downloadScreenshot(base64, "cfd-result") → browser download "cfd-result.png"
-    (atob decode → Uint8Array → Blob → object URL → <a> click → revoke)
+The Vue.js UI binding:
+```python
+vuetify.VSwitch(
+    v_model=("volume_enabled", False),
+    label="Volume Rendering",
+)
 ```
 
 ---
 
-## 7. Implementation Notes
+## 6. Research Gaps / Phase-Specific Investigation Flags
 
-### 7.1 Frontend State Management
-
-Each filter (clip, contour, streamlines) must track its `proxyId` returned from the server so it can be updated or deleted later. Recommended state shape:
-
-```typescript
-interface ViewerState {
-  sourceProxyId: number;         // The OpenFOAM reader proxy ID
-  representation: 'Surface' | 'Volume';
-  activeClip: { proxyId: number; normal: number[]; origin: number[] } | null;
-  activeContour: { proxyId: number; arrayName: string; isovalues: number[] } | null;
-  activeStreamTracer: { proxyId: number } | null;
-}
-```
-
-### 7.2 Filter Composition
-
-Multiple filters can be active simultaneously (e.g., volume rendering + clip + streamlines). Each filter's `simple.Show()` adds a new representation to the view. The frontend should allow independent toggling of each filter's visibility.
-
-### 7.3 StreamTracer Seed Types
-
-ParaView's `StreamTracer` supports multiple `SeedType` values:
-- `"MaskingRegion"` (default) -- seeds throughout the volume
-- `"Point"` -- single seed point (requires `SeedPoint` parameter)
-- `"PointCloud"` -- cloud of points (requires `SeedPoint` and `NumberOfPoints`)
-- `"Line"` -- line of seeds (requires `SeedPoint`, `LineEndPoint`, `Resolution`)
-- `"Plane"` -- plane of seeds (requires `SeedPoint`, `Normal`, `Offset`)
-- `"Sphere"` -- spherical shell of seeds (requires `SeedPoint`, `Radius`)
-
-For v1.5.0 MVP: only `"MaskingRegion"` (default, simplest). P2 could add seed type selection dropdown.
-
-### 7.4 Volume Rendering Limitations on Apple Silicon
-
-The project notes acknowledge Apple Silicon detached-container limitation (`--platform linux/amd64` required on amd64 servers). Volume rendering via `vtkGPUVolumeRayCastMapper` requires GPU access. On Apple Silicon, this means the container must run on a remote Linux/amd64 machine with GPU, not locally via Rosetta. This is an infrastructure constraint, not a code constraint.
-
-### 7.5 Large Mesh Considerations
-
-Volume rendering is memory-intensive. For meshes > 5M cells, `vtkGPUVolumeRayCastMapper` may exceed GPU memory. ParaView provides alternatives:
-- `"GPU Volume Ray Cast Mapper"` (default, fastest)
-- `"Smart Volume Mapper"` (adaptive, handles larger datasets)
-
-The v1.5.0 MVP can default to the built-in mapper. A future enhancement could add mapper type selection.
+| Gap | Why It Matters | Action |
+|-----|----------------|--------|
+| **ParaView version compatibility** | trame v2 requires ParaView 5.11+. The existing Docker image uses ParaView 5.10.1 (from `openfoam/openfoam10-paraview510`). | Verify ParaView version in `openfoam/openfoam10-paraview510`; may need image upgrade |
+| **Filter parameter update (live edit)** | Currently only create/delete exist. The existing `ParaViewWebAdvancedFilters` has no update method. In-place editing requires adding `state.change("clip_origin")` listeners. | Investigate during FILT implementation phase |
+| **Dashboard auth integration** | React dashboard uses JWT for API auth. trame `--auth` flag needs verification with existing JWT flow (cookie vs header). | Investigate during dashboard integration phase |
+| **`html_view.screenshot()` resolution behavior** | Needs verification: does it respect actual viewport DOM size or require explicit resolution parameter? | Test during SHOT phase |
+| **OpenFOAM reader `Fields` property** | `paraview_adv_protocols.py` uses `if hasattr(props, "Fields"): props.Fields = fieldName`. Verify this works identically when called from trame state listener. | Test with actual OpenFOAM case during READER phase |
+| **`VtkLocalView` browser requirements** | WebGL rendering in browser needs hardware GPU access. Apple Silicon Safari may have limitations. Fallback to `VtkRemoteView` (server-side rendering). | Investigate if local rendering mode is prioritized |
+| **Multi-session / job isolation** | Current architecture: each job = separate ParaView Web Docker container (session). trame server starts per-job. How does the dashboard route to the correct trame instance? | Investigate during architecture phase |
 
 ---
 
 ## Sources
 
-| Source | URL | Confidence | Verifies |
-|--------|-----|------------|---------|
-| ParaView 5.10.0 protocols.py (GitHub) | `https://raw.githubusercontent.com/Kitware/ParaView/v5.10.0/Web/Python/paraview/web/protocols.py` | HIGH | All `@exportRpc` method signatures |
-| ParaViewWeb API (paraviewweb) | `https://raw.githubusercontent.com/Kitware/paraviewweb/master/src/IO/WebSocket/ParaViewWebClient/api.md` | HIGH | Available protocol names |
-| openfoam/openfoam10-paraview510 (Docker Hub) | `https://hub.docker.com/r/openfoam/openfoam10-paraview510` | HIGH | Contains ParaView 5.10.1 + vtkGPUVolumeRayCastMapper |
-| Existing codebase: `paraviewProtocol.ts` | `dashboard/src/services/paraviewProtocol.ts` | HIGH | Protocol message pattern, JSON-RPC format |
-| Existing codebase: `paraview_web_launcher.py` | `api_server/services/paraview_web_launcher.py` | HIGH | Container lifecycle, launcher config structure |
-| Existing codebase: STACK.md v1.5.0 | `.planning/research/STACK.md` | HIGH | Detailed Python protocol handlers for all 3 features |
-| ParaView `Clip()` filter docs | ParaView GUI documentation + `simple.py` API | MEDIUM | Clip parameters (Plane, Box, Scalar) |
-| ParaView `Contour()` filter docs | ParaView GUI documentation + `simple.py` API | MEDIUM | Iso-surface parameters |
-| ParaView `StreamTracer()` filter docs | ParaView GUI documentation + `simple.py` API | MEDIUM | Seed types, integration parameters |
+- [Kitware/trame GitHub](https://github.com/Kitware/trame) — official repository, verified source
+  - `examples/07_paraview/Wavelet/app.py` — filter pipeline with `@state.change` listeners, async rendering
+  - `examples/07_paraview/ContourGeometry/RemoteRendering.py` — contour rendering with `VtkRemoteView`, `ctrl.view_update`
+  - `examples/07_paraview/ContourGeometry/DynamicLocalRemoteRendering.py` — auto/local/remote rendering toggle
+  - `examples/07_paraview/TimeAnimation/app.py` — `animation_scene.TimeKeeper` + `@asynchronous.task` for playback
+  - `examples/07_paraview/StateViewer/app.py` — `VtkRemoteView` + CLI state file loading
+- [trame official docs](https://kitware.github.io/trame/) — framework overview, reserved state entries (`trame__*`)
+- [trame API reference](https://trame.readthedocs.io/en/latest/) — `trame.app.core`, `trame.app.asynchronous`, `trame.widgets`
+- [trame tutorial](https://kitware.github.io/trame/guide/tutorial/) — VTK + ParaView integration path
+
+---
+
+*Feature research for: ParaView Web to trame migration (AI-CFD Knowledge Harness v1.6.0)*
+*Researched: 2026-04-11*
