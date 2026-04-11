@@ -123,15 +123,17 @@
 
 ### Phase 15: ParaView Web Server Integration
 - **Goal**: PV-01 — ParaView Web launcher + lifecycle management
-- **Status**: 🔄 Planning
+- **Status**: ✅ Complete (2/2 plans)
 - **Depends on**: Phase 11
 - **Requirements**: PV-01 (ParaView Web server launch + lifecycle)
+- **Plans**: 15-01 (core manager), 15-02 (API router + idle monitor)
 
 ### Phase 16: Dashboard 3D Viewer
 - **Goal**: PV-02 — React component embedding ParaView Web client
-- **Status**: 🔄 Planning
+- **Status**: 🔄 Planning (2/2 plans)
 - **Depends on**: Phase 15
 - **Requirements**: PV-02 (embedded 3D viewer)
+- **Plans**: 16-01 (API service + ParaViewViewer component + CSS), 16-02 (JobDetailPage viewer tab integration)
 
 ### Phase 17: Case Result Loading & Field Selection
 - **Goal**: PV-03 — Load OpenFOAM case, field selection, time stepping
@@ -167,8 +169,8 @@
 | 12 | v1.3.0 | 3/3 | Complete   | 2026-04-11 |
 | 13 | v1.3.0 | 2/2 | Complete   | 2026-04-11 |
 | 14 | v1.3.0 | 2/2 | Complete | 2026-04-11 |
-| 15 | v1.4.0 | TBD | Planning | - |
-| 16 | v1.4.0 | TBD | Planning | - |
+| 15 | v1.4.0 | 2/2 | Complete    | 2026-04-11 |
+| 16 | v1.4.0 | 2/2 | Planning | - |
 | 17 | v1.4.0 | TBD | Planning | - |
 | 18 | v1.4.0 | TBD | Planning | - |
 
