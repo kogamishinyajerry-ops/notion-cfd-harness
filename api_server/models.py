@@ -6,7 +6,7 @@ Defines the core data structures used across all API endpoints.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
@@ -240,8 +240,8 @@ class ParaViewWebSession(BaseModel):
     port: int = Field(..., description="Host port for WebSocket connection")
     case_dir: str = Field(..., description="Case directory mounted in container")
     auth_key: str = Field(..., description="Session authentication key")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
-    last_activity: datetime = Field(default_factory=datetime.utcnow, description="Last activity timestamp")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp")
+    last_activity: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Last activity timestamp")
     status: Literal["launching", "ready", "active", "stopping", "stopped"] = Field(
         default="launching", description="Session lifecycle status"
     )
@@ -258,8 +258,8 @@ class TrameSession(BaseModel):
     port: int = Field(..., description="Host port for HTTP connection")
     case_dir: str = Field(..., description="Case directory mounted in container")
     auth_key: str = Field(..., description="Session authentication key")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
-    last_activity: datetime = Field(default_factory=datetime.utcnow, description="Last activity timestamp")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp")
+    last_activity: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Last activity timestamp")
     status: Literal["launching", "ready", "active", "stopping", "stopped"] = Field(
         default="launching", description="Session lifecycle status"
     )

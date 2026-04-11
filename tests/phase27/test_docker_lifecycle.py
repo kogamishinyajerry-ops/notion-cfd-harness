@@ -11,7 +11,7 @@ Tests the Docker sidecar lifecycle using mocked subprocess calls:
 
 import asyncio
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -282,7 +282,7 @@ class TestDockerLifecycle:
         """Sessions idle > 30 minutes are shut down by _shutdown_idle_sessions."""
         from api_server.models import TrameSession
 
-        old_time = datetime.utcnow() - timedelta(minutes=31)
+        old_time = datetime.now(timezone.utc) - timedelta(minutes=31)
 
         session = TrameSession(
             session_id="TEST-007",
@@ -392,7 +392,7 @@ class TestDockerLifecycle:
         """update_activity only updates the targeted session."""
         from api_server.models import TrameSession
 
-        before = datetime(2026, 1, 1, 0, 0, 0)
+        before = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
         session1 = TrameSession(
             session_id="ACT-1",
             job_id="J1",

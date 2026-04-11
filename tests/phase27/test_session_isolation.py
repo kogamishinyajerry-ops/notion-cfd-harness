@@ -12,7 +12,7 @@ Verifies that two concurrent trame sessions are fully isolated:
 
 import asyncio
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -188,7 +188,7 @@ class TestSessionIsolation:
 
     def test_update_activity_only_affects_target_session(self, manager):
         """update_activity only updates the targeted session's last_activity."""
-        before = datetime(2026, 1, 1, 0, 0, 0)
+        before = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
         session1 = TrameSession(
             session_id="ACT-1",
             job_id="J1",

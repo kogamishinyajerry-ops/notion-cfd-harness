@@ -14,7 +14,7 @@ import logging
 import os
 import secrets
 import shutil
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterator, Optional
 
 logger = logging.getLogger(__name__)
@@ -316,7 +316,7 @@ class TrameSessionManager:
         """Update the last_activity timestamp for a session."""
         session = self._sessions.get(session_id)
         if session:
-            session.last_activity = datetime.utcnow()
+            session.last_activity = datetime.now(timezone.utc)
             self._sessions[session_id] = session
 
     async def _idle_monitor(self) -> None:
@@ -327,7 +327,7 @@ class TrameSessionManager:
 
     async def _shutdown_idle_sessions(self) -> None:
         """Stop sessions that have been idle longer than IDLE_TIMEOUT_MINUTES."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         timeout = timedelta(minutes=PARAVIEW_WEB_IDLE_TIMEOUT_MINUTES)
         for session_id, session in list(self._sessions.items()):
             if session.status == "stopping" or session.status == "stopped":

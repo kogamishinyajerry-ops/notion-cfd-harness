@@ -304,8 +304,9 @@ class TestFilterRegistryUnit:
             integration_direction="FORWARD", max_steps=99999
         )
         assert result["success"] is True
-        # The function caps at min(max_steps, 10000)
-        # We verify the function executed successfully
+        filter_uuid = result["filterId"]
+        registered = ns["_state"].filters[filter_uuid]
+        assert registered["params"]["maxSteps"] <= 10000
 
     def test_build_filter_params_clip(self, ns):
         """_build_filter_params extracts Clip parameters correctly."""
