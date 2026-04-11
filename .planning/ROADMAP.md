@@ -53,7 +53,7 @@
 | 23 | v1.6.0 | 1/1 | Complete    | 2026-04-11 |
 | 24 | v1.6.0 | 1/1 | Complete    | 2026-04-12 |
 | 25 | v1.6.0 | 1/1 | Complete   | 2026-04-11 |
-| 26 | v1.6.0 | 0/1 | Not started | - |
+| 26 | v1.6.0 | 2/2 | Complete    | 2026-04-11 |
 | 27 | v1.6.0 | 0/1 | Not started | - |
 | 28 | v1.6.0 | 0/1 | Not started | - |
 
@@ -130,7 +130,9 @@
 5. Volume rendering toggle, slice slider, and color map controls all function identically to v1.5.0 through the bridge
 6. `ParaViewViewer.tsx` is replaced by an iframe embedding the trame viewer URL — no direct ParaView Web protocol calls remain in React
 
-**Plans:** TBD
+**Plans:**
+2/2 plans complete
+- [x] 26-02-PLAN.md — trame_server.py postMessage listener, camera polling, and state handlers
 
 **UI hint:** yes
 
@@ -150,7 +152,9 @@
 5. Time step navigation (prev/next/play) correctly updates the trame animation state and the 3D view
 6. Two concurrent browser tabs connected to different sessions see isolated state (no cross-contamination of filter or camera state)
 
-**Plans:** TBD
+**Plans:**
+- [x] 26-01-PLAN.md — CFDViewerBridge.ts postMessage layer + TrameViewer.tsx iframe component + JobDetailPage wiring
+- [x] 26-02-PLAN.md — trame_server.py postMessage listener, camera polling, and state handlers
 
 ### Phase 28: Cleanup + Old File Removal
 
@@ -167,7 +171,9 @@
 4. `ParaViewViewer.tsx`, `ParaViewViewer.css`, and `AdvancedFilterPanel.tsx` are deleted or archived — the React viewer directory has no broken component imports
 5. All call sites in `paraviewProtocol.ts` and other API client files are updated — no `import { ... } from './paraviewProtocol'` references that would cause build failures
 
-**Plans:** TBD
+**Plans:**
+- [x] 26-01-PLAN.md — CFDViewerBridge.ts postMessage layer + TrameViewer.tsx iframe component + JobDetailPage wiring
+- [x] 26-02-PLAN.md — trame_server.py postMessage listener, camera polling, and state handlers
 
 ---
 
