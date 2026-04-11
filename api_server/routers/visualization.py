@@ -15,9 +15,9 @@ from pydantic import BaseModel, Field
 
 from api_server.config import DATA_DIR, REPORTS_DIR
 from api_server.models import ParaViewWebSession
-from api_server.services.paraview_web_launcher import (
-    ParaViewWebError,
-    get_paraview_web_manager,
+from api_server.services.trame_session_manager import (
+    TrameSessionError,
+    get_trame_session_manager,
 )
 
 router = APIRouter()
@@ -141,7 +141,7 @@ async def launch_visualization_session(request: VisualizationLaunchRequest):
     session_id = f"PVW-{uuid.uuid4().hex[:8].upper()}"
 
     # Get manager and launch session
-    manager = get_paraview_web_manager()
+    manager = get_trame_session_manager()
 
     try:
         session = await manager.launch_session(
@@ -150,14 +150,14 @@ async def launch_visualization_session(request: VisualizationLaunchRequest):
             port=request.port,
             job_id=request.job_id,
         )
-    except ParaViewWebError as e:
+    except TrameSessionError as e:
         raise HTTPException(
             status_code=503,
-            detail=f"Failed to launch ParaView Web session: {str(e)}"
+            detail=f"Failed to launch trame session: {str(e)}"
         )
 
     # Build session URL
-    session_url = f"ws://localhost:{session.port}/ws"
+    session_url = f"http://localhost:{session.port}"
 
     return VisualizationLaunchResponse(
         session_id=session.session_id,
@@ -182,7 +182,7 @@ async def get_visualization_session(
     Returns current status, timestamps, and configuration for the session.
     Raises 404 if session not found.
     """
-    manager = get_paraview_web_manager()
+    manager = get_trame_session_manager()
     session = manager.get_session(session_id)
 
     if not session:
@@ -215,7 +215,7 @@ async def update_session_activity(
     Clients should call this endpoint periodically while the session is active
     to prevent idle timeout shutdown.
     """
-    manager = get_paraview_web_manager()
+    manager = get_trame_session_manager()
     session = manager.get_session(session_id)
 
     if not session:
@@ -240,7 +240,7 @@ async def shutdown_visualization_session(
 
     Stops the Docker container and frees the session resources.
     """
-    manager = get_paraview_web_manager()
+    manager = get_trame_session_manager()
     session = manager.get_session(session_id)
 
     if not session:

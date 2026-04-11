@@ -124,19 +124,19 @@ class JobService:
                 "job": self._job_to_dict(job),
             })
 
-            # Auto-launch ParaView Web session for completed jobs with output_dir
+            # Auto-launch Trame session for completed jobs with output_dir
             if result.get("output_dir"):
                 try:
-                    from api_server.services.paraview_web_launcher import get_paraview_web_manager
-                    pv_manager = get_paraview_web_manager()
-                    session = await pv_manager.launch_session(
-                        session_id=f"PVW-{job.job_id}",
+                    from api_server.services.trame_session_manager import get_trame_session_manager
+                    trame_manager = get_trame_session_manager()
+                    session = await trame_manager.launch_session(
+                        session_id=f"TRM-{job.job_id}",
                         case_dir=result["output_dir"],
                     )
-                    result["paraview_session_id"] = session.session_id
-                    result["paraview_session_url"] = f"ws://localhost:{session.port}/ws"
+                    result["trame_session_id"] = session.session_id
+                    result["trame_session_url"] = f"http://localhost:{session.port}"
                 except Exception as e:
-                    logger.warning(f"Failed to create ParaView Web session for job {job.job_id}: {e}")
+                    logger.warning(f"Failed to create Trame session for job {job.job_id}: {e}")
                     # Non-fatal: job completed but visualization not auto-launched
 
         except Exception as e:

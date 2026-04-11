@@ -248,3 +248,21 @@ class ParaViewWebSession(BaseModel):
 
     class Config:
         use_enum_values = True
+
+
+class TrameSession(BaseModel):
+    """Trame session state (replaces ParaViewWebSession for v1.6.0)."""
+    session_id: str = Field(..., description="Unique session identifier")
+    job_id: Optional[str] = Field(default=None, description="Associated job ID")
+    container_id: str = Field(..., description="Docker container ID")
+    port: int = Field(..., description="Host port for HTTP connection")
+    case_dir: str = Field(..., description="Case directory mounted in container")
+    auth_key: str = Field(..., description="Session authentication key")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
+    last_activity: datetime = Field(default_factory=datetime.utcnow, description="Last activity timestamp")
+    status: Literal["launching", "ready", "active", "stopping", "stopped"] = Field(
+        default="launching", description="Session lifecycle status"
+    )
+
+    class Config:
+        use_enum_values = True
