@@ -1,5 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { launchVisualizationSession, sendHeartbeat } from '../services/paraview';
+import {
+  createOpenFOAMReaderMessage,
+  createGetFieldsMessage,
+  createFieldDisplayMessage,
+  createGetTimeStepsMessage,
+  createTimeStepMessage,
+  createRenderMessage,
+  parseAvailableFields,
+  parseAvailableTimeSteps,
+} from '../services/paraviewProtocol';
 import './ParaViewViewer.css';
 
 // =============================================================================
@@ -67,6 +77,14 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [sessionInfo, setSessionInfo] = useState<ConnectionResult | null>(null);
 
+  // Field selection state
+  const [availableFields, setAvailableFields] = useState<string[]>([]);
+  const [selectedField, setSelectedField] = useState<string>('');
+
+  // Time step navigation state
+  const [availableTimeSteps, setAvailableTimeSteps] = useState<number[]>([0, 1, 2, 3, 4]);
+  const [currentTimeStepIndex, setCurrentTimeStepIndex] = useState<number>(0);
+
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -104,6 +122,15 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
   }, []);
 
   // -------------------------------------------------------------------------
+  // Send protocol message via WebSocket
+  // -------------------------------------------------------------------------
+  const sendProtocolMessage = useCallback((message: object) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(message));
+    }
+  }, []);
+
+  // -------------------------------------------------------------------------
   // Connect WebSocket
   // -------------------------------------------------------------------------
   const connectWebSocket = useCallback(
@@ -129,18 +156,43 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
         clearTimeout(connectionTimeout);
         // Send auth_key as first message per ParaView Web protocol
         ws.send(authKey);
+        // After auth, open OpenFOAM reader and discover fields/time steps
+        sendProtocolMessage(createOpenFOAMReaderMessage(caseDir));
+        sendProtocolMessage(createGetFieldsMessage());
+        sendProtocolMessage(createGetTimeStepsMessage());
       };
 
       ws.onmessage = (event) => {
-        // ParaView Web sends protocol messages after authentication
-        // The viewport renders automatically via protocol.js injection
-        const data = event.data;
+        try {
+          const message = JSON.parse(event.data);
 
-        // If we see a protocol success indicator, we're connected
+          // Parse available fields response
+          if (message.id === 'pv-fields' && message.result) {
+            const fields = parseAvailableFields(message);
+            if (fields.length > 0) {
+              setAvailableFields(fields);
+              if (!selectedField && fields.length > 0) {
+                setSelectedField(fields[0]);
+              }
+            }
+          }
+
+          // Parse available time steps response
+          if (message.id === 'pv-timesteps' && message.result) {
+            const timeSteps = parseAvailableTimeSteps(message);
+            if (timeSteps.length > 0) {
+              setAvailableTimeSteps(timeSteps);
+              setCurrentTimeStepIndex(0);
+            }
+          }
+        } catch {
+          // Non-JSON messages are normal ParaView Web protocol traffic
+        }
+
+        // Connection established check
         if (ws.readyState === WebSocket.OPEN && !pvProxyRef.current) {
-          // Mark as connected once WebSocket is open and we've sent auth
           setState('connected');
-          setSessionInfo(prev => prev ? { ...prev, sessionId: sessionInfo?.sessionId || '' } : null);
+          setSessionInfo((prev) => prev ? { ...prev, sessionId: prev?.sessionId || '' } : null);
           if (onConnected) onConnected();
         }
       };
@@ -262,16 +314,13 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
       case 'connected':
         return (
           <div className="viewer-canvas-container">
-            {/* ParaView Web renders into this div via protocol.js */}
+            {renderFieldSelector()}
+            {renderTimeStepNavigator()}
             <div
               id="paraview-viewport"
               className="paraview-viewport"
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               ref={(el) => {
                 if (el && sessionInfo && !pvProxyRef.current) {
-                  // Initialize ParaView Web viewport
-                  // The actual ParaView Web JS client is injected by the Docker server
-                  // at the session_url. The viewport div is where it attaches.
                   el.setAttribute('data-session-id', sessionInfo.sessionId);
                 }
               }}
@@ -313,6 +362,79 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
           </div>
         );
     }
+  };
+
+  // -------------------------------------------------------------------------
+  // Field selector
+  // -------------------------------------------------------------------------
+  const renderFieldSelector = () => {
+    const fields = availableFields.length > 0 ? availableFields : [
+      'U (Velocity)', 'p (Pressure)', 'Ux', 'Uy', 'Uz', 'k (Turbulent Kinetic Energy)', 'epsilon (Dissipation Rate)'
+    ];
+    return (
+      <div className="field-selector">
+        <label className="selector-label">Field</label>
+        <select
+          className="field-select"
+          value={selectedField}
+          disabled={availableFields.length === 0}
+          onChange={(e) => {
+            const field = e.target.value;
+            setSelectedField(field);
+            sendProtocolMessage(createFieldDisplayMessage(field));
+            sendProtocolMessage(createRenderMessage());
+          }}
+        >
+          {!selectedField && <option value="">Select field...</option>}
+          {fields.map((f) => (
+            <option key={f} value={f}>{f}</option>
+          ))}
+        </select>
+      </div>
+    );
+  };
+
+  // -------------------------------------------------------------------------
+  // Time step navigator
+  // -------------------------------------------------------------------------
+  const renderTimeStepNavigator = () => {
+    const total = availableTimeSteps.length;
+    const hasTimeSteps = total > 0;
+    return (
+      <div className="timestep-navigator">
+        <button
+          className="timestep-btn timestep-prev"
+          disabled={currentTimeStepIndex === 0}
+          onClick={() => {
+            if (currentTimeStepIndex > 0) {
+              const newIndex = currentTimeStepIndex - 1;
+              setCurrentTimeStepIndex(newIndex);
+              sendProtocolMessage(createTimeStepMessage(newIndex));
+              sendProtocolMessage(createRenderMessage());
+            }
+          }}
+        >
+          Previous
+        </button>
+        <span className="timestep-display">
+          {hasTimeSteps ? `Step ${currentTimeStepIndex + 1} / ${total}` : 'No time steps'}
+        </span>
+        <button
+          className="timestep-btn timestep-next"
+          disabled={currentTimeStepIndex >= total - 1}
+          onClick={() => {
+            if (currentTimeStepIndex < total - 1) {
+              const newIndex = currentTimeStepIndex + 1;
+              setCurrentTimeStepIndex(newIndex);
+              sendProtocolMessage(createTimeStepMessage(newIndex));
+              sendProtocolMessage(createRenderMessage());
+            }
+          }}
+        >
+          Next
+        </button>
+      </div>
+    );
   };
 
   return (
