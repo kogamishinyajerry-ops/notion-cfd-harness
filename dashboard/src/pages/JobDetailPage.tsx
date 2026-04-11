@@ -9,7 +9,7 @@ import wsService from '../services/websocket';
 import type { ResidualMessage, WebSocketMessage } from '../services/websocket';
 import type { Job, JobLog, JobStatus } from '../services/types';
 import ResultSummaryPanel from '../components/ResultSummaryPanel';
-import ParaViewViewer from '../components/ParaViewViewer';
+import TrameViewer from '../components/TrameViewer';
 import './JobDetailPage.css';
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; className: string }> = {
@@ -370,7 +370,7 @@ export default function JobDetailPage() {
         {activeTab === 'viewer' && (
           <div className="viewer-view">
             {job.result?.output_dir ? (
-              <ParaViewViewer
+              <TrameViewer
                 jobId={job.id}
                 caseDir={job.result.output_dir}
                 onError={(reason) => console.error('Viewer error:', reason)}
