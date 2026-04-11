@@ -9,6 +9,10 @@ import {
   createRenderMessage,
   parseAvailableFields,
   parseAvailableTimeSteps,
+  createSliceMessage,
+  createColorPresetMessage,
+  createScalarRangeMessage,
+  createScalarBarMessage,
 } from '../services/paraviewProtocol';
 import './ParaViewViewer.css';
 
@@ -84,6 +88,21 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
   // Time step navigation state
   const [availableTimeSteps, setAvailableTimeSteps] = useState<number[]>([0, 1, 2, 3, 4]);
   const [currentTimeStepIndex, setCurrentTimeStepIndex] = useState<number>(0);
+
+  // Slice filter state (PV-04.3)
+  const [sliceAxis, setSliceAxis] = useState<'X' | 'Y' | 'Z' | null>(null);
+  const [sliceOrigin, setSliceOrigin] = useState<[number, number, number]>([0, 0, 0]);
+
+  // Color preset state (PV-04.4)
+  const [colorPreset, setColorPreset] = useState<'Viridis' | 'BlueRed' | 'Grayscale'>('Viridis');
+
+  // Scalar range state (PV-04.6)
+  const [scalarRangeMode, setScalarRangeMode] = useState<'auto' | 'manual'>('auto');
+  const [scalarMin, setScalarMin] = useState<number>(0);
+  const [scalarMax, setScalarMax] = useState<number>(1);
+
+  // Scalar bar visibility state (PV-04.5)
+  const [showScalarBar, setShowScalarBar] = useState<boolean>(true);
 
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -315,6 +334,9 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
         return (
           <div className="viewer-canvas-container">
             {renderFieldSelector()}
+            {renderSliceControls()}
+            {renderColorPresetControls()}
+            {renderScalarRangeControls()}
             {renderTimeStepNavigator()}
             <div
               id="paraview-viewport"
@@ -362,6 +384,153 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
           </div>
         );
     }
+  };
+
+  // -------------------------------------------------------------------------
+  // Slice controls (PV-04.3)
+  // -------------------------------------------------------------------------
+  const renderSliceControls = () => {
+    return (
+      <div className="slice-controls">
+        <div className="slice-row">
+          <label className="selector-label">Slice</label>
+          <div className="axis-buttons">
+            {(['X', 'Y', 'Z'] as const).map((axis) => (
+              <button
+                key={axis}
+                className={`axis-btn ${sliceAxis === axis ? 'active' : ''}`}
+                onClick={() => {
+                  setSliceAxis(axis);
+                  sendProtocolMessage(createSliceMessage(axis, sliceOrigin));
+                  sendProtocolMessage(createRenderMessage());
+                }}
+              >
+                {axis}
+              </button>
+            ))}
+            <button
+              className={`axis-btn ${sliceAxis === null ? 'active' : ''}`}
+              onClick={() => {
+                setSliceAxis(null);
+                sendProtocolMessage(createRenderMessage());
+              }}
+            >
+              Off
+            </button>
+          </div>
+        </div>
+        {sliceAxis !== null && (
+          <div className="slice-origin-row">
+            <label className="selector-label">Origin</label>
+            <input
+              type="range"
+              className="origin-slider"
+              min="-5"
+              max="5"
+              step="0.1"
+              value={sliceOrigin[0]}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                const newOrigin: [number, number, number] = [val, 0, 0];
+                setSliceOrigin(newOrigin);
+                sendProtocolMessage(createSliceMessage(sliceAxis, newOrigin));
+                sendProtocolMessage(createRenderMessage());
+              }}
+            />
+            <span className="origin-value">{sliceOrigin[0].toFixed(1)}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // -------------------------------------------------------------------------
+  // Color preset controls (PV-04.4)
+  // -------------------------------------------------------------------------
+  const renderColorPresetControls = () => {
+    const presets: Array<'Viridis' | 'BlueRed' | 'Grayscale'> = ['Viridis', 'BlueRed', 'Grayscale'];
+    return (
+      <div className="color-preset-row">
+        <label className="selector-label">Color</label>
+        <div className="preset-buttons">
+          {presets.map((preset) => (
+            <button
+              key={preset}
+              className={`preset-btn ${colorPreset === preset ? 'active' : ''}`}
+              onClick={() => {
+                setColorPreset(preset);
+                sendProtocolMessage(createColorPresetMessage(preset));
+                sendProtocolMessage(createRenderMessage());
+              }}
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // -------------------------------------------------------------------------
+  // Scalar range controls (PV-04.6)
+  // -------------------------------------------------------------------------
+  const renderScalarRangeControls = () => {
+    return (
+      <div className="scalar-range-row">
+        <label className="selector-label">Range</label>
+        <div className="range-mode-toggle">
+          <button
+            className={`range-btn ${scalarRangeMode === 'auto' ? 'active' : ''}`}
+            onClick={() => {
+              setScalarRangeMode('auto');
+              sendProtocolMessage(createScalarRangeMessage('auto'));
+              sendProtocolMessage(createRenderMessage());
+            }}
+          >
+            Auto
+          </button>
+          <button
+            className={`range-btn ${scalarRangeMode === 'manual' ? 'active' : ''}`}
+            onClick={() => {
+              setScalarRangeMode('manual');
+              sendProtocolMessage(createScalarRangeMessage('manual', scalarMin, scalarMax));
+              sendProtocolMessage(createRenderMessage());
+            }}
+          >
+            Manual
+          </button>
+        </div>
+        {scalarRangeMode === 'manual' && (
+          <div className="manual-range-inputs">
+            <input
+              type="number"
+              className="range-input"
+              value={scalarMin}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                setScalarMin(val);
+                sendProtocolMessage(createScalarRangeMessage('manual', val, scalarMax));
+                sendProtocolMessage(createRenderMessage());
+              }}
+              placeholder="Min"
+            />
+            <span className="range-separator">—</span>
+            <input
+              type="number"
+              className="range-input"
+              value={scalarMax}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                setScalarMax(val);
+                sendProtocolMessage(createScalarRangeMessage('manual', scalarMin, val));
+                sendProtocolMessage(createRenderMessage());
+              }}
+              placeholder="Max"
+            />
+          </div>
+        )}
+      </div>
+    );
   };
 
   // -------------------------------------------------------------------------

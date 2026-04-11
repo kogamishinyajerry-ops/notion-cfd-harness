@@ -109,3 +109,96 @@ export function parseAvailableTimeSteps(response: { id?: string; result?: unknow
   }
   return [];
 }
+
+/**
+ * Create a protocol message to reset the camera to default orientation.
+ * Maps to PV-04.2: Camera reset button.
+ */
+export function createCameraResetMessage(): object {
+  return {
+    id: "pv-camera-reset",
+    method: "view.resetCamera",
+    params: {}
+  };
+}
+
+/**
+ * Create a protocol message to create or update an axis-aligned slice filter.
+ * Maps to PV-04.3: Slice filter with adjustable origin.
+ *
+ * @param axis - "X" | "Y" | "Z" — the plane normal direction
+ * @param origin - [number, number, number] — point the plane passes through
+ */
+export function createSliceMessage(axis: 'X' | 'Y' | 'Z', origin: [number, number, number]): object {
+  const normalMap: Record<string, [number, number, number]> = {
+    X: [1, 0, 0],
+    Y: [0, 1, 0],
+    Z: [0, 0, 1]
+  };
+  return {
+    id: "pv-slice",
+    method: "Slice.Create",
+    params: {
+      input: "OpenFOAMReader",
+      normal: normalMap[axis] ?? [0, 0, 1],
+      origin: origin
+    }
+  };
+}
+
+/**
+ * Create a protocol message to change the color lookup table preset.
+ * Maps to PV-04.4: Color presets — Viridis, BlueRed, Grayscale.
+ *
+ * @param preset - "Viridis" | "BlueRed" | "Grayscale"
+ */
+export function createColorPresetMessage(preset: 'Viridis' | 'BlueRed' | 'Grayscale'): object {
+  return {
+    id: "pv-lut",
+    method: "UpdateLUT",
+    params: {
+      property: "lookupTable",
+      preset: preset
+    }
+  };
+}
+
+/**
+ * Create a protocol message to set the scalar color range.
+ * Maps to PV-04.6: Scalar range — Auto or Manual.
+ *
+ * @param mode - "auto" | "manual"
+ * @param min - minimum value (used in manual mode)
+ * @param max - maximum value (used in manual mode)
+ */
+export function createScalarRangeMessage(mode: 'auto' | 'manual', min?: number, max?: number): object {
+  if (mode === 'auto') {
+    return {
+      id: "pv-range",
+      method: "UpdateScalarRange",
+      params: { mode: "auto" }
+    };
+  }
+  return {
+    id: "pv-range",
+    method: "UpdateScalarRange",
+    params: { mode: "manual", min: min ?? 0, max: max ?? 1 }
+  };
+}
+
+/**
+ * Create a protocol message to show or hide the scalar color bar (legend).
+ * Maps to PV-04.5: Scalar bar with min/max values and labeled ticks.
+ *
+ * @param visible - true to show the scalar bar, false to hide
+ */
+export function createScalarBarMessage(visible: boolean): object {
+  return {
+    id: "pv-scalarbar",
+    method: "CreateScalarBar",
+    params: {
+      visible: visible,
+      component: "ScalarBarWidget"
+    }
+  };
+}
