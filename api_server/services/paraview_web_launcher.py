@@ -29,7 +29,7 @@ try:
     )
 except ImportError:
     # Defaults if config not yet updated (Task 3)
-    PARAVIEW_WEB_IMAGE = "openfoam/openfoam10-paraview510"
+    PARAVIEW_WEB_IMAGE = "cfd-workbench:openfoam-v10"
     PARAVIEW_WEB_IDLE_TIMEOUT_MINUTES = 30
     PARAVIEW_WEB_LAUNCHER_TIMEOUT = 60
     PARAVIEW_WEB_PORT_RANGE_START = 8081
@@ -70,7 +70,7 @@ async def verify_paraview_web_image(image: str = PARAVIEW_WEB_IMAGE) -> tuple[bo
     # Run a lightweight check: try to find the launcher module path
     # Use pvpython -c "import vtk.web.launcher" inside the container
     proc = await asyncio.create_subprocess_exec(
-        docker, "run", "--rm", image,
+        docker, "run", "--rm", "--platform", "linux/amd64", image,
         "pvpython", "-c",
         "import vtk.web.launcher; import os; print(os.path.dirname(vtk.web.launcher.__file__))",
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
@@ -98,6 +98,7 @@ class ParaviewWebManager:
         self._port_allocator: Iterator[int] = iter(self._cycle_ports())
         self._launcher_path: Optional[str] = None
         self._verified: bool = False
+        self._image_built: bool = False
         self._idle_check_interval = 60  # seconds between idle checks
         self._idle_task: Optional[asyncio.Task] = None
 
@@ -135,6 +136,55 @@ class ParaviewWebManager:
         self._launcher_path = msg
         self._verified = True
 
+    async def build_custom_image(self) -> None:
+        """
+        Build the custom cfd-workbench:openfoam-v10 Docker image if not already present.
+
+        Checks local image registry first to avoid rebuilding on every session launch.
+        Builds from Dockerfile at project root on first call, sets _image_built=True.
+
+        Raises:
+            ParaViewWebError: If docker build fails.
+        """
+        if self._image_built:
+            return
+
+        docker = shutil.which("docker")
+        if not docker:
+            raise ParaViewWebError("docker executable not found")
+
+        # Check if image already exists locally
+        inspect_proc = await asyncio.create_subprocess_exec(
+            docker, "image", "inspect", PARAVIEW_WEB_IMAGE,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await inspect_proc.communicate()
+
+        if inspect_proc.returncode == 0:
+            # Image already present — skip build
+            logger.info(f"Custom image {PARAVIEW_WEB_IMAGE} already present, skipping build")
+            self._image_built = True
+            return
+
+        # Build image from project root Dockerfile
+        project_root = "/Users/Zhuanz/Desktop/notion-cfd-harness"
+        logger.info(f"Building custom image {PARAVIEW_WEB_IMAGE} from {project_root}...")
+        build_proc = await asyncio.create_subprocess_exec(
+            docker, "build", "-t", PARAVIEW_WEB_IMAGE, ".",
+            cwd=project_root,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await build_proc.communicate()
+
+        if build_proc.returncode != 0:
+            err = stderr.decode().strip()
+            raise ParaViewWebError(f"Failed to build custom ParaView Web image: {err[:500]}")
+
+        logger.info(f"Custom image {PARAVIEW_WEB_IMAGE} built successfully")
+        self._image_built = True
+
     async def launch_session(
         self,
         session_id: str,
@@ -161,6 +211,9 @@ class ParaviewWebManager:
         # Validate Docker availability
         if not self.validate_docker_available():
             raise ParaViewWebError("Docker daemon is not running or not accessible")
+
+        # Build custom image if not already present (no-op if already built)
+        await self.build_custom_image()
 
         # Verify the image has the required launcher module
         await self._verify_image()
@@ -270,7 +323,11 @@ class ParaviewWebManager:
         port: int,
         case_path: str,
     ) -> str:
-        """Start the ParaView Web Docker container in detached mode."""
+        """Start the ParaView Web Docker container in detached mode.
+
+        Entrypoint is /entrypoint_wrapper.sh (--entrypoint /entrypoint_wrapper.sh)
+        which imports adv_protocols.py before exec'ing pvpython launcher.
+        """
         docker = shutil.which("docker")
         if not docker:
             raise ParaViewWebError("docker executable not found")
@@ -281,14 +338,15 @@ class ParaviewWebManager:
             docker,
             "run",
             "-d",  # detached
+            "--platform", "linux/amd64",
             "--name", container_name,
             "-v", f"{config_path}:/tmp/launcher_config.json:ro",
             "-v", f"{case_path}:/data:ro",
+            "-v", "/Users/Zhuanz/Desktop/notion-cfd-harness/api_server/services/paraview_adv_protocols.py:/tmp/adv_protocols.py:ro",
             "-p", f"{port}:9000",
-            "--entrypoint", "pvpython",
+            "--entrypoint", "/entrypoint_wrapper.sh",
             PARAVIEW_WEB_IMAGE,
-            "lib/site-packages/vtk/web/launcher.py",
-            "/tmp/launcher_config.json",
+            "pvpython", "lib/site-packages/vtkmodules/web/launcher.py", "/tmp/launcher_config.json",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
