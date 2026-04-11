@@ -72,10 +72,13 @@ class JobService:
 
         if submission.async_mode:
             # Schedule async execution
-            asyncio.create_task(self._execute_job_async(job_id, submission))
+            task = asyncio.create_task(self._execute_job_async(job_id, submission))
         else:
             # Run synchronously
-            asyncio.create_task(self._execute_job_async(job_id, submission))
+            task = asyncio.create_task(self._execute_job_async(job_id, submission))
+
+        # Track active job for cancel/abort support (CR-01 fix)
+        _ACTIVE_JOBS[job_id] = ActiveJob(task=task, container_id=None)
 
         logger.info(f"Submitted job: {job_id} (async={submission.async_mode})")
         return job
@@ -204,9 +207,11 @@ class JobService:
                 residual_callback=detector,
             )
 
-            # Store container_id in _ACTIVE_JOBS for abort support
-            if job_id in _ACTIVE_JOBS:
-                _ACTIVE_JOBS[job_id].container_id = streaming_result.container_id
+            # Store container_id in _ACTIVE_JOBS for abort support (WR-04 fix)
+            if job_id in _ACTIVE_JOBS and streaming_result is not None:
+                container_id = getattr(streaming_result, 'container_id', None)
+                if container_id:
+                    _ACTIVE_JOBS[job_id].container_id = container_id
 
             result = streaming_result.solver_result
             return {
