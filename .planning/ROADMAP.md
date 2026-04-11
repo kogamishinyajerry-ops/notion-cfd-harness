@@ -52,7 +52,7 @@
 | 22 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
 | 23 | v1.6.0 | 1/1 | Complete    | 2026-04-11 |
 | 24 | v1.6.0 | 1/1 | Complete    | 2026-04-12 |
-| 25 | v1.6.0 | 1/1 | Planning complete | - |
+| 25 | v1.6.0 | 1/1 | Complete   | 2026-04-11 |
 | 26 | v1.6.0 | 0/1 | Not started | - |
 | 27 | v1.6.0 | 0/1 | Not started | - |
 | 28 | v1.6.0 | 0/1 | Not started | - |
@@ -112,7 +112,7 @@
 4. Multiple concurrent sessions are isolated — dashboard connects to the correct trame instance via auth key routing
 
 **Plans:**
-- [x] 25-01-PLAN.md — TrameSessionManager replacing ParaViewWebManager, Docker lifecycle, idle timeout
+1/1 plans complete
 
 ### Phase 26: Vue Frontend + Iframe Bridge
 
