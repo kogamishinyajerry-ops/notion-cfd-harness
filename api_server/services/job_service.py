@@ -121,6 +121,21 @@ class JobService:
                 "job": self._job_to_dict(job),
             })
 
+            # Auto-launch ParaView Web session for completed jobs with output_dir
+            if result.get("output_dir"):
+                try:
+                    from api_server.services.paraview_web_launcher import get_paraview_web_manager
+                    pv_manager = get_paraview_web_manager()
+                    session = await pv_manager.launch_session(
+                        session_id=f"PVW-{job.job_id}",
+                        case_dir=result["output_dir"],
+                    )
+                    result["paraview_session_id"] = session.session_id
+                    result["paraview_session_url"] = f"ws://localhost:{session.port}/ws"
+                except Exception as e:
+                    logger.warning(f"Failed to create ParaView Web session for job {job.job_id}: {e}")
+                    # Non-fatal: job completed but visualization not auto-launched
+
         except Exception as e:
             job.status = JobStatus.FAILED
             job.completed_at = datetime.utcnow()

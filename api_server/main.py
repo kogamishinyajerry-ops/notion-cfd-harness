@@ -21,7 +21,7 @@ from api_server.config import (
     PORT,
     REDOC_URL,
 )
-from api_server.routers import cases, jobs, knowledge, status, auth, websocket
+from api_server.routers import cases, jobs, knowledge, status, auth, websocket, visualization
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +32,19 @@ APP_START_TIME = time.time()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup/shutdown events."""
+    from api_server.services.paraview_web_launcher import get_paraview_web_manager
+
     logger.info(f"Starting AI-CFD Knowledge Harness API v1.2.0")
     logger.info(f"Server: {HOST}:{PORT}, Debug: {DEBUG}")
+
+    # Start ParaView Web idle monitor
+    pv_manager = get_paraview_web_manager()
+    pv_manager.start_idle_monitor()
+
     yield
+
+    # Stop ParaView Web idle monitor
+    await pv_manager.stop_idle_monitor()
     logger.info("Shutting down AI-CFD Knowledge Harness API")
 
 
@@ -77,6 +87,7 @@ def create_app() -> FastAPI:
     app.include_router(jobs.router, prefix=API_PREFIX, tags=["jobs"])
     app.include_router(knowledge.router, prefix=API_PREFIX, tags=["knowledge"])
     app.include_router(websocket.router, tags=["websocket"])
+    app.include_router(visualization.router, prefix=API_PREFIX, tags=["visualization"])
 
     @app.get("/", tags=["root"])
     async def root():
