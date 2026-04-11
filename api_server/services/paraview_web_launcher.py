@@ -9,16 +9,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import secrets
 import shutil
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Iterator, Literal, Optional
+
+logger = logging.getLogger(__name__)
 
 try:
     from api_server.config import (
         PARAVIEW_WEB_IMAGE,
+        PARAVIEW_WEB_IDLE_TIMEOUT_MINUTES,
         PARAVIEW_WEB_LAUNCHER_TIMEOUT,
         PARAVIEW_WEB_PORT_RANGE_END,
         PARAVIEW_WEB_PORT_RANGE_START,
@@ -26,6 +30,7 @@ try:
 except ImportError:
     # Defaults if config not yet updated (Task 3)
     PARAVIEW_WEB_IMAGE = "openfoam/openfoam10-paraview510"
+    PARAVIEW_WEB_IDLE_TIMEOUT_MINUTES = 30
     PARAVIEW_WEB_LAUNCHER_TIMEOUT = 60
     PARAVIEW_WEB_PORT_RANGE_START = 8081
     PARAVIEW_WEB_PORT_RANGE_END = 8090
@@ -93,6 +98,8 @@ class ParaviewWebManager:
         self._port_allocator: Iterator[int] = iter(self._cycle_ports())
         self._launcher_path: Optional[str] = None
         self._verified: bool = False
+        self._idle_check_interval = 60  # seconds between idle checks
+        self._idle_task: Optional[asyncio.Task] = None
 
     def _cycle_ports(self) -> Iterator[int]:
         """Cycle through the configured port range indefinitely."""
@@ -391,3 +398,53 @@ class ParaviewWebManager:
         if session:
             session.last_activity = datetime.utcnow()
             self._sessions[session_id] = session
+
+    async def _idle_monitor(self) -> None:
+        """Background task: check idle sessions every 60 seconds and shut down expired ones."""
+        while True:
+            await asyncio.sleep(self._idle_check_interval)
+            await self._shutdown_idle_sessions()
+
+    async def _shutdown_idle_sessions(self) -> None:
+        """Stop sessions that have been idle longer than IDLE_TIMEOUT_MINUTES."""
+        now = datetime.utcnow()
+        timeout = timedelta(minutes=PARAVIEW_WEB_IDLE_TIMEOUT_MINUTES)
+        for session_id, session in list(self._sessions.items()):
+            if session.status == "stopping" or session.status == "stopped":
+                continue
+            if now - session.last_activity > timeout:
+                logger.info(f"Idle timeout for session {session_id}, shutting down")
+                await self.shutdown_session(session_id)
+
+    def start_idle_monitor(self) -> None:
+        """Start the background idle monitoring task. Call once at app startup."""
+        if self._idle_task is None:
+            self._idle_task = asyncio.create_task(self._idle_monitor())
+            logger.info("ParaView Web idle monitor started")
+
+    async def stop_idle_monitor(self) -> None:
+        """Stop the background idle monitoring task."""
+        if self._idle_task is not None:
+            self._idle_task.cancel()
+            try:
+                await self._idle_task
+            except asyncio.CancelledError:
+                pass
+            self._idle_task = None
+            logger.info("ParaView Web idle monitor stopped")
+
+
+# =============================================================================
+# Singleton
+# =============================================================================
+
+
+_paraview_web_manager: Optional[ParaviewWebManager] = None
+
+
+def get_paraview_web_manager() -> ParaviewWebManager:
+    """Get or create the singleton ParaviewWebManager instance."""
+    global _paraview_web_manager
+    if _paraview_web_manager is None:
+        _paraview_web_manager = ParaviewWebManager()
+    return _paraview_web_manager
