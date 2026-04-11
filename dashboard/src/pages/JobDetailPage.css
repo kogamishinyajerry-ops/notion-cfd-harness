@@ -338,3 +338,16 @@
 .result-summary-wrapper {
   margin: 2rem 0;
 }
+
+.viewer-view {
+  padding: 0;
+}
+
+.viewer-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}

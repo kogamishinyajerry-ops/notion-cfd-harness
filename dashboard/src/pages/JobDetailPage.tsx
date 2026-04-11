@@ -9,6 +9,7 @@ import wsService, { ResidualMessage } from '../services/websocket';
 import type { WebSocketMessage } from '../services/websocket';
 import type { Job, JobLog, JobStatus } from '../services/types';
 import ResultSummaryPanel from '../components/ResultSummaryPanel';
+import ParaViewViewer from '../components/ParaViewViewer';
 import './JobDetailPage.css';
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; className: string }> = {
@@ -62,7 +63,7 @@ export default function JobDetailPage() {
   const [logs, setLogs] = useState<JobLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'logs' | 'output' | 'config'>('logs');
+  const [activeTab, setActiveTab] = useState<'logs' | 'output' | 'config' | 'viewer'>('logs');
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [showResultSummary, setShowResultSummary] = useState(false);
   const [finalResiduals, setFinalResiduals] = useState<{
@@ -306,6 +307,14 @@ export default function JobDetailPage() {
         >
           Configuration
         </button>
+        {job.status === 'completed' && (
+          <button
+            className={`tab-btn ${activeTab === 'viewer' ? 'active' : ''}`}
+            onClick={() => setActiveTab('viewer')}
+          >
+            Viewer
+          </button>
+        )}
       </div>
 
       <div className="tab-content">
@@ -355,6 +364,23 @@ export default function JobDetailPage() {
               <span className="config-label">Case Name</span>
               <span className="config-value">{job.case_name || '-'}</span>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'viewer' && (
+          <div className="viewer-view">
+            {job.result?.output_dir ? (
+              <ParaViewViewer
+                jobId={job.id}
+                caseDir={job.result.output_dir}
+                onError={(reason) => console.error('Viewer error:', reason)}
+                onConnected={() => console.log('Viewer connected')}
+              />
+            ) : (
+              <div className="viewer-empty">
+                <p>No case directory available. Run a job to generate visualization data.</p>
+              </div>
+            )}
           </div>
         )}
       </div>
