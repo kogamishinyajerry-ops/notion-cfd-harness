@@ -12,19 +12,22 @@
 │                     用户交互层 (唯一入口)                         │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  Claude Code (GLM-5.1) ← 你与我对话的唯一窗口                    │
-│  - 掌握所有 Agent 拉起权限                                       │
+│  Claude Code (MiniMax-2.7) ← 你与我对话的唯一窗口               │
+│  - 掌握所有工具调用权限                                         │
 │  - 掌握 Notion API 全权访问                                     │
-│  - 负责任务分配、同步、进度跟踪                                  │
+│  - 负责任务分配、同步、进度跟踪                                 │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
                             │
             ┌───────────────┼───────────────┐
             ↓               ↓               ↓
     ┌───────────┐   ┌───────────┐   ┌───────────┐
-    │  Agent层   │   │  Notion层  │   │  Opus 4.6 │
-    │ (自动拉起)  │   │  (自动同步) │   │ (手动触发) │
+    │  Skill层   │   │  Notion层  │   │  Opus 4.6 │
+    │ (按需拉起)  │   │  (自动同步) │   │ (手动触发) │
     └───────────┘   └───────────┘   └───────────┘
+    GLM-5.1 (glmext.py)   ← 并行开发协助
+    Codex (plugin cmd)    ← 代码审查
+    MiniMax-2.7 (Agent)   ← 辅助任务
 ```
 
 ---
@@ -33,13 +36,54 @@
 
 ### 模型能力映射
 
-| 模型 | 主要能力 | 典型任务 | Agent类型 |
-|------|----------|----------|-----------|
-| **GPT-5.4** | 最强推理 | 架构设计、复杂决策、根因分析 | planner, chief-of-staff |
-| **GPT-5.3-codex** | 代码专项 | 核心算法实现、复杂功能开发 | codex-rescue |
-| **GLM-5.1** | 平衡型 | 主对话、任务编排、测试用例 | 主驱动 |
-| **Minimax-2.7** | 快速响应 | 简单任务、辅助验证 | support |
-| **Opus 4.6** | 架构审查 | 设计审查、关键点决策 | 🛑 手动触发 |
+| 模型 | 主要能力 | 典型任务 | 调用方式 |
+|------|----------|----------|----------|
+| **GPT-5.4** | 最强推理 | 架构设计、复杂决策、根因分析 | Codex plugin → `/codex:rescue` |
+| **GLM-5.1** | 平衡型 | 前端/后端开发、研究调研 | Skill `/glm-execute` |
+| **MiniMax-2.7** | 快速响应 | 主对话调度、辅助验证、简单任务 | 直接执行 (我) |
+| **Opus 4.6** | 架构审查 | 设计审查、关键点决策 | 🛑 Notion 手动触发 |
+
+---
+
+## 🔌 实际调用方式（Plugin/Skill/Command）
+
+> ⚠️ **关键说明**: GLM-5.1 和 Codex 都通过 **Plugin/Skill/Command** 调用，不是 Agent tool 子类型。
+> MiniMax-2.7 的 Agent tool 只接受 `sonnet/opus/haiku`，无法拉起 GLM 或 Codex。
+
+### GLM-5.1 (智谱)
+
+| 调用方式 | 命令/路径 |
+|---------|----------|
+| **Skill** | `/glm-execute` |
+| **直接调用** | `python3 glmext.py "<prompt>"` |
+| **环境变量** | `ZHIPU_API_KEY` (已配置) |
+| **脚本位置** | `/Users/Zhuanz/Desktop/notion-cfd-harness/glmext.py` |
+| **任务类型** | `--task TASK_DECOMPOSE` / `--task M1_3_WIZARD` / `--task VALIDATE_GATE` |
+| **注意** | 额度耗尽报 1113 错误；不要用 Agent tool 拉起（不支持） |
+
+### Codex (GPT-5.4)
+
+| 调用方式 | 命令 |
+|---------|------|
+| **插件** | `codex@openai-codex` |
+| **命令组** | `/codex:setup`, `/codex:status`, `/codex:review`, `/codex:rescue`, `/codex:result` |
+| **直接调用** | `node ~/.claude/plugins/marketplaces/openai-codex/plugins/codex/scripts/codex-companion.mjs <command>` |
+| **Agent 子类型** | `codex-rescue` (via Codex plugin agent, not Agent tool) |
+
+### Opus 4.6
+
+| 调用方式 | 命令 |
+|---------|------|
+| **方式** | 只能在 Notion 里手动 @ 触发 |
+| **提示词** | Claude Code 提供模板 → 用户粘贴到 Notion → Opus 回复 → 粘贴回 Claude |
+
+### MiniMax-2.7 (Claude Code Agent — 我)
+
+| 调用方式 | 命令 |
+|---------|------|
+| **Agent tool** | `subagent_type: general-purpose, model: sonnet/opus/haiku` |
+| **主会话** | 我就是 MiniMax-2.7，主对话入口 |
+| **辅助任务** | 并行验证、grep搜索、文件读取等简单任务 |
 
 ### 任务类型 → 模型路由
 
@@ -51,29 +95,13 @@
                     ┌──────────────────┼──────────────────┐
                     ↓                  ↓                  ↓
             ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-            │  架构相关     │  │  核心实现     │  │  测试/辅助    │
+            │  架构相关     │  │  核心实现     │  │  前端/后端    │
             └──────────────┘  └──────────────┘  └──────────────┘
                     │                  │                  │
                     ↓                  ↓                  ↓
-            🛑 OPUS 4.6        GPT-5.3-codex        GLM-5.1
-            (手动触发)         (自动拉起)           (自动拉起)
-                                或                   或
-                              GPT-5.4            Minimax-2.7
-                              (自动拉起)           (自动拉起)
-```
+            🛑 OPUS 4.6        Codex plugin        GLM-5.1
+            (Notion手动)       /codex:rescue        /glm-execute
 
-### 具体路由规则
-
-| 任务类型 | 默认模型 | 备选模型 | 触发方式 |
-|----------|----------|----------|----------|
-| **架构设计/审查** | Opus 4.6 | GPT-5.4 | 🛑 手动 |
-| **核心算法实现** | GPT-5.3-codex | GPT-5.4 | 自动 |
-| **测试用例编写** | GLM-5.1 | Minimax-2.7 | 自动 |
-| **Bug 修复** | GPT-5.3-codex | GPT-5.4 | 自动 |
-| **文档生成** | GLM-5.1 | Minimax-2.7 | 自动 |
-| **代码审查** | Opus 4.6 | GPT-5.4 | 🛑 手动 |
-| **性能优化** | GPT-5.4 | GPT-5.3-codex | 自动 |
-| **重构决策** | Opus 4.6 | GPT-5.4 | 🛑 手动 |
 
 ---
 
@@ -111,9 +139,10 @@
 4. 建议的下一步是什么？
 
 【约束】
-- 已完成组件: Physics Planner (53/53测试), Mesh Builder (24/24), Solver Runner (30/30)
-- 模型分工: Codex(核心) + GLM-5.1(测试) + Opus 4.6(审查)
-- Phase 2/3 边界待确定
+- 项目: notion-cfd-harness (AI-CFD Knowledge Harness)
+- 当前里程碑: v1.6.0 (ParaView Web → Trame Migration)
+- 已完成里程碑: M1, v1.1.0, v1.2.0, v1.3.0, v1.4.0, v1.5.0
+- 模型分工: MiniMax-2.7(调度) + GLM-5.1(/glm-execute) + Codex(/codex:*) + Opus 4.6(Notion手动)
 ```
 
 ---
@@ -162,4 +191,5 @@
 
 **版本历史**
 - v1.0 (2026-04-08): 初始冻结版本
+- v1.1 (2026-04-11): 更新调用方式，补充 Plugin/Skill/Command 实际路径
 

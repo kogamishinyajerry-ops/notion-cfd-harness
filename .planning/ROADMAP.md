@@ -50,7 +50,7 @@
 | 20 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
 | 21 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
 | 22 | v1.5.0 | 1/1 | Complete | 2026-04-11 |
-| 23 | v1.6.0 | 1/1 | Planned | - |
+| 23 | v1.6.0 | 1/1 | Complete    | 2026-04-11 |
 | 24 | v1.6.0 | 0/1 | Not started | - |
 | 25 | v1.6.0 | 0/1 | Not started | - |
 | 26 | v1.6.0 | 0/1 | Not started | - |
@@ -76,7 +76,7 @@
 4. `import trame; import trame_vtk; import trame_vuetify` succeeds inside the container with no conflicts against ParaView 5.10 Python environment
 
 **Plans:**
-- [ ] 23-01-PLAN.md — Trame backend skeleton: Dockerfile update, trame_server.py creation, end-to-end verification
+1/1 plans complete
 
 ### Phase 24: RPC Protocol Migration
 
