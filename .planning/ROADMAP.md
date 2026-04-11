@@ -8,7 +8,7 @@
 - [x] **v1.3.0** — Real-time Convergence Monitoring (shipped 2026-04-11)
 - [x] **v1.4.0** — ParaView Web 3D Visualization (shipped 2026-04-11)
 - [x] **v1.5.0** — Advanced Visualization (Phases 19-22, shipped 2026-04-11)
-- [ ] **v1.6.0** — ParaView Web to Trame Migration (Phases 23-28)
+- [x] **v1.6.0** — ParaView Web to Trame Migration (Phases 23-28, shipped 2026-04-12)
 
 ## v1.6.0 — ParaView Web to Trame Migration
 
@@ -19,8 +19,8 @@
 - [x] **Phase 24: RPC Protocol Migration** — All 7 @exportRpc converted to @ctrl.add/@state.change, UUID filter registry
 - [x] **Phase 25: Session Manager Adaptation** — TrameSessionManager replacing ParaViewWebManager, Docker lifecycle
 - [x] **Phase 26: Vue Frontend + Iframe Bridge** — Vue.js viewer, CFDViewerBridge.ts, postMessage wiring
-- [ ] **Phase 27: Integration + Feature Parity** — End-to-end validation of all v1.4.0/v1.5.0 features
-- [ ] **Phase 28: Cleanup + Old File Removal** — Delete all ParaView Web artifacts
+- [x] **Phase 27: Integration + Feature Parity** — End-to-end validation of all v1.4.0/v1.5.0 features
+- [x] **Phase 28: Cleanup + Old File Removal** — Delete all ParaView Web artifacts
 
 </details>
 
@@ -54,8 +54,8 @@
 | 24 | v1.6.0 | 1/1 | Complete    | 2026-04-12 |
 | 25 | v1.6.0 | 1/1 | Complete   | 2026-04-11 |
 | 26 | v1.6.0 | 2/2 | Complete    | 2026-04-11 |
-| 27 | v1.6.0 | 0/2 | Not started | - |
-| 28 | v1.6.0 | 0/1 | Not started | - |
+| 27 | v1.6.0 | 2/2 | Complete | 2026-04-12 |
+| 28 | v1.6.0 | 1/1 | Complete | 2026-04-12 |
 
 ---
 
