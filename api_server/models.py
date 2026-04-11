@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -210,3 +210,41 @@ class LogoutResponse(BaseModel):
     """Logout response"""
     message: str = Field(..., description="Logout status message")
     sessions_terminated: int = Field(default=0, description="Number of sessions terminated")
+
+
+# =============================================================================
+# Convergence Models
+# =============================================================================
+
+class ConvergenceMessage(BaseModel):
+    """Real-time convergence data streamed during job execution."""
+    type: Literal["residual"] = "residual"
+    job_id: str
+    iteration: int
+    time_value: float
+    residuals: Dict[str, float]  # e.g., {"p": 1.23e-5, "Ux": 4.56e-6, "Uy": 3.21e-6}
+    status: str  # running | converged | diverged | stalled
+    timestamp: datetime
+
+
+# =============================================================================
+# ParaView Web Models
+# =============================================================================
+
+
+class ParaViewWebSession(BaseModel):
+    """ParaView Web session state."""
+    session_id: str = Field(..., description="Unique session identifier")
+    job_id: Optional[str] = Field(default=None, description="Associated job ID")
+    container_id: str = Field(..., description="Docker container ID")
+    port: int = Field(..., description="Host port for WebSocket connection")
+    case_dir: str = Field(..., description="Case directory mounted in container")
+    auth_key: str = Field(..., description="Session authentication key")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
+    last_activity: datetime = Field(default_factory=datetime.utcnow, description="Last activity timestamp")
+    status: Literal["launching", "ready", "active", "stopping", "stopped"] = Field(
+        default="launching", description="Session lifecycle status"
+    )
+
+    class Config:
+        use_enum_values = True
