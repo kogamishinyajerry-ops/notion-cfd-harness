@@ -13,6 +13,9 @@ import {
   createColorPresetMessage,
   createScalarRangeMessage,
   createScalarBarMessage,
+  createVolumeRenderingToggle,
+  createVolumeRenderingStatus,
+  parseVolumeRenderingStatus,
 } from '../services/paraviewProtocol';
 import './ParaViewViewer.css';
 
@@ -104,6 +107,10 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
   // Scalar bar visibility state (PV-04.5)
   const [showScalarBar, setShowScalarBar] = useState<boolean>(true);
 
+  // Volume rendering state (VOL-01.1/01.2/01.3)
+  const [volumeEnabled, setVolumeEnabled] = useState<boolean>(false);
+  const [volumeWarning, setVolumeWarning] = useState<string | null>(null);
+
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -179,6 +186,7 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
         sendProtocolMessage(createOpenFOAMReaderMessage(caseDir));
         sendProtocolMessage(createGetFieldsMessage());
         sendProtocolMessage(createGetTimeStepsMessage());
+        sendProtocolMessage(createVolumeRenderingStatus());
       };
 
       ws.onmessage = (event) => {
@@ -193,6 +201,26 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
               if (!selectedField && fields.length > 0) {
                 setSelectedField(fields[0]);
               }
+            }
+          }
+
+          // Parse volume rendering status response
+          if (message.id === 'pv-volume-status' && message.result) {
+            const status = parseVolumeRenderingStatus(message);
+            if (status) {
+              setVolumeEnabled(status.enabled);
+              // Build warning message
+              const warnings: string[] = [];
+              if (!status.gpu_available && status.gpu_vendor === 'Mesa') {
+                warnings.push('Apple Silicon detected: volume rendering uses Mesa software (slow). Enable GPU for hardware acceleration.');
+              }
+              if (status.gpu_vendor === 'unknown' && !status.gpu_available) {
+                warnings.push('No GPU detected: volume rendering unavailable.');
+              }
+              if (status.cell_count_warning) {
+                warnings.push(`Large dataset (${(status.cell_count / 1e6).toFixed(1)}M cells): may cause memory issues.`);
+              }
+              setVolumeWarning(warnings.length > 0 ? warnings.join(' ') : null);
             }
           }
 
@@ -336,6 +364,7 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
             {renderFieldSelector()}
             {renderSliceControls()}
             {renderColorPresetControls()}
+            {renderVolumeControls()}
             {renderScalarRangeControls()}
             {renderTimeStepNavigator()}
             <div
@@ -466,6 +495,42 @@ export default function ParaViewViewer({ jobId, caseDir, onError, onConnected }:
               {preset}
             </button>
           ))}
+        </div>
+      </div>
+    );
+  };
+
+  // -------------------------------------------------------------------------
+  // Volume rendering controls (VOL-01.1/01.2/01.3)
+  // -------------------------------------------------------------------------
+  const renderVolumeControls = () => {
+    return (
+      <div className="volume-controls">
+        {volumeWarning && (
+          <div className="volume-warning-banner">
+            <span className="warning-icon">!</span>
+            <span className="warning-text">{volumeWarning}</span>
+          </div>
+        )}
+        <div className="volume-row">
+          <label className="selector-label">Volume</label>
+          <div className="volume-toggle-wrapper">
+            <button
+              className={`volume-toggle-btn ${volumeEnabled ? 'active' : ''}`}
+              disabled={selectedField === ''}
+              onClick={() => {
+                const newEnabled = !volumeEnabled;
+                setVolumeEnabled(newEnabled);
+                sendProtocolMessage(createVolumeRenderingToggle(selectedField, newEnabled));
+                sendProtocolMessage(createRenderMessage());
+              }}
+            >
+              {volumeEnabled ? 'On' : 'Off'}
+            </button>
+            <span className="volume-hint">
+              {volumeEnabled ? 'Volume rendering active' : 'Surface rendering'}
+            </span>
+          </div>
         </div>
       </div>
     );

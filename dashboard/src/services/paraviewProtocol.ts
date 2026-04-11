@@ -202,3 +202,61 @@ export function createScalarBarMessage(visible: boolean): object {
     }
   };
 }
+
+/**
+ * Create a protocol message to toggle volume rendering on/off.
+ * Maps to VOL-01.1: Volume rendering toggle RPC.
+ *
+ * @param fieldName - Name of the scalar field to render as volume
+ * @param enabled - true to enable volume, false to restore surface
+ */
+export function createVolumeRenderingToggle(fieldName: string, enabled: boolean): object {
+  return {
+    id: "pv-volume-toggle",
+    method: "visualization.volume.rendering.toggle",
+    params: { fieldName, enabled }
+  };
+}
+
+/**
+ * Create a protocol message to query volume rendering status.
+ * Maps to VOL-01.2/01.3: GPU availability and cell count status RPC.
+ */
+export function createVolumeRenderingStatus(): object {
+  return {
+    id: "pv-volume-status",
+    method: "visualization.volume.rendering.status",
+    params: {}
+  };
+}
+
+/**
+ * Volume rendering status response parser.
+ * Maps to VOL-01.2/01.3: GPU warning and cell count warning.
+ */
+export interface VolumeRenderingStatus {
+  enabled: boolean;
+  field_name: string | null;
+  gpu_available: boolean;
+  gpu_vendor: string;
+  cell_count: number;
+  cell_count_warning: boolean;
+}
+
+export function parseVolumeRenderingStatus(response: { id?: string; result?: unknown }): VolumeRenderingStatus | null {
+  if (response && typeof response === 'object') {
+    const r = response as Record<string, unknown>;
+    if (r.result && typeof r.result === 'object') {
+      const result = r.result as Record<string, unknown>;
+      return {
+        enabled: Boolean(result.enabled),
+        field_name: typeof result.field_name === 'string' ? result.field_name : null,
+        gpu_available: Boolean(result.gpu_available),
+        gpu_vendor: typeof result.gpu_vendor === 'string' ? result.gpu_vendor : 'unknown',
+        cell_count: typeof result.cell_count === 'number' ? result.cell_count : 0,
+        cell_count_warning: Boolean(result.cell_count_warning),
+      };
+    }
+  }
+  return null;
+}
