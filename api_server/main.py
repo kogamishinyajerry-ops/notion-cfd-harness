@@ -32,19 +32,19 @@ APP_START_TIME = time.time()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup/shutdown events."""
-    from api_server.services.paraview_web_launcher import get_paraview_web_manager
+    from api_server.services.trame_session_manager import get_trame_session_manager
 
-    logger.info(f"Starting AI-CFD Knowledge Harness API v1.2.0")
+    logger.info(f"Starting AI-CFD Knowledge Harness API v1.6.0")
     logger.info(f"Server: {HOST}:{PORT}, Debug: {DEBUG}")
 
-    # Start ParaView Web idle monitor
-    pv_manager = get_paraview_web_manager()
-    pv_manager.start_idle_monitor()
+    # Start Trame idle monitor
+    trame_manager = get_trame_session_manager()
+    trame_manager.start_idle_monitor()
 
     yield
 
-    # Stop ParaView Web idle monitor
-    await pv_manager.stop_idle_monitor()
+    # Stop Trame idle monitor
+    await trame_manager.stop_idle_monitor()
     logger.info("Shutting down AI-CFD Knowledge Harness API")
 
 
