@@ -34,7 +34,8 @@
 3. Custom entrypoint wrapper script imports `adv_protocols.py` programmatically before `launcher.py` starts the wslink server (import ordering guaranteed)
 4. If `adv_protocols.py` has an import error, container startup fails with a user-facing error message surfaced in the Dashboard viewer area
 
-**Plans**: TBD
+**Plans:**
+- [ ] 19-01-PLAN.md — Container integration: custom entrypoint wrapper, adv_protocols.py mount, custom image build
 
 **UI hint**: no
 
@@ -55,7 +56,8 @@
 3. Server checks cell count and shows a warning banner when dataset exceeds 2M cells (OOM risk)
 4. Volume rendering uses Smart Volume Mapper (adaptive) confirmed in protocol code
 
-**Plans**: TBD
+**Plans:**
+- [ ] 19-01-PLAN.md — Container integration: custom entrypoint wrapper, adv_protocols.py mount, custom image build
 
 **UI hint**: yes
 
@@ -76,7 +78,8 @@
 3. UI remains responsive during screenshot capture (button disabled + spinner, no frozen interactions)
 4. Rapid clicks within 500ms produce only one screenshot (debounce active)
 
-**Plans**: TBD
+**Plans:**
+- [ ] 19-01-PLAN.md — Container integration: custom entrypoint wrapper, adv_protocols.py mount, custom image build
 
 **UI hint**: yes
 
@@ -99,7 +102,8 @@
 5. User updates filter parameters (threshold value, isovalue) and the filter re-renders immediately
 6. Multiple filters (e.g., Clip + Contour + Streamlines) are visible simultaneously in the viewport
 
-**Plans**: TBD
+**Plans:**
+- [ ] 19-01-PLAN.md — Container integration: custom entrypoint wrapper, adv_protocols.py mount, custom image build
 
 **UI hint**: yes
 
@@ -127,7 +131,7 @@
 | 16 | v1.4.0 | 2/2 | Complete | 2026-04-11 |
 | 17 | v1.4.0 | 2/2 | Complete | 2026-04-11 |
 | 18 | v1.4.0 | 1/1 | Complete   | 2026-04-11 |
-| 19 | v1.5.0 | 0/1 | Not started | - |
+| 19 | v1.5.0 | 1/1 | Not started | - |
 | 20 | v1.5.0 | 0/1 | Not started | - |
 | 21 | v1.5.0 | 0/1 | Not started | - |
 | 22 | v1.5.0 | 0/1 | Not started | - |
