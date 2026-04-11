@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1.0
-milestone_name: milestone
-status: v1.3.0 milestone complete
-last_updated: "2026-04-11T03:18:15.240Z"
+milestone: v1.4.0
+milestone_name: ParaView Web 3D Visualization
+status: Planning
+last_updated: "2026-04-11"
 progress:
-  total_phases: 7
-  completed_phases: 6
-  total_plans: 20
-  completed_plans: 17
-  percent: 85
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # State
@@ -18,73 +18,31 @@ progress:
 
 - **Name**: AI-CFD Knowledge Harness
 - **Root**: /Users/Zhuanz/Desktop/notion-cfd-harness
-- **Version**: v1.3.0 (Planning)
-- **Milestone**: v1.3.0 — Real-time Convergence Monitoring
+- **Version**: v1.4.0 (Planning)
+- **Milestone**: v1.4.0 — ParaView Web 3D Visualization
 
-## v1.3.0 Scope
+## v1.4.0 Scope
 
 ### Target Features
 
-- **MON-01**: 仿真进程残差数据 WebSocket 推送（从 OpenFOAM 日志解析，≤500ms debounce）
-- **MON-02**: Dashboard 实时残差曲线（Recharts LineChart，随迭代更新）
-- **MON-03**: Job detail 页面收敛监控面板
-- **MON-04**: 收敛完成后自动展示结果摘要（压力、速度、Y+）
-- **MON-05**: Job abort 按钮（停止运行中仿真）
-- **MON-06**: 收敛异常检测 + 告警（divergence detection）
-
-## Phase Structure
-
-### Phase 12: Residual Streaming Backend ✅ COMPLETED
-
-- **Goal**: OpenFOAM log residual parser + WebSocket streaming + job abort
-- **Depends on**: Phase 11
-- **Requirements**: MON-01, MON-05
-- **Plans**: 12-01, 12-02, 12-03 (all completed)
-- **Key decisions**:
-  - Remove --rm from Docker for abort support
-  - ResidualStreamer as asyncio.Task alongside solver subprocess
-  - Debounce to 500ms
-  - ConvergenceMessage Pydantic model for WebSocket broadcast
-
-### Phase 13: Real-time Convergence Frontend ✅ COMPLETED
-
-- **Goal**: Dashboard real-time residual charts + Job detail page
-- **Depends on**: Phase 12
-- **Requirements**: MON-02, MON-03
-- **Plans**: 13-01 ✅, 13-02 ✅ (all completed)
-- **Key decisions**:
-  - Recharts (already installed) for LineChart
-  - Log-scale Y-axis (1e-8 to 1e-1)
-  - 500-point sliding window (FIFO)
-  - Wave 1: WS subscription + ResidualChart component
-  - Wave 2: Job detail page convergence panel
-
-### Phase 14: Convergence Intelligence ✅ COMPLETED
-
-- **Goal**: Divergence detection + result summary
-- **Depends on**: Phase 13
-- **Requirements**: MON-04, MON-06
-- **Plans**: 14-01 ✅ (backend divergence detection), 14-02 ✅ (frontend result summary) — All completed
-- **Key decisions**:
-  - Rolling 5-iteration window per variable for divergence detection
-  - Divergence alert fires when residual increases 5 consecutive times
-  - Convergence criteria overlay at 1e-5
-  - DivergenceDetector wraps residual_callback without breaking existing behavior
+- **PV-01**: ParaView Web server integration (launch + lifecycle management)
+- **PV-02**: Dashboard embedded 3D viewer (React + ParaView Web client)
+- **PV-03**: Case result loading and field selection (velocity/pressure scalar fields)
+- **PV-04**: Basic interaction (rotation, zoom, slicing, color mapping)
 
 ## Requirements Traceability
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| MON-01 | 12 | ✅ Complete |
-| MON-02 | 13 | ✅ Complete |
-| MON-03 | 13 | ✅ Complete |
-| MON-04 | 14 | ✅ Complete |
-| MON-05 | 12 | ✅ Complete |
-| MON-06 | 14 | ✅ Complete |
+| PV-01 | TBD | Planning |
+| PV-02 | TBD | Planning |
+| PV-03 | TBD | Planning |
+| PV-04 | TBD | Planning |
 
 ## Milestone History
 
 - **M1**: Phases 1-7 (shipped 2026-04-07)
 - **v1.1.0**: Phases 8-9 (shipped 2026-04-10) — CaseGenerator v2 + Report Automation
 - **v1.2.0**: Phases 10-11 (shipped 2026-04-10) — REST API + Web Dashboard
-- **v1.3.0**: Phases 12-14 (in progress) — Real-time Convergence Monitoring
+- **v1.3.0**: Phases 12-14 (shipped 2026-04-11) — Real-time Convergence Monitoring
+- **v1.4.0**: TBD (planning) — ParaView Web 3D Visualization

@@ -46,13 +46,19 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 
 ---
 
-## v1.4.0 — Next Milestone (TBD)
+## v1.4.0 — ParaView Web 3D Visualization
 
-**Goal:** TBD
+**Goal:** Embed ParaView Web viewer in Dashboard for interactive 3D CFD field visualization (velocity, pressure)
+
+**Target features:**
+- **PV-01**: ParaView Web server integration (launch + lifecycle management)
+- **PV-02**: Dashboard embedded 3D viewer (React + ParaView Web client)
+- **PV-03**: Case result loading and field selection (velocity/pressure scalar fields)
+- **PV-04**: Basic interaction (rotation, zoom, slicing, color mapping)
 
 ## Evolution
 
-*Last updated: 2026-04-11 after v1.3.0 milestone*
+*Last updated: 2026-04-11 — v1.4.0 started (ParaView Web 3D Visualization)*
 
 **After each phase transition** (via `/gsd-transition`):
 1. Requirements invalidated? → Move to Out of Scope with reason
