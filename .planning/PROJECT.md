@@ -20,7 +20,7 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 - **REST API Server**: FastAPI exposing all CLI functionality
 - **Web Dashboard**: React-based UI for case management
 - **Real-time Convergence Monitoring**: WebSocket residual streaming + DivergenceDetector
-- **ParaView Web 3D Visualization**: Embedded interactive CFD viewer with slice/color controls, volume rendering, advanced filters, screenshot export (v1.4.0 + v1.5.0)
+- **ParaView Web 3D Visualization**: Embedded interactive CFD viewer (v1.4.0+v1.5.0) — migrating to trame (v1.6.0)
 
 ## Milestones
 
@@ -79,9 +79,25 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 
 **Archive:** `.planning/milestones/v1.5.0-ROADMAP.md`
 
-## v1.6.0 — Next Milestone (Planning)
+## v1.6.0 — ParaView Web → Trame Migration (Planning)
 
-**Status:** Planning started
+**Goal:** Replace ParaView Web infrastructure (wslink/vtkmodules/web) with trame (Kitware's official successor), achieving full feature parity with a modern reactive state architecture.
+
+**Target features:**
+- **TRAME-01**: Trame backend skeleton (trame + trame-vtk + trame-vuetify in Docker)
+- **TRAME-02**: RPC protocol migration (@exportRpc → @ctrl.add/@state.change, 13 RPCs)
+- **TRAME-03**: FastAPI Session Manager adaptation (TrameSessionManager replacing ParaViewWebManager)
+- **TRAME-04**: Vue.js frontend + React iframe bridge (CFDViewerBridge.ts + postMessage)
+- **TRAME-05**: Integration + feature parity validation
+- **TRAME-06**: Cleanup + old ParaView Web file removal
+
+**Research:** `.planning/research/SUMMARY.md` (4 agents + synthesizer, commit `291cccc`)
+
+**Key risks:**
+- No official migration guide — full rewrite, not port
+- React dashboard must embed Vue.js viewer as iframe (postMessage bridge)
+- `InvokeEvent` calls have no trame equivalent — must be replaced with state mutation
+- Filter `id()` registry keys are unstable across restarts — need UUID replacement
 
 ## Evolution
 

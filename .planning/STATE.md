@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.5.0
-milestone_name: — Advanced Visualization
-status: completed
-last_updated: "2026-04-11T14:52:35.612Z"
+milestone: v1.6.0
+milestone_name: — ParaView Web → Trame Migration
+status: defining_requirements
+last_updated: "2026-04-11T23:30:00.000Z"
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_phases: 6
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # State
@@ -18,91 +18,33 @@ progress:
 
 - **Name**: AI-CFD Knowledge Harness
 - **Root**: /Users/Zhuanz/Desktop/notion-cfd-harness
-- **Version**: v1.5.0
-- **Milestone**: v1.5.0 — Advanced Visualization (Shipped)
+- **Version**: v1.6.0
+- **Milestone**: v1.6.0 — ParaView Web → Trame Migration
 
 ## Current Position
 
-**Active milestone:** v1.5.0 Advanced Visualization
-**Active phase:** 22 — Advanced Filters (COMPLETE)
-**Plan:** 22-01-PLAN.md
-**Status:** v1.5.0 milestone complete
+**Active milestone:** v1.6.0 ParaView Web → Trame Migration
+**Active phase:** Not started (defining requirements)
+**Status:** Research complete — 4/4 agents + synthesizer done
+**Next:** Requirements → Roadmap
 
-**Progress bar:**
+## Research Summary
 
-```
-[ Phase 19 ]------ Phase 20 ----- Phase 21 ----- Phase 22 -----
-  100%               100%           100%           100%
-```
+Research completed (4 agents + synthesizer, commit `291cccc`):
+- **Stack:** trame 3.12.0 + trame-vtk 2.11.6 + trame-vuetify 3.2.1, Python 3.9 compatible
+- **Key change:** @exportRpc → @ctrl.add/@state.change, React → Vue.js iframe, entrypoint_wrapper.sh → pvpython app.py
+- **Risk:** No official migration guide exists; full rewrite not port
+- **Open questions:** VtkLocalView Apple Silicon WebGL, html_view.screenshot resolution, multi-session isolation
 
-## Milestone History
+## v1.6.0 Goals
 
-- **M1**: Phases 1-7 (shipped 2026-04-07)
-- **v1.1.0**: Phases 8-9 (shipped 2026-04-10) — CaseGenerator v2 + Report Automation
-- **v1.2.0**: Phases 10-11 (shipped 2026-04-10) — REST API + Web Dashboard
-- **v1.3.0**: Phases 12-14 (shipped 2026-04-11) — Real-time Convergence Monitoring
-- **v1.4.0**: Phases 15-18 (shipped 2026-04-11) — ParaView Web 3D Visualization
-
-## v1.5.0 Goals
-
-- **VOL-01**: Volume Rendering for 3D scalar fields
-- **FILT-01**: Advanced Filters (Clip, Contour, Streamlines)
-- **SHOT-01**: Screenshot Export (PNG)
-
-## What This Is
-
-v1.5.0 adds three capability clusters to the existing ParaView Web viewer: GPU volume rendering, advanced filters (Clip/Contour/StreamTracer), and screenshot PNG export. Zero new Docker images or npm packages required. All infrastructure already exists in `openfoam/openfoam10-paraview510`.
-
-## Key Constraints
-
-- Custom protocols must be registered BEFORE first WS connection (container integration is the foundation for all other phases)
-- Apple Silicon: `--platform linux/amd64` means GPU unavailable — volume rendering silently falls back to Mesa software rendering
-- GPU memory exhaustion on large datasets (>2M cells) — must check cell count before enabling volume rendering
-
-## Phase Dependencies
-
-- Phase 19 (Container Integration) unlocks all subsequent phases
-- Phase 20 (Volume Rendering) and Phase 21 (Screenshot) both depend on Phase 19
-- Phase 22 (Filters) depends on Phase 19
-- Phase 20 and Phase 21 can be planned/executed in parallel once Phase 19 is complete
-
----
-
-## Key Decisions
-
-| Phase | Decision | Rationale |
-|-------|----------|-----------|
-| All | 4 phases (19-22) for v1.5.0 | Aligned with natural delivery boundaries: integration -> volume -> screenshot -> filters |
-| 19 | Phase 1 = container integration | Protocol registration timing is the highest-risk pitfall; solve it first as the foundation |
-| 20 | Apple Silicon graceful degradation | Cannot detect GPU reliably with `--platform linux/amd64`; show explicit user warning |
-| 20 | Smart Volume Mapper for volume rendering | Adaptive, handles larger datasets better than basic GPU ray cast |
-
-## Open Risks
-
-| Risk | Phase | Mitigation |
-|------|-------|------------|
-| Protocol import timing — must test import sequence in actual container | 19 | Custom entrypoint wrapper that imports before launcher.py |
-| Apple Silicon EGL vendor strings — need field verification | 20 | Check `eglinfo \| grep "EGL vendor"` at startup |
-| GPU memory thresholds for CFD volume — literature says ~2M cells OK, beyond unknown | 20 | Cell count check + user warning + memory limits |
-| Screenshot blocks WS event loop on large datasets | 21 | Async UX (disable + spinner), debounce, consider background thread |
+- **TRAME-01**: Trame backend skeleton in Docker
+- **TRAME-02**: RPC protocol migration (all 13 RPCs)
+- **TRAME-03**: FastAPI Session Manager adaptation
+- **TRAME-04**: Vue.js frontend + React iframe bridge
+- **TRAME-05**: Integration + feature parity
+- **TRAME-06**: Cleanup + old file removal
 
 ## Blockers
 
-None — planning phase complete
-
----
-
-## Session Continuity
-
-**Last updated:** 2026-04-11
-
-### Current work
-
-- Phase 22 (Advanced Filters) COMPLETE — 4 tasks executed, 2 commits
-- Phase 22-01 plan: committed, ParaViewWebAdvancedFilters protocol + AdvancedFilterPanel.tsx + wiring
-- v1.5.0 milestone: ALL 4 PHASES COMPLETE (19, 20, 21, 22)
-
-### Before implementing Phase 22
-
-- Confirm `OpenFOAMReader.GetPropertyList` returns usable integer proxyId
-- Verify `simple.StreamTracer()` seed type compatibility with blockMesh geometry
+None — research complete, awaiting user confirmation to proceed
