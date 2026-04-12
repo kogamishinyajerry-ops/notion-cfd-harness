@@ -33,7 +33,7 @@ User can create, read, update, and delete pipeline definitions via REST API.
 
 **Traceability:** PO-01b (DAG with branches)
 **Priority:** Must have
-**Phase:** 1
+**Phase:** 29
 
 ---
 
@@ -54,7 +54,7 @@ Pipeline executes steps according to DAG dependency order, with a defined state 
 
 **Traceability:** PO-01b (DAG with branches)
 **Priority:** Must have
-**Phase:** 2
+**Phase:** 30
 
 ---
 
@@ -77,7 +77,7 @@ Each wrapped component returns a structured result object — not just an exit c
 
 **Traceability:** PO-01b + PITFALL 2.1
 **Priority:** Must have
-**Phase:** 2
+**Phase:** 30
 
 ---
 
@@ -99,7 +99,7 @@ Pipeline orchestrates existing components by calling their existing APIs.
 
 **Traceability:** PO-01b + PITFALL 2.2
 **Priority:** Must have
-**Phase:** 2
+**Phase:** 30
 
 ---
 
@@ -120,7 +120,7 @@ Dashboard receives real-time pipeline events via WebSocket.
 
 **Traceability:** PO-01b + PITFALL 2.3
 **Priority:** Must have
-**Phase:** 2
+**Phase:** 30
 
 ---
 
@@ -141,7 +141,7 @@ Pipeline abort/cancel cleans up all resources started by that pipeline.
 
 **Traceability:** PO-01b + PITFALL 4.1
 **Priority:** Must have
-**Phase:** 2
+**Phase:** 30
 
 ---
 
@@ -160,7 +160,7 @@ Blocking I/O (OpenFOAM file I/O, mesh generation) does not block the FastAPI eve
 
 **Traceability:** PO-01b + PITFALL 3.1, 5.1
 **Priority:** Must have
-**Phase:** 2
+**Phase:** 30
 
 ---
 
@@ -186,7 +186,7 @@ REST API exposes pipeline CRUD and control operations.
 
 **Traceability:** PO-01b
 **Priority:** Must have
-**Phase:** 3
+**Phase:** 31
 
 ---
 
@@ -205,7 +205,7 @@ Dashboard exposes pipeline management and monitoring UI.
 
 **Traceability:** PO-01b
 **Priority:** Must have
-**Phase:** 3
+**Phase:** 31
 
 ---
 
@@ -228,7 +228,7 @@ User can define and execute a parametric sweep: one pipeline template, N paramet
 
 **Traceability:** PO-02a
 **Priority:** Must have
-**Phase:** 4
+**Phase:** 32
 
 ---
 
@@ -249,7 +249,7 @@ User can compare multiple completed cases: convergence curves overlay, delta fie
 
 **Traceability:** PO-03
 **Priority:** Should have
-**Phase:** 6
+**Phase:** 34
 
 ---
 
@@ -270,7 +270,7 @@ Dashboard provides UI for selecting cases, running comparison, and viewing resul
 
 **Traceability:** PO-03
 **Priority:** Should have
-**Phase:** 6
+**Phase:** 34
 
 ---
 
@@ -292,7 +292,7 @@ Dashboard displays pipeline as an interactive DAG with live status updates.
 
 **Traceability:** PO-05 + PITFALL 3.4
 **Priority:** Should have
-**Phase:** 5
+**Phase:** 33
 
 ---
 
@@ -325,12 +325,12 @@ These requirements are out of scope for v1.7.0 but noted for future milestones.
 
 | Phase | Requirements |
 |-------|-------------|
-| 1 | PIPE-01 |
-| 2 | PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07 |
-| 3 | PIPE-08, PIPE-09 |
-| 4 | PIPE-10 |
-| 5 | PIPE-13 |
-| 6 | PIPE-11, PIPE-12 |
+| 29 | PIPE-01 |
+| 30 | PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07 |
+| 31 | PIPE-08, PIPE-09 |
+| 32 | PIPE-10 |
+| 33 | PIPE-13 |
+| 34 | PIPE-11, PIPE-12 |
 
 ---
 

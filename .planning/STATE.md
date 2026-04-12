@@ -2,7 +2,7 @@
 gsd_state_version: 1.0
 milestone: v1.7.0
 milestone_name: Pipeline Orchestration & Automation
-status: defining_requirements
+status: roadmap_created
 last_updated: "2026-04-12"
 ---
 
@@ -17,22 +17,41 @@ last_updated: "2026-04-12"
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Roadmap created — awaiting planning
 Plan: —
 **Active milestone:** v1.7.0 Pipeline Orchestration & Automation
-**Status:** Defining requirements
-**Next:** Requirements gathering in progress
+**Status:** Roadmap defined
+**Next:** `/gsd-plan-phase 29` to begin Phase 29 planning
+
+## Phase Structure (v1.7.0)
+
+| Phase | Name | Requirements | Status |
+|-------|------|-------------|--------|
+| 29 | Foundation — Data Models + SQLite Persistence | PIPE-01 | Not started |
+| 30 | PO-01 Orchestration Engine | PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07 | Not started |
+| 31 | Pipeline REST API + React Dashboard | PIPE-08, PIPE-09 | Not started |
+| 32 | PO-02 Parametric Sweep | PIPE-10 | Not started |
+| 33 | PO-05 DAG Visualization | PIPE-13 | Not started |
+| 34 | PO-03 Cross-Case Comparison | PIPE-11, PIPE-12 | Not started |
 
 ## Active Milestone Context
 
-**Goal:** 将孤立的组件（case generation → solver execution → convergence monitoring → 3D visualization → report generation）串联为端-to-end自动化流水线
+**Goal:** 将孤立的组件（case generation → solver execution → convergence monitoring → 3D visualization → report generation）串联为端到端自动化流水线，一键触发全流程。
 
-**Target features (TBD — requirements in progress):**
-- PO-01: Pipeline 编排引擎
-- PO-02: 批量作业调度
-- PO-03: 跨 case 比较引擎
-- PO-04: Pipeline 状态持久化与恢复
-- PO-05: Pipeline 可视化 DAG
+**Requirements:** 13 total (PIPE-01 through PIPE-13)
+**Coverage:** 13/13 mapped — all requirements assigned to exactly one phase
+
+## Phase 30 Critical Notes (PO-01 Orchestration Engine)
+
+Phase 30 is the **critical path phase** — all 6 requirements (PIPE-02 through PIPE-07) must be addressed together to resolve the following pitfalls identified in research:
+
+1. **PITFALL 2.1 (Critical):** Structured result objects — exit_code alone is insufficient; use `status` enum
+2. **PITFALL 2.2 (Critical):** Docker lifecycle ownership — pipeline vs TrameSessionManager container ownership must be explicitly designed
+3. **PITFALL 2.3 (Critical):** WebSocket connection resilience — server-side buffering with sequence numbers, 30s heartbeat
+4. **PITFALL 5.1 (Critical):** FastAPI BackgroundTasks — pipeline orchestrator must run in dedicated background process, NOT BackgroundTasks
+5. **PITFALL 3.1 (Medium):** Blocking sync in async — use `asyncio.to_thread()` for OpenFOAM I/O
+
+**Docker ownership model decision is required at phase start** — does pipeline own all containers, or does TrameSessionManager retain viewer containers?
 
 ## Key Architecture (from v1.6.0)
 
@@ -46,6 +65,14 @@ Plan: —
 
 None — roadmap ready for planning
 
+## Dependencies
+
+- Phase 30 depends on Phase 29 (data models must exist first)
+- Phase 31 depends on Phase 30 (API/Dashboard need orchestration engine)
+- Phase 32 depends on Phase 30 (SweepRunner uses PO-01)
+- Phase 33 depends on Phase 31 (DAG viewer needs WebSocket infrastructure)
+- Phase 34 depends on Phase 32 (needs completed cases from sweep)
+
 ## Session Continuity
 
-After requirements confirmed: spawn 4 parallel researchers → define requirements → create roadmap
+Roadmap created for v1.7.0. Next step: `/gsd-plan-phase 29` to plan Phase 29 (Foundation — Data Models + SQLite Persistence).
