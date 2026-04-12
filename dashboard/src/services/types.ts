@@ -211,3 +211,43 @@ export interface PipelineListResponse {
   pipelines: Pipeline[];
   total: number;
 }
+
+// Sweep types (PIPE-10)
+export type SweepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export type SweepCaseStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+export interface Sweep {
+  id: string;
+  name: string;
+  description?: string;
+  base_pipeline_id: string;
+  param_grid: Record<string, (string | number)[]>;
+  max_concurrent: number;
+  status: SweepStatus;
+  total_combinations: number;
+  completed_combinations: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SweepCase {
+  id: string;
+  sweep_id: string;
+  param_combination: Record<string, string | number>;
+  combination_hash: string;
+  pipeline_id?: string;
+  status: SweepCaseStatus;
+  result_summary?: {
+    final_residual?: number;
+    execution_time?: number;
+    pipeline_status?: string;
+    error?: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SweepListResponse {
+  sweeps: Sweep[];
+  total: number;
+}

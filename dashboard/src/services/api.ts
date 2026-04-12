@@ -16,6 +16,9 @@ import type {
   PaginatedResponse,
   Pipeline,
   PipelineListResponse,
+  Sweep,
+  SweepCase,
+  SweepListResponse,
 } from './types';
 
 class ApiClient {
@@ -229,6 +232,49 @@ class ApiClient {
 
   async getPipelineEvents(id: string): Promise<unknown[]> {
     return this.request<unknown[]>(`/pipelines/${id}/events`);
+  }
+
+  // Sweeps (PIPE-10)
+  async getSweeps(): Promise<Sweep[]> {
+    const response = await this.request<SweepListResponse>('/sweeps');
+    return response.sweeps;
+  }
+
+  async getSweep(id: string): Promise<Sweep> {
+    return this.request<Sweep>(`/sweeps/${id}`);
+  }
+
+  async createSweep(data: {
+    name: string;
+    description?: string;
+    base_pipeline_id: string;
+    param_grid: Record<string, (string | number)[]>;
+    max_concurrent: number;
+  }): Promise<Sweep> {
+    return this.request<Sweep>('/sweeps', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSweep(id: string): Promise<void> {
+    await this.request(`/sweeps/${id}`, { method: 'DELETE' });
+  }
+
+  async startSweep(id: string): Promise<{ status: string; sweep_id: string }> {
+    return this.request<{ status: string; sweep_id: string }>(`/sweeps/${id}/start`, {
+      method: 'POST',
+    });
+  }
+
+  async cancelSweep(id: string): Promise<{ status: string; sweep_id: string }> {
+    return this.request<{ status: string; sweep_id: string }>(`/sweeps/${id}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  async getSweepCases(sweepId: string): Promise<SweepCase[]> {
+    return this.request<SweepCase[]>(`/sweeps/${sweepId}/cases`);
   }
 }
 
