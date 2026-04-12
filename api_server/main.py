@@ -21,7 +21,7 @@ from api_server.config import (
     PORT,
     REDOC_URL,
 )
-from api_server.routers import cases, jobs, knowledge, status, auth, websocket, visualization, pipelines
+from api_server.routers import cases, jobs, knowledge, status, auth, websocket, visualization, pipelines, sweeps
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,10 @@ async def lifespan(app: FastAPI):
     from api_server.services.pipeline_db import init_pipeline_db
     init_pipeline_db()
     logger.info("Pipeline database initialized: data/pipelines.db")
+
+    # Initialize sweep database (schema v3 — sweeps + sweep_cases tables)
+    init_pipeline_db()  # idempotent; schema v3 applied automatically
+    logger.info("Sweep database initialized (shared with pipelines.db)")
 
     yield
 
@@ -100,6 +104,7 @@ def create_app() -> FastAPI:
     app.include_router(websocket.router, tags=["websocket"])
     app.include_router(visualization.router, prefix=API_PREFIX, tags=["visualization"])
     app.include_router(pipelines.router, prefix=API_PREFIX, tags=["pipelines"])
+    app.include_router(sweeps.router, prefix=API_PREFIX, tags=["sweeps"])
 
     @app.get("/", tags=["root"])
     async def root():
