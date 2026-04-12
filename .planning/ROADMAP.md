@@ -49,4 +49,43 @@ For full phase details, see: `.planning/milestones/v1.7.0-ROADMAP.md`
 
 ---
 
+## v1.8.0 — System Integration & GoldStandard Expansion (Planning)
+
+**Target features:**
+1. **GoldStandard 扩展** — 实现 24 个缺失冷启动案例的 GoldStandard，重点：SU2-02/04/09/10/19, OF-04
+2. **系统集成** — `knowledge_compiler/` GoldStandardLoader ↔ `api_server/` PipelineExecutor/ComparisonService 桥接
+3. **WR-01/WR-02 修复** — pvpython docker path + subprocess trame session cleanup
+4. **Phase 5 验收** — 301 tests pass + Opus 审查 Pass
+
+### Phase 35: GoldStandard Registry & Priority Cases
+| Requirement | Description | Status |
+|-------------|-------------|--------|
+| GS-01 | GoldStandardRegistry + GoldStandardLoader | Planning |
+| GS-02 | Bridge Service + REST API | Planning |
+| GS-03 | 6 Priority Case Implementations | Planning |
+| GS-04 | Mesh/Solver Metadata Functions | Planning |
+
+### Phase 36: System Integration
+| Requirement | Description | Status |
+|-------------|-------------|--------|
+| GS-05 | GOLDSTANDARD Step Type in PipelineExecutor | Pending |
+| GS-06 | ComparisonService GoldStandard Validation | Pending |
+| GS-07 | ColdStartWhitelist → Pipeline Template Wiring | Pending |
+| GS-08 | Provenance Hash Computation | Pending |
+
+### Phase 37: Bug Fixes
+| Requirement | Description | Status |
+|-------------|-------------|--------|
+| WR-01 | pvpython Docker Script Path Fix | Pending |
+| WR-02 | Subprocess Trame Session Cleanup | Pending |
+
+### Phase 38: Phase 5 Acceptance
+| Requirement | Description | Status |
+|-------------|-------------|--------|
+| GS-V1 | Phase 5 Tests Pass (301 tests) | Pending |
+| GS-V2 | Full Regression Pass (1,920+ tests) | Pending |
+| GS-V3 | Notion Phase 5 Record = Pass | Pending |
+
+---
+
 *Full milestone history: `.planning/MILESTONES.md`*

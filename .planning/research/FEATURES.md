@@ -1,307 +1,472 @@
-# Feature Landscape: Pipeline Orchestration for AI-CFD
+# Feature Landscape: GoldStandard Expansion & System Integration
 
-**Domain:** Scientific Computing / CFD Workflow Automation
-**Project:** AI-CFD Knowledge Harness v1.7.0
+**Domain:** AI-CFD Knowledge Harness - CFD Case Validation & Literature Comparison
+**Project:** AI-CFD Knowledge Harness v1.8.0
 **Researched:** 2026-04-12
-**Confidence:** MEDIUM (Nextflow/Snakemake/Prefect/Cylc documentation verified via WebFetch)
+**Overall confidence:** HIGH (existing implementations provide clear pattern; literature-based reference data well-documented)
 
 ---
 
-## Introduction
+## Executive Summary
 
-The AI-CFD Knowledge Harness v1.6.0 has discrete components (case generation, solver execution, convergence monitoring, 3D visualization, report generation). v1.7.0 adds an **orchestration layer** that chains these into end-to-end automated pipelines.
+GoldStandards serve as the literature-validation anchor for the AI-CFD Knowledge Harness. Each GoldStandard is a Python module providing: (1) a `ReportSpec` template defining required plots/metrics/sections, (2) analytical `get_expected_*()` functions returning literature reference values, and (3) a `*GateValidator` class for comparing simulated results against benchmarks.
 
-Pipeline orchestration in this context means: the coordination layer that manages dependencies, execution order, state, and recovery for a sequence of CFD operations: `generate case parameters -> run solver -> monitor convergence -> visualize results -> generate report`.
-
----
-
-## What Separates a Shell Script from a Production Pipeline Orchestrator?
-
-| Dimension | Shell Script | Production Orchestrator |
-|-----------|-------------|------------------------|
-| **Dependency management** | Hardcoded order; runs all commands regardless | DAG-derived execution; runs only when inputs satisfy outputs |
-| **Parallelism** | Sequential or manual `&`/wait | Automatic discovery of parallelizable tasks |
-| **Failure handling** | Crashes, no resume | Retries, preserved logs, attempt-scaled resources |
-| **Reproducibility** | Environment-specific | Containerized, version-tracked, checksum-validated |
-| **Portability** | Machine-specific paths/commands | Abstract execution platform (local/cluster/cloud) |
-| **State awareness** | Stateless | Tracks success/failure/cached state per step |
-| **Resource constraints** | None | Tracks CPU, memory, GPU; scheduler enforces limits |
-| **Parametric variations** | Copy-paste scripts | Wildcard/generation patterns; one definition -> N runs |
-
-For CFD specifically:
-- A parametric sweep of 20 mesh densities = 20 separate solver runs
-- A shell script handles this as 20 hardcoded command blocks
-- A production orchestrator treats each as a DAG node with wildcard expansion
-
-**Sources:** Snakemake documentation (shell script vs orchestrator distinction) — WebFetch HIGH confidence
+The current implementation covers 6 of 30 whitelist cases (OF-01, OF-02, SU2-01, SU2-02, SU2-03, SU2-06, SU2-07). The v1.8.0 expansion requires 24 additional GoldStandard implementations plus a `GoldStandardLoader` bridge to the `api_server`'s `ComparisonService`.
 
 ---
 
-## Feature Categories
+## GoldStandard Anatomy
 
-### Table Stakes (Expected -- missing feels incomplete)
+### Core Components
 
-#### PO-01: Pipeline Orchestration Engine
-**What it does:** Chains existing components into a directed graph: `generate -> run -> monitor -> visualize -> report`.
+Every GoldStandard module follows this structure:
 
-**Why expected:** Without orchestration, users manually trigger each step. That is a CLI tool, not a product.
+| Component | Purpose | Example |
+|-----------|---------|---------|
+| `*Constants` class | Physical parameters, geometry, flow conditions, tabulated literature data | `CavityConstants.RE_VALUES = [100, 400, 1000, 3200, 5000, 7500, 10000]` |
+| `create_*_spec()` | Returns `ReportSpec` with required plots, metrics, sections | Creates template for report generation |
+| `get_expected_*()` | Returns literature reference data (analytical or tabulated) | `get_expected_ghia_data(Re)` returns velocity profiles |
+| `*GateValidator` | Compares submitted `ReportSpec` against gold standard | Checks plot/metric/section coverage |
+| `__all__` exports | Enables package-level imports | Must include all public symbols |
 
-**Execution chain:**
-```
-Generate (blockMeshDict / case setup via CaseGenerator API)
-  -> Run (OpenFOAM Docker solver via executor API)
-    -> Monitor (WebSocket convergence, auto-abort on divergence)
-      -> Visualize (Trame 3D viewer, auto-load result)
-        -> Report (HTML/PDF with literature comparison)
+### ReportSpec Structure
+
+```python
+ReportSpec(
+    report_spec_id=f"GOLD-{case_id}",
+    name=f"Lid-Driven Cavity (Re={reynolds_number})",
+    problem_type=ProblemType.INTERNAL_FLOW,  # INTERNAL_FLOW | EXTERNAL_FLOW | HEAT_TRANSFER | MULTIPHASE | FSI
+    required_plots=[PlotSpec(name="...", plane="domain", colormap="viridis", range="auto")],
+    required_metrics=[MetricSpec(name="lid_drag_coefficient", unit="-", comparison=ComparisonType.DIRECT)],
+    critical_sections=[SectionSpec(name="centerline_vertical", type="centerline", position={"x": 0.5})],
+    plot_order=["velocity_magnitude_contour", "pressure_contour", "streamlines", ...],
+    comparison_method={"type": "direct", "tolerance_display": True},
+    knowledge_layer=KnowledgeLayer.CANONICAL,
+    knowledge_status=KnowledgeStatus.APPROVED,
+)
 ```
 
-**State machine:**
+### LiteratureComparison (Output of GoldStandardLoader)
+
+```python
+LiteratureComparison(
+    metric_name="shock_angle",
+    simulated_value=45.1,
+    reference_value=45.34,
+    error_pct=0.53,
+    unit="deg",
+    reference_source="theta-beta-M relation (weak shock)",
+    reynolds_number=0,  # Compressible flow, Re not primary
+    status="PASS",  # PASS if error_pct <= 5%, WARN if <= 10%, FAIL otherwise
+)
 ```
-PENDING -> RUNNING -> MONITORING -> VISUALIZING -> REPORTING -> COMPLETED
-                    -> FAILED (at any stage, with error context)
-```
 
-**Each stage must be idempotent:** if monitor fails mid-stream, pipeline resumes from last successful stage, not restart from scratch.
+### Verification Quantities by Case Type
 
-**Complexity:** Medium
-- Build on existing FastAPI endpoints
-- Define pipeline state machine
-- Each stage produces a checkpoint artifact
-
-**Existing system hooks:**
-- `POST /cases/generate` (CaseGenerator)
-- `POST /jobs/run` (Docker executor)
-- WebSocket `/ws/convergence/{job_id}` (monitoring)
-- `POST /trame/load` (visualization)
-- `POST /reports/generate` (report generator)
+| Case Type | Key Verification Quantity | Literature Source | Type |
+|-----------|-------------------------|-------------------|------|
+| Lid-driven cavity | u/v velocity centerline profiles | Ghia 1982 (Table I/II) | Tabulated array |
+| Backward-facing step | Reattachment length xr/h | Armaly 1983 | Tabulated by Re |
+| Inviscid wedge | Oblique shock angle | theta-beta-M relation | Analytical |
+| Laminar flat plate | Skin friction coefficient Cf | Blasius: Cf = 0.664/sqrt(Re_x) | Analytical |
+| Inviscid bump | Pressure ratio p_peak/p_inf | Isentropic relations | Analytical |
+| Cylinder crossflow | Drag coefficient Cd, Strouhal number St | Zdravkovich 1997 | Tabulated |
+| Von Karman vortex | Strouhal number St | Williamson 1989: St = 0.2 | Analytical |
+| Turbulent flat plate | Cf(x), boundary layer thickness | Prandtl/Schlichting | Analytical |
+| ONERA M6 | Cp distribution, CL | AGARD AR-303 | Tabulated |
+| Dam break (VOF) | Alpha field evolution, front position | Qualitative validation | Qualitative |
 
 ---
 
-#### PO-02: Batch Job Scheduling / Parametric Sweep
-**What it is in CFD context:** Running the same solver configuration with systematically varied parameters (mesh refinement levels, boundary condition values, turbulence model constants, inlet velocities).
+## Table Stakes Features
 
-**Why expected:** The equivalent of "5-minute professional KT board design" for CFD is parameter exploration -- users need to sweep `meshSize: [0.1, 0.05, 0.02]` or `inletVelocity: [1, 5, 10]` without writing shell loops.
+Features users/configurers expect. Missing = GoldStandard expansion feels incomplete.
 
-**Common CFD sweep parameters:**
+### For Each GoldStandard Module
 
-| Parameter Type | Examples | CFD Implication |
-|----------------|----------|-----------------|
-| Mesh resolution | `cellSize: [0.1, 0.05, 0.02]` | Refinement study -- tests discretization sensitivity |
-| Boundary condition | `inletVelocity: [1, 5, 10]` m/s | Flow regime sensitivity |
-| Turbulence model | `model: [kEpsilon, kOmega, SST]` | Model uncertainty |
-| Physical property | `viscosity: [1e-5, 1e-4]` | Fluid behavior sensitivity |
-| Geometry | `angleOfAttack: [-5, 0, 5, 10]` deg | Performance polar |
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| `*Constants` class | Provides physical parameters for all downstream functions | Low | Consistent naming convention |
+| `create_*_spec()` | Generates ReportSpec template used by Report Generator | Low | Follows existing pattern |
+| `get_expected_*()` | Returns literature reference values for comparison | Medium | May require tabulated data or analytical derivation |
+| `*GateValidator` | Validates ReportSpec completeness against gold standard | Low | Template validation, not result validation |
+| `__all__` exports | Enables `from gold_standards import *` | Low | Must include all public symbols |
+| Unit tests | Validates physical constants, analytical functions, validator | Medium | See test pattern in `test_gold_standards_laminar_flat_plate.py` |
+| Source citations | Literature references in docstrings | Low | Required for knowledge traceability |
 
-**Sweep execution patterns:**
-- **Full factorial:** All N1 x N2 x ... combinations (grows combinatorially)
-- **One-at-a-time (OAT):** Fix all but one parameter, sweep one, repeat
-- **Latin Hypercube:** Sparse sampling for high-dimensional parameter spaces
+### For GoldStandardLoader Integration
 
-For v1.7.0, full factorial with concurrency control is the recommended starting point. OAT and Latin Hypercube are future phases.
-
-**Patterns from established tools:**
-- **Snakemake:** `expand("{dataset}/a.{ext}", dataset=DATASETS, ext=FORMATS)` -- Cartesian product of parameter lists
-- **Prefect:** Task `.map()` spawning N task instances from a list of parameters
-
-**Complexity:** Medium-High
-- `ParametricSweep` schema: `{parameter_name: [value1, value2, ...], ...}`
-- Sweep engine generates N pipeline instances
-- Job queue with concurrency limits (do not run 100 Docker containers simultaneously)
-- Individual job status tracking + aggregate sweep progress
-
-**Dependency on existing:** Uses PO-01 as the per-parameter pipeline template.
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Case-type mapping | Maps whitelist IDs to GoldStandard modules | Low | Extend existing `_case_type_loaders` dict |
+| `get_reference_data()` | Returns literature data for given case type and Re | Medium | Needs per-case-type implementation |
+| `compare_with_reference()` | Computes error_pct and PASS/WARN/FAIL status | Low | Already implemented in phase9_report |
+| REST API endpoints | Exposes comparison via `api_server` | Medium | Bridge to `ComparisonService` |
+| Whitelist-to-GoldStandard registry | Maps OF-01..OF-06, SU2-01..SU2-24 to modules | Low | Dict lookup |
 
 ---
 
-#### PO-03: Cross-Case Comparison Engine
-**What it does:** Compares convergence histories, field distributions (velocity/pressure), and key metrics across multiple cases.
+## Differentiators
 
-**Why expected:** Users generate parametric sweeps to understand sensitivity. Raw job outputs are siloed. Comparison is the analytical layer on top of batch runs.
+Features that elevate GoldStandard from "basic validation" to "powerful comparison engine." Not expected but highly valued.
 
-**Expected behaviors:**
-1. **Convergence comparison:** Overlay residual curves (log-scale). X-axis = iteration number (aligned by iteration). Each case gets a distinct line color.
-2. **Field comparison:** For a selected iteration (e.g., final), compute delta field = CaseA - CaseB. Display overlaid contours or side-by-side slice views.
-3. **Key metrics table:** Per-case summary:
-   - Final max velocity
-   - Final max pressure
-   - Total iterations to convergence
-   - Execution time
-   - Percentage difference from reference case
-4. **Report embedding:** Comparison results embeddable in standard report generator output.
+### Advanced Literature Comparison
 
-**Complexity:** Medium
-- Convergence data: fetch from job history (already tracked via WebSocket)
-- Field comparison: extract scalar fields from OpenFOAM results, compute delta
-- Needs case metadata storage (already in Notion SSOT)
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Profile comparison (1D) | Compare full velocity profiles vs tabulated data, not just peak values | High | `lid_driven_cavity` has this for u/v centerlines |
+| Multi-metric composite score | Aggregate PASS/WARN/FAIL across all metrics into single quality score | Medium | Useful for dashboard ranking |
+| Uncertainty-aware comparison | Compare against range (min/max) rather than single value | High | Some literature provides confidence intervals |
+| Regime detection | Automatically identify if case is laminar/transitional/turbulent | Medium | Relevant for SU2-17 (transitional flat plate) |
 
-**Dependency on existing:** Uses Trame visualization (TRAME-01~06 shipped), report generator (Phase 19-22 shipped).
+### Automation for New GoldStandards
 
----
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| GoldStandard template generator | Scaffold new GoldStandard from whitelist entry | Medium | Reads YAML, generates Python module skeleton |
+| Batch literature lookup | Fetch reference data from known sources | High | Requires literature database or manual curation |
+| Auto-validator generator | Generate `*GateValidator` from `ReportSpec` introspection | Medium | Reduce boilerplate |
 
-### Differentiators (Not expected, but valued)
+### Knowledge Compilation Integration
 
-#### PO-04: Pipeline State Persistence and Recovery
-**What it is:** If a pipeline crashes (Docker OOM, WebSocket disconnect), it resumes from the last successful stage, not from scratch.
-
-**Why differentiating:** Most research codebases restart from zero. Production systems (Nextflow, Snakemake, Prefect) treat state as first-class.
-
-**Patterns from established tools:**
-- **Nextflow:** `nxusDB` cache per task; `.resume()` reuses cached results
-- **Prefect:** "Resuming interrupted runs from the last successful checkpoint"
-- **Snakemake:** `--notemp` preserves intermediates; `--rerun-triggers mtime` forces re-execution on change
-
-**How it works:**
-- Each pipeline stage writes a checkpoint artifact (completed stage + output artifacts)
-- On restart, loader reads checkpoint and skips completed stages
-- Idempotency: each stage must be safe to re-run with same inputs
-
-**Complexity:** High
-- Requires checkpointing infrastructure (state store, artifact storage)
-- Need to handle partial Docker container states
-- Cross-stage artifacts must be addressable (case files, result files)
-
-**Dependency on existing:** Uses existing Docker executor and file storage. Needs a new state store (SQLite or Notion page per pipeline run).
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| E1-E6 analogy linking | Connect new cases to similar GoldStandards via analogy engine | High | Phase 3 feature, requires analogy schema |
+| Correction propagation | When GoldStandard is corrected, propagate to derived cases | Medium | Would require provenance tracking |
+| Multi-source reference | Compare against multiple literature sources | Medium | Some metrics have conflicting reference values |
 
 ---
 
-#### PO-05: Pipeline DAG Visualization
-**What it is:** Dashboard display of the pipeline as a dependency graph, with live status indicators per node.
+## Anti-Features
 
-**Why differentiating:** Shell scripts have no graph. Even many "orchestrators" lack live DAG UIs.
-
-**What it shows:**
-- Nodes: generate, run, monitor, visualize, report
-- Edges: data flow arrows with artifact names
-- Node states: pending (gray), running (blue), completed (green), failed (red), skipped (yellow)
-- For parametric sweeps: DAG expands to show sweep fan-out pattern
-
-**Comparison with existing tools:**
-- Snakemake: `--dag` produces a dot/graphviz representation
-- Prefect: Real-time UI with task dependency graph
-- Cylc: TUI (`cylc tui`) for terminal-based graph display
-
-**Complexity:** Medium
-- DAG can be pre-computed from pipeline definition (static graph)
-- Live status requires WebSocket updates per stage
-- React component for node rendering (existing dashboard infrastructure)
-- For PO-02 sweeps: DAG shows the fan-out/fan-in pattern
-
----
-
-## Anti-Features (What NOT to Build)
+Features to explicitly NOT build as part of GoldStandard expansion.
 
 | Anti-Feature | Why Avoid | What to Do Instead |
 |--------------|-----------|-------------------|
-| **Custom DSL for pipeline definition** | Reinventing the wheel; Nextflow/Snakemake already solved this | Use existing FastAPI endpoints, compose them in Python |
-| **HPC scheduler integration (SLURM/PBS)** | Over-scope for v1.7.0; local Docker is current execution target | Defer to future phase if HPC access is needed |
-| **Real-time collaborative editing** | Complex multi-user state sync | Single-user pipeline control; collaboration via Notion SSOT |
-| **Cloud deployment orchestration (K8s)** | Over-scope; current Docker executor is sufficient | Defer to future phase |
-| **Full Nextflow/Snakemake engine port** | These are general-purpose; CFD-specific wrappers add value but complexity is high | Build lightweight CFD-specific orchestrator on top of existing FastAPI |
-| **Native ParaView batch processing** | v1.4.0/1.5.0 shipped ParaView Web; batch CLI is separate | Expose existing `pvpython` CLI via Docker exec |
-| **Automatic mesh refinement** | AI-driven mesh adaptation is a research problem | Accept mesh parameter as input; do not try to optimize it automatically |
+| CFD solver inside GoldStandard | Violates single responsibility; solver belongs in `execution_layer` | Keep GoldStandards as pure reference data |
+| Runtime case execution | GoldStandards are static reference, not execution engines | Use `PipelineExecutor` for actual case runs |
+| Non-physical tolerances | Setting tolerance too loose makes comparison meaningless | Default 5% threshold, document rationale |
+| Hardcoded mesh requirements | Different cases have different mesh needs | Describe expected mesh class, not specific counts |
+| Platform-specific reference values | Reference data should be solver-agnostic | Use physical quantities, not raw solver output |
 
 ---
 
-## Feature Dependency Graph
+## GoldStandard Coverage Analysis
+
+### Current State (6 implemented)
+
+| ID | Case Name | Verification Basis | Status |
+|----|-----------|-------------------|--------|
+| OF-01 | lid_driven_cavity | Ghia 1982 u/v profiles | Complete |
+| OF-02 | backward_facing_step | Armaly 1983 reattachment | Complete |
+| SU2-01 | inviscid_bump | Analytical pressure ratio | Complete |
+| SU2-02 | inviscid_wedge | theta-beta-M shock angle | Complete |
+| SU2-03 | laminar_flat_plate | Blasius Cf formula | Complete |
+| SU2-06 | laminar_flat_plate_incompressible_heat_transfer | Heat transfer analogy | Partial (placeholder) |
+| SU2-07 | laminar_backward_facing_step_incompressible | Armaly 1983 | Partial (placeholder) |
+
+### Missing (24 cases)
+
+**OpenFOAM (4 missing)**
+
+| ID | Case Name | Priority | Difficulty | Key Reference | Verification Metric |
+|----|-----------|----------|------------|---------------|---------------------|
+| OF-03 | cylinder_crossflow | MEDIUM | Basic | Low-Re cylinder benchmark | Drag coefficient Cd |
+| OF-04 | dam_break_laminar_vof | HIGH | Basic-to-Intermediate | Qualitative | Free-surface front position |
+| OF-05 | cooling_cylinder_2d_cht | MEDIUM | Intermediate | Analytical CHT | Temperature distribution |
+| OF-06 | heated_duct_cht | LOW | Intermediate | Analytical CHT | Wall-to-fluid heat transfer |
+
+**SU2 (18 missing)**
+
+| ID | Case Name | Priority | Difficulty | Key Reference | Verification Metric |
+|----|-----------|----------|------------|---------------|---------------------|
+| SU2-04 | laminar_cylinder_compressible | HIGH | Basic | Low-Re cylinder Zdravkovich | Drag coefficient Cd |
+| SU2-05 | inviscid_hydrofoil | MEDIUM | Basic | Kantrowitz limit | Lift curve slope |
+| SU2-08 | laminar_buoyancy_driven_cavity | MEDIUM | Basic | De Vahl Davis 1983 | Temperature gradient |
+| SU2-09 | turbulent_flat_plate_incompressible | HIGH | Basic | Prandtl/Schlichting | Cf(x) distribution |
+| SU2-10 | unsteady_von_karman_vortex_shedding | HIGH | Intermediate | Williamson 1989: St=0.2 | Strouhal number |
+| SU2-11 | turbulent_naca0012_incompressible | MEDIUM | Basic-to-Intermediate | Abbott-von Doenhoff | Cp distribution |
+| SU2-12 | species_transport_venturi_mixer | MEDIUM | Intermediate | Conservative scalar | Concentration profile |
+| SU2-13 | species_transport_composition_dependent_kenics | MEDIUM | Intermediate | Mixture fraction | Blend uniformity |
+| SU2-14 | streamwise_periodic_pin_fin | MEDIUM | Intermediate | Friction factor correlation | Pressure drop |
+| SU2-15 | turbulent_bend_with_wall_functions | MEDIUM | Intermediate | Miller correlation | Loss coefficient |
+| SU2-16 | turbulent_flat_plate_compressible | MEDIUM | Intermediate | Van Driest II | Cf(x) with compressibility |
+| SU2-17 | transitional_flat_plate | LOW | Intermediate | Dhawan/R Narasimha | Transition location |
+| SU2-18 | unsteady_naca0012_urans | MEDIUM | Intermediate | Time-accurate Cp | Hysteresis |
+| SU2-19 | turbulent_onera_m6 | HIGH | Intermediate | AGARD AR-303 | Cp at 6 stations |
+| SU2-20 | actuator_disk_variable_load | LOW | Intermediate | Actuator disk theory | Pressure jump |
+| SU2-21 | static_conjugate_heat_transfer_three_cylinders | MEDIUM | Advanced | Analytical CHT | Temperature distribution |
+| SU2-22 | radiative_heat_transfer_buoyancy_cavity | LOW | Advanced | Simple RHT | Net radiative flux |
+| SU2-23 | unsteady_conjugate_heat_transfer | MEDIUM | Advanced | Time-accurate CHT | Temperature evolution |
+| SU2-24 | solid_to_solid_cht_with_contact_resistance | LOW | Advanced | Thermal resistance network | Interface temperature drop |
+
+### High-Value Priority Cases
+
+From PROJECT.md v1.8.0 targets:
+1. **SU2-02** (inviscid_wedge) - Already implemented
+2. **SU2-04** (laminar_cylinder_compressible) - HIGH priority, basic bluff-body
+3. **SU2-09** (turbulent_flat_plate_incompressible) - HIGH priority, first RANS seed
+4. **SU2-10** (von_karman_vortex_shedding) - HIGH priority, first unsteady incompressible
+5. **SU2-19** (turbulent_onera_m6) - HIGH priority, first compact 3D aerodynamic
+6. **OF-04** (dam_break_laminar_vof) - HIGH priority, introduces multiphase
+
+---
+
+## Feature Dependencies
 
 ```
-PO-01 (Orchestration Engine)
-  ├── PO-02 (Batch/Parametric Sweep) [depends on PO-01 as template]
-  ├── PO-03 (Cross-Case Comparison) [depends on completed cases]
-  ├── PO-04 (State Persistence) [spans all pipeline stages]
-  └── PO-05 (DAG Visualization) [visualizes PO-01/02]
+GoldStandard Module (per case)
+    ├── Imports: knowledge_compiler.phase1.schema
+    │   ├── ProblemType, ReportSpec, PlotSpec, MetricSpec, SectionSpec
+    │   ├── ComparisonType, KnowledgeLayer, KnowledgeStatus
+    │   └── LiteratureComparison (from gold_standard_loader.py)
+    │
+    ├── GoldStandardLoader.get_reference_data() calls get_expected_*()
+    │
+    └── api_server ComparisonService
+            ├── Uses LiteratureComparison results
+            ├── Displays in React Dashboard
+            └── CSV/JSON export
 
-Existing System (v1.6.0):
-  ├── CaseGenerator (CLI -> API)
-  ├── Docker Executor (OpenFOAM)
-  ├── WebSocket Convergence Monitor
-  ├── Trame 3D Viewer
-  └── Report Generator (HTML/PDF/JSON)
+GoldStandardLoader (bridge)
+    ├── Maps case_type -> get_expected_* function
+    ├── Returns Dict with reference data
+    └── compare_with_reference() -> LiteratureComparison
+
+PipelineExecutor (api_server)
+    └── Runs cases, stores results
+            └── ComparisonService queries GoldStandardLoader
+```
+
+### System Integration Architecture
+
+```
+knowledge_compiler/phase1/gold_standards/
+    ├── __init__.py          # Exports all GoldStandard symbols
+    ├── cold_start.py        # ColdStartWhitelist loader
+    └── [case].py            # One module per GoldStandard case
+                                 - *_constants.py (Constants class)
+                                 - create_*_spec() (ReportSpec factory)
+                                 - get_expected_*() (reference data)
+                                 - *_validator.py (GateValidator class)
+
+knowledge_compiler/phase9_report/gold_standard_loader.py
+    ├── GoldStandardLoader   # Maps case_type -> get_expected_*()
+    ├── LiteratureComparison # Result dataclass
+    └── compare_with_reference()
+
+api_server/
+    └── comparison endpoints # Uses GoldStandardLoader for literature comparison
+                                 - POST /comparisons (submit result for comparison)
+                                 - GET /comparisons/{id} (get comparison result)
+                                 - GET /goldstandards/{case_type} (get reference data)
+
+PipelineExecutor (api_server)
+    └── Runs cases, stores results
+            └── ComparisonService queries GoldStandardLoader
 ```
 
 ---
 
 ## MVP Recommendation
 
-**Prioritize in order:**
+Prioritize these for v1.8.0 GoldStandard expansion:
 
-1. **PO-01** -- Without orchestration engine, nothing else matters. Core value is chaining isolated components. Target: single-case end-to-end pipeline with manual trigger.
+1. **SU2-04 (laminar_cylinder_compressible)**: Low complexity, high value - classic bluff-body benchmark
+2. **SU2-09 (turbulent_flat_plate_incompressible)**: Low complexity - first RANS seed, analytical Cf formula well-established
+3. **SU2-10 (von_karman_vortex_shedding)**: Medium complexity - Williamson St=0.2 is definitive, excellent validation target
+4. **SU2-19 (turbulent_onera_m6)**: Medium complexity - first 3D aerodynamic case, AGARD data is authoritative
+5. **OF-04 (dam_break_laminar_vof)**: High complexity - first multiphase seed, qualitative validation approach needed
 
-2. **PO-02** -- Batch scheduling is the natural extension of PO-01. The parametric sweep pattern is well-understood and directly serves parameter exploration. Target: parameter grid with N cases queued and executed sequentially with concurrency control.
-
-3. **PO-05** -- DAG visualization builds on PO-01's pipeline definition. It is the clearest "wow" indicator for an orchestration system and directly answers "what separates this from a shell script."
+**Also prioritize:**
+- GoldStandardLoader bridge registration for all existing + new cases
+- REST API integration with ComparisonService
 
 **Defer:**
-- **PO-03** (Cross-Case Comparison): Depends on having completed cases (PO-02 output). Build after PO-02 has runs to compare.
-- **PO-04** (State Persistence): Highest complexity, lowest immediate value for demo. Defer to a maintenance phase after user feedback.
+- SU2-24 (contact_resistance_cht): Advanced complexity, niche use case
+- SU2-22 (radiative_heat_transfer): Radiation adds significant complexity
 
 ---
 
-## Complexity Assessment Summary
+## Complexity Assessment
 
-| Feature | Complexity | Risk | Reason |
-|---------|------------|------|--------|
-| PO-01: Orchestration Engine | Medium | Low | Uses existing APIs; just needs state machine and orchestration layer |
-| PO-02: Batch Scheduling | Medium-High | Medium | Concurrency control, sweep generation, queue management |
-| PO-03: Cross-Case Comparison | Medium | Medium | Field extraction + comparison algorithms |
-| PO-04: State Persistence | High | High | Checkpoint infrastructure, idempotency guarantees, partial failure handling |
-| PO-05: DAG Visualization | Medium | Low | React component on existing dashboard; DAG derived from pipeline definition |
+| Case | Complexity | Primary Challenge |
+|------|------------|-------------------|
+| SU2-04 (cylinder compressible) | Low | Tabulated drag data for low-Re range |
+| SU2-09 (turbulent flat plate) | Low | Analytical Cf(x) formula well-established |
+| SU2-10 (von Karman) | Medium | Unsteady extraction, St calculation, time-series comparison |
+| SU2-19 (ONERA M6) | Medium | 3D case, tabulated AGARD Cp data at 6 stations |
+| OF-04 (dam break VOF) | High | Qualitative validation, no single metric, free-surface tracking |
+| SU2-21 (CHT 3 cylinders) | High | Multi-zone coupling, steady-state thermal distribution |
+| SU2-24 (contact resistance) | High | Interface modeling, thermal resistance network |
 
 ---
 
-## Parametric Sweep Deep Dive (PO-02)
+## GoldStandard Module Template
 
-In CFD context, a parametric sweep means varying one or more parameters across a defined range and observing the effect on the solution.
+New GoldStandard modules should follow this structure:
 
-**Execution requirements:**
-- **Queue management:** N sweep cases queued, executed with concurrency limit (e.g., max 2 simultaneous Docker containers)
-- **Case isolation:** Each sweep case gets its own Docker container, own working directory
-- **Progress tracking:** Per-case status (pending/running/completed/failed) + aggregate progress
-- **Cancellation:** Ability to abort entire sweep or individual cases
+```python
+#!/usr/bin/env python3
+"""
+Phase 1 Gold Standard: [Case Name]
 
-**Output organization:**
+Reference implementation for [Solver] Tutorial [ID].
+
+[Brief description of physics and what is being validated].
+
+Gold standard provides:
+1. ReportSpec template for [Case Name]
+2. Literature reference values via get_expected_*()
+3. Gate validation via [Case]GateValidator
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from math import sqrt  # as needed
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from knowledge_compiler.phase1.schema import (
+    ProblemType,
+    ReportSpec,
+    PlotSpec,
+    MetricSpec,
+    SectionSpec,
+    ComparisonType,
+    KnowledgeLayer,
+    KnowledgeStatus,
+)
+
+
+# ============================================================================
+# [Case] Constants
+# ============================================================================
+
+class [Case]Constants:
+    """Physical constants for [case name]"""
+
+    # Geometry
+    # ... constants ...
+
+    # Flow conditions
+    # ... constants ...
+
+    # Literature reference values (tabulated or analytical)
+    # ... constants ...
+
+
+# ============================================================================
+# Gold Standard ReportSpec
+# ============================================================================
+
+def create_[case]_spec(
+    case_id: str = "[case_id]",
+    # ... parameter list ...
+) -> ReportSpec:
+    """Create a gold standard ReportSpec for [case name]"""
+    required_plots = _create_required_plots()
+    required_metrics = _create_required_metrics()
+    critical_sections = _create_required_sections()
+    plot_order = [p.name for p in required_plots]
+
+    return ReportSpec(
+        report_spec_id=f"GOLD-{case_id}",
+        name=f"[Case Name] ({param_description})",
+        problem_type=ProblemType.[FLOW_TYPE],
+        required_plots=required_plots,
+        required_metrics=required_metrics,
+        critical_sections=critical_sections,
+        plot_order=plot_order,
+        comparison_method={"type": "direct", "tolerance_display": True},
+        anomaly_explanation_rules=[],
+        knowledge_layer=KnowledgeLayer.CANONICAL,
+        knowledge_status=KnowledgeStatus.APPROVED,
+    )
+
+
+def _create_required_plots() -> List[PlotSpec]:
+    """Create required plot specifications"""
+    plots = []
+    plots.append(PlotSpec(name="...", plane="domain", colormap="viridis", range="auto"))
+    return plots
+
+
+def _create_required_metrics() -> List[MetricSpec]:
+    """Create required metric specifications"""
+    metrics = []
+    metrics.append(MetricSpec(name="...", unit="...", comparison=ComparisonType.DIRECT))
+    return metrics
+
+
+def _create_required_sections() -> List[SectionSpec]:
+    """Create required section specifications"""
+    sections = []
+    sections.append(SectionSpec(name="...", type="...", position={"x": ...}))
+    return sections
+
+
+# ============================================================================
+# Expected Reference Values
+# ============================================================================
+
+def get_expected_[quantity](...) -> ...:
+    """Get expected [quantity] from literature reference.
+
+    [Description of formula or source].
+    """
+    # Implementation
+    return result
+
+
+# ============================================================================
+# Gate Validation
+# ============================================================================
+
+class [Case]GateValidator:
+    """Validates that a result meets the gold standard criteria."""
+
+    def __init__(self):
+        self.gold_spec = create_[case]_spec()
+
+    def validate_report_spec(self, spec: ReportSpec) -> Dict[str, Any]:
+        """Validate a ReportSpec against gold standard"""
+        results = {"passed": True, "errors": [], "warnings": [], "details": {}}
+        # Check required plots
+        # Check required metrics
+        # Check critical sections
+        return results
+
+
+# ============================================================================
+# Export
+# ============================================================================
+
+__all__ = [
+    "[Case]Constants",
+    "create_[case]_spec",
+    "[Case]GateValidator",
+    "get_expected_[quantity]",
+]
 ```
-sweep_<id>/
-  case_<param_set_hash>/
-    case/           (OpenFOAM case files)
-    results/        (solver output)
-    residuals.csv   (convergence history)
-    report/         (PDF/HTML report)
-  summary.csv       (key metrics across all cases)
-  comparison.pdf    (cross-case comparison report)
-```
-
----
-
-## Cross-Case Comparison Expected Behavior (PO-03)
-
-Given N cases from a parametric sweep, the comparison engine produces:
-
-1. **Convergence comparison:** Residual curves overlaid on log-scale, iteration-aligned across cases. Visual diff of how fast each case converged.
-
-2. **Field comparison:** For a selected time step (e.g., final), delta field = CaseA - CaseB. Displays absolute difference magnitude as a scalar field.
-
-3. **Metrics table:**
-
-   | Case | Max Velocity | Max Pressure | Iterations | Exec Time | vs Ref |
-   |------|-------------|-------------|------------|-----------|--------|
-   | ref  | 12.34 m/s   | 101325 Pa   | 523        | 142s      | --     |
-   | A    | 12.41 m/s   | 101340 Pa   | 489        | 138s      | +0.6%  |
-   | B    | 11.98 m/s   | 101310 Pa   | 601        | 165s      | -2.9%  |
-
-4. **Report embedding:** Comparison results as a section in the standard PDF/HTML report.
 
 ---
 
 ## Sources
 
-- [Nextflow documentation](https://www.nextflow.io/docs/latest/index.html) -- dataflow model, channels, processes (WebFetch HIGH confidence)
-- [Snakemake documentation](https://snakemake.readthedocs.io/en/stable/) -- wildcards, expand(), DAG phase, reporting, shell script vs orchestrator (WebFetch HIGH confidence)
-- [Prefect documentation](https://docs.prefect.io/latest/) -- flows, tasks, state management, caching, retries (WebFetch HIGH confidence)
-- [Cylc documentation](https://github.com/cylc/cylc-flow) -- HPC workflow engine, cycling systems (WebFetch MEDIUM confidence)
-- [Dask documentation](https://docs.dask.org/en/stable/) -- parallel execution, futures, distributed computing (WebFetch HIGH confidence)
+- **Ghia 1982**: Ghia, U., et al. (1982) "High-Re solutions for flow using Navier-Stokes equations and a multigrid method" JCP 48(3), 387-411
+- **Armaly 1983**: Armaly, B.F., et al. (1983) "Experimental and theoretical investigation of backward-facing step flow" JFM 127, 473-496
+- **Williamson 1989**: Williamson, C.H.K. (1989) "Oblique and parallel modes of vortex shedding in the wake of a cylinder" JFM 459, 67-82
+- **AGARD AR-303**: ESDU 80020 (based on AGARD data) - ONERA M6 wing Cp distributions
+- **Zdravkovich 1997**: Zdravkovich, M.M. (1997) "Flow Around Circular Cylinders, Vol. 1" Oxford University Press
+- **De Vahl Davis 1983**: Natural convection of air in a square cavity - benchmark data
+- **GoldStandard implementations**: `knowledge_compiler/phase1/gold_standards/*.py` — HIGH confidence
+- **GoldStandardLoader**: `knowledge_compiler/phase9_report/gold_standard_loader.py` — HIGH confidence
+- **Test patterns**: `tests/test_gold_standards_*.py` — HIGH confidence
+- **Cold start whitelist**: `data/cold_start_whitelist.yaml` — HIGH confidence
 
 ---
 
-*Feature research for: Pipeline Orchestration & Automation (AI-CFD Knowledge Harness v1.7.0)*
+*Feature research for: GoldStandard Expansion & System Integration (AI-CFD Knowledge Harness v1.8.0)*
 *Researched: 2026-04-12*

@@ -1,437 +1,464 @@
-# Research: Pipeline Orchestration Architecture
+# Architecture Research: knowledge_compiler / api_server Integration
 
-**Project:** AI-CFD Knowledge Harness v1.7.0
+**Project:** AI-CFD Knowledge Harness v1.8.0
 **Researched:** 2026-04-12
 **Confidence:** MEDIUM-HIGH
-
-Sources: Existing codebase analysis (api_server/, dashboard/src/, knowledge_compiler/), FastAPI/FastAPI-Worker patterns.
+**Mode:** Ecosystem (integration architecture)
 
 ---
 
 ## Executive Summary
 
-Pipeline orchestration (PO-01 to PO-05) integrates with the existing FastAPI + React architecture by extending the current job-based execution model into a hierarchical structure where Pipelines own Jobs. The existing `JobResponse` model, `WebSocketManager`, and `TrameSessionManager` provide the foundation -- new work is primarily additive.
+The `knowledge_compiler/` and `api_server/` systems are currently **parallel, independent stacks** that share only one integration point: `step_wrappers.py`'s `generate_wrapper` calls `GenericOpenFOAMCaseGenerator`. The v1.8.0 goal is to bridge them so that GoldStandard case metadata (ColdStartCase, BenchmarkSuite) can drive Pipeline creation, and solver results can be validated against BenchmarkSuite expected outputs.
 
-**Recommendation: Integrate into `api_server` as a new `pipeline_service` module.** Do not create a separate microservice. The existing Docker-based deployment, in-process job execution, and absence of microservice infrastructure make an embedded approach correct for this project scale.
-
----
-
-## 1. Integration Points with Existing Components
-
-### 1.1 Data Layer -- Extend or Mirror Job Storage
-
-**Current state:**
-- `job_service.py` line 20: `_JOBS: Dict[str, JobResponse] = {}` -- in-memory only
-- `JobResponse` (models.py lines 103-114): flat job model with `case_id`, `job_type`, `status`, `progress`, `result`
-
-**Pipeline additions needed:**
-
-| Model | File | Purpose | Relationship |
-|-------|------|---------|--------------|
-| `Pipeline` | `models.py` (new) | Pipeline metadata, config, status | Owns many `PipelineStep` |
-| `PipelineStep` | `models.py` (new) | Per-step job reference | Belongs to one `Pipeline` |
-| `Pipeline DAG` | `models.py` (new) | Step dependency graph (JSON field) | Embedded in `Pipeline.config` |
-
-**Key design decision -- pipeline state storage:**
-
-- **Option A (Recommended): SQLite in `data/` directory alongside existing job persistence**
-  - Current `_JOBS` dict is ephemeral. Pipeline PO-04 (recovery) requires persistence.
-  - SQLite is already appropriate for single-node deployment.
-  - Migration path: later replace with PostgreSQL if needed.
-
-- **Option B: Extend in-memory with JSON file dump**
-  - Simpler but less robust for long-running pipelines.
-  - Recovery from mid-pipeline crash is fragile.
-
-- **Option C: Separate pipeline database**
-  - Overkill at this project scale; adds deployment complexity.
-
-### 1.2 API Layer -- New Router for Pipelines
-
-**Current routers in `api_server/routers/`:**
-- `cases.py`, `jobs.py`, `knowledge.py`, `status.py`, `auth.py`, `websocket.py`, `visualization.py`
-
-**Pipeline router additions:**
-
-```
-POST   /pipelines              -- Create new pipeline
-GET    /pipelines              -- List pipelines
-GET    /pipelines/{id}         -- Get pipeline with steps
-POST   /pipelines/{id}/start   -- Trigger pipeline execution
-POST   /pipelines/{id}/pause   -- Pause pipeline
-POST   /pipelines/{id}/resume  -- Resume pipeline
-POST   /pipelines/{id}/cancel  -- Cancel pipeline
-DELETE /pipelines/{id}         -- Delete pipeline
-
-GET    /pipelines/{id}/steps   -- List pipeline steps
-GET    /pipelines/{id}/dag     -- Get DAG structure for visualization
-GET    /pipelines/{id}/compare -- Cross-case comparison data (PO-03)
-```
-
-**Existing job endpoints remain unchanged.** Pipeline execution creates child jobs via the existing `JobService.submit_job()` -- no duplication of job execution logic.
-
-### 1.3 Service Layer -- New `pipeline_service.py`
-
-**Current service structure:**
-```
-api_server/services/
-  case_service.py       -- Case CRUD
-  job_service.py        -- Job submission, execution, cancel
-  knowledge_service.py  -- Knowledge registry
-  websocket_manager.py  -- WebSocket connection registry
-  trame_session_manager.py -- Trame Docker session lifecycle
-  divergence_detector.py   -- Convergence detection
-```
-
-**New service:**
-```
-api_server/services/
-  pipeline_service.py   -- Pipeline orchestration logic (NEW)
-```
-
-**Dependencies on existing services:**
-
-```
-pipeline_service.py
-  --> JobService.submit_job()    -- Creates child jobs for each step
-  --> WebSocketManager.broadcast() -- Pipeline-level progress events
-  --> TrameSessionManager.launch_session() -- Auto-visualization after step=run
-  --> knowledge_compiler/phase2/execution_layer/openfoam_docker.py -- Direct for step=run (bypasses JobService when pipeline manages lifecycle)
-```
-
-**Key insight:** `job_service.py` already has `_run_job()` that delegates to `_run_case`, `_verify_case`, `_generate_report`. Pipeline service should reuse these directly for `step_type=run/verify/report` rather than re-implementing Docker execution.
-
-### 1.4 WebSocket Layer -- Extend Protocol for Pipeline Events
-
-**Current WebSocket message types (dashboard/src/services/websocket.ts line 8):**
-```typescript
-type WebSocketMessageType = 'status' | 'progress' | 'completion' | 'error' | 'residual';
-```
-
-**Pipeline WebSocket events to add:**
-```typescript
-type PipelineMessageType = 'pipeline_status' | 'pipeline_progress' | 'pipeline_step_complete' | 'pipeline_complete' | 'pipeline_error' | 'pipeline_diverged';
-
-interface PipelineStatusMessage {
-  type: 'pipeline_status';
-  pipeline_id: string;
-  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
-  current_step: string | null;      // step_id of actively executing step
-  completed_steps: number;
-  total_steps: number;
-  progress: number;                   // 0-100
-}
-
-interface PipelineStepCompleteMessage {
-  type: 'pipeline_step_complete';
-  pipeline_id: string;
-  step_id: string;
-  step_type: 'generate' | 'run' | 'verify' | 'visualize' | 'report';
-  step_status: 'completed' | 'failed';
-  output_dir?: string;                // Passed to next step
-  trame_session_id?: string;         // If step_type=visualize
-  error?: string;
-}
-```
-
-**Existing per-job WebSocket remains unchanged** (`/ws/jobs/{job_id}`). Pipeline WebSocket at `/ws/pipelines/{pipeline_id}` aggregates child job events and emits pipeline-level events.
-
-### 1.5 Knowledge Compiler Integration
-
-**Current knowledge_compiler orchestrator (knowledge_compiler/orchestrator/):**
-- `monitor.py` -- already handles residual streaming
-- `verify_console.py` -- verification logic
-- `solver_runner.py` -- solver execution
-
-**Pipeline steps map to existing components:**
-
-| Pipeline Step | Calls | Notes |
-|---------------|-------|-------|
-| `generate` | `knowledge_compiler/phase2/execution_layer/` case generation | Currently called via JobService._run_case which delegates to OpenFOAMDockerExecutor.execute_streaming |
-| `run` | `OpenFOAMDockerExecutor.execute_streaming()` | Same executor, residual streaming already wired |
-| `verify` | `knowledge_compiler/orchestrator/verify_console.py` | Already in JobService._verify_case |
-| `visualize` | `TrameSessionManager.launch_session()` | Already auto-launches after job completion |
-| `report` | `knowledge_compiler/phase9_report/ReportGenerator` | Already in JobService._generate_report |
-
-**Conclusion:** Pipeline orchestration does not require new knowledge_compiler components. It orchestrates existing ones. The only potential new component is a `case_generator` invoker in `pipeline_service.py` to handle the `generate` step.
-
-### 1.6 React Dashboard Integration
-
-**Current dashboard services (dashboard/src/services/):**
-- `api.ts` -- HTTP API client
-- `websocket.ts` -- WebSocket subscription service
-- `caseTypes.ts`, `types.ts` -- TypeScript interfaces
-
-**Dashboard changes needed:**
-
-| File | Change | Purpose |
-|------|--------|---------|
-| `services/types.ts` | Add `Pipeline`, `PipelineStep`, `PipelineDAG` interfaces | Type safety |
-| `services/api.ts` | Add `getPipelines()`, `createPipeline()`, `startPipeline()`, etc. | API client methods |
-| `services/pipelineWs.ts` (new) | Pipeline WebSocket subscription service | Real-time pipeline updates |
-| `pages/PipelinesPage.tsx` (new) | Pipeline list and creation UI | Main pipeline view |
-| `pages/PipelineDetailPage.tsx` (new) | Pipeline monitor with DAG visualization | Per-pipeline detail |
-| `components/PipelineDAGViewer.tsx` (new) | DAG visualization component | PO-05 requirement |
-| `components/PipelineStepCard.tsx` (new) | Individual step status card | Reusable step display |
+The core integration challenge: **knowledge_compiler uses rich domain dataclasses** (RunContext, TaskIntent, PhysicsPlan, BenchmarkCase) while **api_server uses flat Pydantic request/response models** (PipelineCreate, StepResult, SweepCaseResponse). Bridging requires a translation/adapter layer (`GoldStandardLoader`) that maps domain objects to pipeline step parameters.
 
 ---
 
-## 2. New Components Needed
+## Current Architecture Map
 
-### 2.1 Backend (api_server/)
+```
+knowledge_compiler/
+├── phase1/gold_standards/cold_start.py
+│   ├── ColdStartCase       — YAML-loaded CFD case metadata (id, rank, platform,
+│   │                         tier, mesh_strategy, solver_command, ...)
+│   └── ColdStartWhitelist  — Container with filter methods (by_platform, core_seeds, ...)
+│
+├── phase2c/benchmark_replay.py
+│   ├── BenchmarkCase       — Gold standard case (input_data, expected_output,
+│   │                         tolerance, constraints, category, ...)
+│   ├── BenchmarkReplayResult — Per-replay validation result
+│   ├── BenchmarkReplayEngine — Replay orchestration
+│   └── BenchmarkSuite      — Case registry + JSON file storage
+│
+├── phase2c/knowledge_compiler.py
+│   ├── KnowledgeManager    — PatternKnowledge/RuleKnowledge CRUD
+│   ├── PatternKnowledge    — Extracted anomaly/fix patterns (L2)
+│   └── KnowledgeValidator  — Confidence + success rate validation
+│
+├── orchestrator/
+│   ├── contract.py         — RunContext, TaskIntent, PhysicsPlan, MeshPlan,
+│   │                         SolverPlan, MonitorReport, VerificationReport
+│   └── interfaces.py       — ISolverRunner, IVerifyConsole protocols
+│
+└── executables/
+    └── bench_*.py          — Per-benchmark validator scripts
 
-| Component | Path | Purpose |
-|-----------|------|---------|
-| Pipeline models | `models.py` (additions) | `Pipeline`, `PipelineStep`, `PipelineDAG` Pydantic models |
-| Pipeline service | `services/pipeline_service.py` | Core orchestration logic: step sequencing, dependency resolution, error handling |
-| Pipeline router | `routers/pipeline.py` | REST endpoints for pipeline CRUD and control |
-| Pipeline DB | `data/pipelines.db` | SQLite persistence (auto-created) |
-
-### 2.2 Frontend (dashboard/src/)
-
-| Component | Path | Purpose |
-|-----------|------|---------|
-| Pipeline types | `services/types.ts` (additions) | TypeScript interfaces |
-| Pipeline API client | `services/api.ts` (additions) | HTTP methods |
-| Pipeline WS service | `services/pipelineWs.ts` | WebSocket subscription |
-| Pipelines list page | `pages/PipelinesPage.tsx` | List + create + delete pipelines |
-| Pipeline detail page | `pages/PipelineDetailPage.tsx` | Monitor + control pipeline |
-| DAG viewer | `components/PipelineDAGViewer.tsx` | D3.js or React Flow DAG viz |
-| Step card | `components/PipelineStepCard.tsx` | Step status display |
+api_server/
+├── services/
+│   ├── pipeline_executor.py
+│   │   └── PipelineExecutor — threading.Thread, DAG topological sort,
+│   │                         StepResult.status (SUCCESS/DIVERGED/ERROR)
+│   ├── sweep_runner.py
+│   │   └── SweepRunner     — Full-factorial, asyncio.Semaphore concurrency,
+│   │                         per-combination pipeline creation
+│   ├── comparison_service.py
+│   │   ├── parse_convergence_log() — OpenFOAM log → residual time series
+│   │   ├── compute_delta_field()   — pvpython delta field
+│   │   └── ComparisonService       — cross-case provenance + metrics
+│   ├── pipeline_db.py
+│   │   ├── PipelineDBService — pipelines + pipeline_steps CRUD
+│   │   └── SweepDBService   — sweeps + sweep_cases + comparisons CRUD
+│   └── step_wrappers.py
+│       ├── generate_wrapper — GenericOpenFOAMCaseGenerator (knowledge_compiler)
+│       ├── run_wrapper     — JobService.submit_job + poll
+│       ├── monitor_wrapper — convergence polling → DIVERGED/SUCCESS
+│       ├── visualize_wrapper — TrameSessionManager
+│       └── report_wrapper  — ReportGenerator (knowledge_compiler)
+│
+└── models.py
+    └── PipelineCreate, PipelineStep, StepType, StepResult,
+        SweepCaseResponse, ComparisonResponse, ProvenanceMetadata, ...
+```
 
 ---
 
-## 3. Data Flow Changes
+## Existing Integration Points
 
-### 3.1 Current Job Execution Flow
+### 1. `generate_wrapper` calls `GenericOpenFOAMCaseGenerator`
 
-```
-Dashboard                   api_server                    knowledge_compiler
-    |                              |                                |
-    |-- POST /jobs -------------->|                                |
-    |                              |-- JobService.submit_job() -->|
-    |                              |   Creates JobResponse         |
-    |                              |   Stores in _JOBS dict         |
-    |<-- 201 JobResponse ---------|                                |
-    |                              |                                |
-    | WebSocket /ws/jobs/{id}      |-- _execute_job_async() ------->|
-    |<====== streaming ===========>|   (residual messages)          |
-    |                              |                                |
-    |                              |   Job completes                |
-    |<====== completion ==========|                                |
+```python
+# step_wrappers.py → generate_wrapper
+from knowledge_compiler.phase2.execution_layer.generic_case_generator import (
+    GenericOpenFOAMCaseGenerator,
+)
+generator = GenericOpenFOAMCaseGenerator(**params)
+output = generator.generate()
 ```
 
-### 3.2 Pipeline Execution Flow (New)
+This is the **only** existing bridge. It works because `generate_wrapper` passes `step.params` as kwargs to the generator. The interface is: dict-in, dict-out with `case_dir` key.
 
-```
-Dashboard                api_server                 knowledge_compiler / Docker
-    |                         |                               |
-    |-- POST /pipelines ---->|                               |
-    |   { steps: [generate,   |                               |
-    |    run, verify, report]}|                               |
-    |<-- 201 Pipeline --------|                               |
-    |                         |                               |
-    |-- POST /pipelines/{id}/|                               |
-    |   start                 |                               |
-    |                         |-- PipelineService.start() --->|
-    |                         |   Step 1: generate case ------>|
-    | WebSocket /ws/pipelines/|       (case_generator)        |
-    | {id}                    |<-- output_dir -----------------|
-    |<==== pipeline_status ===|                               |
-    |   current_step="gen_1" |   Step 2: run solver --------->|
-    |                         |<-- residuals streaming --------|
-    |<==== pipeline_step_    |<==== streaming ================|
-    |   complete             |                               |
-    |                         |   Step 3: verify ------------->|
-    |<==== step_complete =====|       (verify_console)        |
-    |                         |<-- verification report -------|
-    |                         |                               |
-    |                         |   Step 4: launch trame ------->|
-    |<==== trame_session_id ==|       (TrameSessionManager)    |
-    |                         |<-- session ready --------------|
-    |                         |                               |
-    |                         |   Step 5: report ------------->|
-    |<==== pipeline_complete =|       (ReportGenerator)       |
-    |   { result_urls: [...] }|                               |
+### 2. `ComparisonService` convergence log parser
+
+```python
+# comparison_service.py
+time_pattern = re.compile(r"Time = ([\d.]+)")
+residual_pattern = re.compile(r"(Ux|Uy|Uz|p)\s*=\s*([\d.e+-]+)")
 ```
 
-### 3.3 Key Data Flow Changes
-
-1. **Child job ownership:** Pipeline creates jobs with `pipeline_id` field set. Jobs retain full independence (queryable via existing `/jobs/{id}` endpoint) but pipeline tracks them.
-
-2. **Output passing between steps:** Each step's `output_dir` is passed as input to the next step. This is stored in `PipelineStep.output_dir` and carried forward.
-
-3. **WebSocket separation:**
-   - `/ws/jobs/{job_id}` -- per-job events (unchanged)
-   - `/ws/pipelines/{pipeline_id}` -- pipeline-level aggregation + step lifecycle
-
-4. **Trame session lifecycle:** Currently auto-launched after job completion (job_service.py line 127-140). Pipeline should control this -- only launch after final `run` step completes, not after every child job.
+This mirrors the regex patterns in `knowledge_compiler/orchestrator/monitor.py` (confirmed in comparison_service.py comment). This is **convergent duplication** — not a real integration point, but evidence both systems parse the same log format.
 
 ---
 
-## 4. Suggested Build Order
+## Gap Analysis
 
-### Phase 1: Data Models + Persistence (Foundation)
-**Purpose:** Establish the data layer before any orchestration logic.
+### Gap 1: No ColdStartCase to Pipeline mapping
 
-1. Add `Pipeline`, `PipelineStep`, `PipelineDAG` Pydantic models to `models.py`
-2. Add `PipelineStatus` enum (PENDING, RUNNING, PAUSED, COMPLETED, FAILED, CANCELLED)
-3. Create SQLite database in `data/pipelines.db` via `pipeline_db.py`
-4. Implement basic CRUD operations in `pipeline_db.py`
-5. Write tests for models and database operations
+`ColdStartWhitelist` contains rich metadata, but there is no path from a `ColdStartCase` to a `PipelineCreate` spec. The `solver_command` field (e.g., `"icoFoam"`) contains the solver name, but the pipeline system has no concept of "this case should use solver X with mesh_strategy Y."
 
-**Dependencies:** None -- pure foundation.
+| ColdStartCase field | PipelineStep mapping |
+|---------------------|---------------------|
+| `solver_command` | `run_wrapper` params: `solver_name` |
+| `mesh_strategy: "A"` | No generate step (use existing mesh) |
+| `mesh_strategy: "B"` | Add `generate_wrapper` step with mesh script |
+| `case_name` | Pipeline `name` field |
+| `platform: "OpenFOAM"` | Default; `"SU2"` needs separate step type |
+| `source_location.local_case_path` | Pass as `case_dir` param to run step |
 
-### Phase 2: Pipeline Service Core (PO-01 engine)
-**Purpose:** Build the orchestration engine that sequences steps.
+### Gap 2: BenchmarkSuite not integrated with ComparisonService
 
-1. Create `pipeline_service.py` with:
-   - `create_pipeline(config)` -- validates DAG, stores in DB
-   - `start_pipeline(pipeline_id)` -- begins sequential step execution
-   - `_execute_step(step_id)` -- runs one step, captures output
-   - `pause_pipeline(pipeline_id)`, `resume_pipeline(pipeline_id)`, `cancel_pipeline(pipeline_id)`
-2. Implement step dependency resolution (DAG traversal)
-3. Integrate with `JobService` for `run/verify/report` steps
-4. Integrate with case generator for `generate` step
-5. Error handling: step failure -> pipeline FAILED, propagate error
-6. Write unit tests for orchestration logic
+`BenchmarkSuite` validates outputs against `expected_output`. `ComparisonService` computes convergence metrics. **These are complementary**: ComparisonService handles quantitative metrics, BenchmarkSuite handles threshold validation.
 
-**Dependencies:** Phase 1 models.
+### Gap 3: SweepRunner provenance metadata gap
 
-### Phase 3: Pipeline REST API (PO-01 endpoint)
-**Purpose:** Expose pipeline control to dashboard.
+`SweepCaseResponse` has 4 provenance columns (openfoam_version, compiler_version, mesh_seed_hash, solver_config_hash), but no code populates them. ColdStartWhitelist has no hash fields.
 
-1. Create `routers/pipeline.py`
-2. Implement all pipeline CRUD + control endpoints
-3. Extend `WebSocketManager` with pipeline WebSocket support
-4. Add pipeline WebSocket endpoint `/ws/pipelines/{pipeline_id}`
-5. Write integration tests for API
+### Gap 4: No GoldStandardLoader service in api_server
 
-**Dependencies:** Phase 2 service.
-
-### Phase 4: React Dashboard Integration (PO-05 UI)
-**Purpose:** Enable users to create and monitor pipelines.
-
-1. Add `Pipeline`, `PipelineStep` to `dashboard/src/services/types.ts`
-2. Add pipeline methods to `dashboard/src/services/api.ts`
-3. Create `services/pipelineWs.ts` for WebSocket subscription
-4. Create `PipelinesPage.tsx` -- list + create + delete
-5. Create `PipelineDetailPage.tsx` -- monitor with step cards
-6. Create `PipelineDAGViewer.tsx` -- D3.js DAG visualization
-
-**Dependencies:** Phase 3 API.
-
-### Phase 5: Cross-Case Comparison (PO-03)
-**Purpose:** Enable PO-03 feature.
-
-1. Add `GET /pipelines/{id}/compare` endpoint
-2. Implement comparison engine: collect metrics from all child jobs' results
-3. Dashboard: add comparison view to `PipelineDetailPage`
-
-**Dependencies:** Phase 3.
-
-### Phase 6: Batch/Parametric Sweep (PO-02)
-**Purpose:** Enable parameterized batch runs.
-
-1. Extend `PipelineStep` with `parameter_sweep` config (list of parameter values)
-2. Pipeline service: expand sweep into parallel child jobs
-3. Aggregate results for comparison
-4. Dashboard: sweep configuration UI
-
-**Dependencies:** Phase 2.
-
-### Phase 7: Persistence Recovery (PO-04)
-**Purpose:** Enable mid-crash recovery.
-
-1. Pipeline service: on startup, scan DB for RUNNING pipelines
-2. Implement recovery logic: re-attach to running steps or restart from last completed step
-3. Add pipeline heartbeat to detect orphaned pipelines
-4. Dashboard: "Resume interrupted pipeline" prompt
-
-**Dependencies:** Phase 2 + Phase 3.
+`ColdStartWhitelist` is only accessible via `load_cold_start_whitelist()`. The api_server has no API endpoint to list or query it.
 
 ---
 
-## 5. Architecture Options
+## Proposed Integration Architecture
 
-### Option A: Embedded in api_server (RECOMMENDED)
+### New Component: GoldStandardLoader Service
 
-**Description:** Add `pipeline_service.py` and `routers/pipeline.py` inside the existing `api_server/` module. SQLite in `data/`. Extend `models.py`.
+```
+api_server/services/gold_standard_loader.py   (NEW)
+```
 
-**Tradeoffs:**
+**Responsibility:** Load and serve ColdStartCase metadata as API-selectable items, translate cases into PipelineCreate specs.
 
-| Pros | Cons |
-|------|------|
-| Single deployment unit -- no new service to operate | Pipeline crashes can affect API availability |
-| Shares existing auth, WebSocket, Docker infrastructure | Single-point scaling limitation (but appropriate for current scale) |
-| Type sharing between pipeline and job models trivial | Larger api_server codebase |
-| Existing CI/CD pipeline works unchanged | |
+```python
+class ColdStartCaseDTO(BaseModel):
+    """API-facing GoldStandard case metadata."""
+    id: str
+    rank: int
+    platform: str
+    tier: str
+    dimension: str
+    difficulty: str
+    case_name: str
+    mesh_strategy: str  # "A" = ready mesh, "B" = script-built
+    has_ready_mesh: bool
+    solver_command: str
+    success_criteria: str
+    source_provenance: str
 
-**When appropriate:** Current project scale (single-node Docker), no existing microservice infrastructure, team already familiar with api_server layout.
 
-### Option B: Separate Pipeline Orchestrator Service
+class GoldStandardLoader:
+    def list_cases(
+        platform: Optional[str] = None,
+        tier: Optional[str] = None,
+        difficulty: Optional[str] = None,
+        has_ready_mesh: bool = False,
+    ) -> List[ColdStartCaseDTO]: ...
 
-**Description:** New `pipeline-orchestrator/` service with its own FastAPI app, connects to `api_server` via HTTP for job submission.
+    def get_case(self, case_id: str) -> Optional[ColdStartCaseDTO]: ...
 
-**Tradeoffs:**
+    def build_pipeline_spec(
+        self,
+        case_id: str,
+        output_dir: str,
+    ) -> PipelineCreate: ...
+```
 
-| Pros | Cons |
-|------|------|
-| Complete isolation -- pipeline crashes don't affect API | New deployment target, CI/CD pipeline, Docker Compose update |
-| Independent scaling if needed later | Must maintain two auth systems or shared token validation |
-| Clean separation of concerns | HTTP latency between orchestrator and job execution |
-| | Requires defining inter-service protocol |
+**`build_pipeline_spec` translation logic:**
 
-**When appropriate:** Multiple frontend clients, team scaling, operational independence requirements. Not yet justified for this project.
+```python
+def build_pipeline_spec(self, case_id: str, output_dir: str) -> PipelineCreate:
+    case = self.get_case(case_id)
+    steps = []
 
-### Option C: Workflow Engine (Prefabricated)
+    if not case.has_ready_mesh:
+        steps.append(PipelineStep(
+            step_id="generate_mesh",
+            step_type=StepType.GENERATE,
+            step_order=0,
+            depends_on=[],
+            params={"case_name": case.case_name},
+        ))
 
-**Description:** Use a workflow engine library (Prefect, Temporal, Airflow) instead of building orchestration from scratch.
+    steps.append(PipelineStep(
+        step_id="run_solver",
+        step_type=StepType.RUN,
+        step_order=1,
+        depends_on=["generate_mesh"] if not case.has_ready_mesh else [],
+        params={
+            "solver_name": self._parse_solver(case.solver_command),
+            "case_dir": case.source_location.get("local_case_path", ""),
+            "output_dir": output_dir,
+        },
+    ))
 
-**Tradeoffs:**
+    steps.append(PipelineStep(
+        step_id="monitor_convergence",
+        step_type=StepType.MONITOR,
+        step_order=2,
+        depends_on=["run_solver"],
+        params={"job_id": "{{ run_solver.job_id }}"},
+    ))
 
-| Pros | Cons |
-|------|------|
-| Built-in retry, backfill, scheduling, UI | Heavy dependency -- introduces its own concepts and overhead |
-| Battle-tested reliability | Overkill for 5-step linear pipeline |
-| Distributed execution ready | Integration with existing job_service and trame_manager requires wrapper anyway |
+    return PipelineCreate(
+        name=f"GoldStandard: {case.case_name}",
+        description=f"Auto-generated from {case.id}",
+        steps=steps,
+        config={"gold_standard_case_id": case.id},
+    )
+```
 
-**When appropriate:** Multi-team environment, complex branching DAGs, scheduled recurring pipelines, distributed execution requirements. None of these apply to the current 5-step pipeline.
+### Pipeline Template Registry
+
+Pre-stored `PipelineCreate` specs keyed by ColdStartCase ID. This avoids repeated translation logic and makes templates inspectable before creation.
+
+```python
+class PipelineTemplateRegistry:
+    TEMPLATES: Dict[str, PipelineCreate] = {
+        "OF-01": PipelineCreate(name="OF-01 Lid-Driven Cavity", steps=[...]),
+        "OF-02": PipelineCreate(name="OF-02", steps=[...]),
+        ...
+    }
+```
+
+Templates are populated by a build step that translates all 30 ColdStartCases. The `gold_standard_case_id` in `config` provides provenance.
+
+### BenchmarkVerificationService (NEW)
+
+```
+api_server/services/benchmark_verification.py   (NEW)
+```
+
+```python
+class BenchmarkVerificationService:
+    def __init__(self, benchmark_suite: BenchmarkSuite):
+        self._suite = benchmark_suite
+
+    def verify_case(
+        self,
+        case_id: str,
+        completed_case_dir: Path,
+    ) -> VerificationReportDTO:
+        benchmark = self._suite.get_case(case_id)
+        if not benchmark:
+            raise ValueError(f"No benchmark for case {case_id}")
+
+        actual_output = self._parse_solver_output(completed_case_dir)
+        passed, result = benchmark.validate_output(actual_output)
+
+        return VerificationReportDTO(
+            case_id=case_id,
+            benchmark_id=benchmark.case_id,
+            passed=passed,
+            field_results=result["field_results"],
+            errors=result["errors"],
+        )
+```
+
+### ComparisonService Extension
+
+`ComparisonService` stays as-is for convergence + provenance. Add `verify_against_benchmark()` that delegates to `BenchmarkVerificationService`:
+
+```python
+# In ComparisonService
+def verify_against_benchmark(
+    self,
+    case_id: str,
+    benchmark_case_id: str,
+    case_output_dir: Path,
+) -> VerificationReportDTO:
+    verifier = BenchmarkVerificationService()
+    return verifier.verify_case(benchmark_case_id, case_output_dir)
+```
+
+This keeps ComparisonService as the facade while delegating domain logic to knowledge_compiler's BenchmarkSuite.
 
 ---
 
-## 6. Summary of Required Changes
+## Data Flow
 
-### Modified Files
+```
+[User selects ColdStartCase via GET /gold-standard-cases]
+         │
+         ▼
+[POST /pipelines/from-gold-standard/{case_id}]
+         │
+         ▼
+GoldStandardLoader.build_pipeline_spec(case_id)
+         │
+         ├─→ Template lookup (TEMPLATE registry)
+         │
+         └─→ PipelineCreate(spec)
+                   │
+                   ▼
+         PipelineDBService.create_pipeline()
+                   │
+                   ▼
+         PipelineExecutor (threading.Thread)
+                   │
+                   ├─→ generate_wrapper (mesh generation)
+                   │
+                   ├─→ run_wrapper (solver execution)
+                   │
+                   ├─→ monitor_wrapper (convergence)
+                   │
+                   ├─→ visualize_wrapper (trame)
+                   │
+                   └─→ report_wrapper (HTML report)
+                            │
+                            ▼
+              [SweepCaseResponse stored in SQLite with provenance]
+                            │
+              ┌─────────────┴─────────────┐
+              ▼                           ▼
+    [GET /comparisons]            [POST /verifications]
+              │                           │
+              ▼                           ▼
+    ComparisonService           BenchmarkVerificationService
+    - convergence_data          - BenchmarkSuite.validate_output()
+    - provenance_mismatch       - field-by-field pass/fail
+    - delta_field
+```
 
-| File | Change |
-|------|--------|
-| `api_server/models.py` | Add `Pipeline`, `PipelineStep`, `PipelineDAG`, `PipelineStatus` models |
-| `api_server/main.py` | Register new `pipeline.router` |
-| `api_server/services/websocket_manager.py` | Add pipeline-level broadcast methods |
-| `dashboard/src/services/api.ts` | Add pipeline API methods |
-| `dashboard/src/services/types.ts` | Add TypeScript pipeline types |
-| `dashboard/src/services/websocket.ts` | Extend message types for pipelines |
+---
 
-### New Files
+## Shared Models (Proposed)
 
-| File | Purpose |
-|------|---------|
-| `api_server/services/pipeline_service.py` | Core orchestration engine |
-| `api_server/routers/pipeline.py` | Pipeline REST endpoints |
-| `api_server/services/pipeline_db.py` | SQLite persistence |
-| `dashboard/src/services/pipelineWs.ts` | Pipeline WebSocket client |
-| `dashboard/src/pages/PipelinesPage.tsx` | Pipeline list UI |
-| `dashboard/src/pages/PipelineDetailPage.tsx` | Pipeline monitor UI |
-| `dashboard/src/components/PipelineDAGViewer.tsx` | DAG visualization |
-| `dashboard/src/components/PipelineStepCard.tsx` | Step status component |
+### New Pydantic models in api_server/models.py
 
-### Components Left Unchanged
+```python
+class GoldStandardCase(BaseModel):
+    """API-facing GoldStandard case metadata."""
+    id: str
+    rank: int
+    platform: str
+    tier: str
+    dimension: str
+    difficulty: str
+    case_name: str
+    mesh_strategy: str
+    has_ready_mesh: bool
+    solver_command: str
+    success_criteria: str
+    source_provenance: str
 
-- `knowledge_compiler/` -- no changes required; pipeline orchestrates existing entry points
-- `trame_server.py` -- no changes; lifecycle managed via existing `TrameSessionManager`
-- `job_service.py` -- no changes; pipeline reuses `submit_job()` interface
-- `Dockerfile` -- likely needs `pip install aiosqlite` for async SQLite
+
+class VerificationReportDTO(BaseModel):
+    """Result of BenchmarkSuite validation on a completed case."""
+    case_id: str
+    benchmark_id: str
+    passed: bool
+    field_results: Dict[str, str]
+    errors: List[str]
+    timestamp: datetime
+```
+
+### Schema Extension: sweep_cases benchmark columns
+
+```sql
+-- Schema v5: Add to sweep_cases table
+ALTER TABLE sweep_cases ADD COLUMN benchmark_id TEXT;
+ALTER TABLE sweep_cases ADD COLUMN verification_passed BOOLEAN;
+ALTER TABLE sweep_cases ADD COLUMN verification_errors TEXT;  -- JSON
+```
+
+---
+
+## API Contract Additions
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/gold-standard-cases` | List ColdStartWhitelist cases (filterable) |
+| `GET` | `/gold-standard-cases/{case_id}` | Single case metadata |
+| `POST` | `/pipelines/from-gold-standard/{case_id}` | Create pipeline from GoldStandard template |
+| `POST` | `/verifications` | Run BenchmarkSuite validation on completed case |
+| `GET` | `/verifications/{case_id}` | Get verification report for a case |
+
+**Request/Response examples:**
+
+```python
+# POST /pipelines/from-gold-standard/OF-01
+# Request: {"output_dir": "data/gold_standard/OF-01"}
+# Response: 201 PipelineResponse with config.gold_standard_case_id = "OF-01"
+```
+
+```python
+# POST /verifications
+# Request: {
+#   "case_id": "CASE-XXXXXXXX",
+#   "benchmark_case_id": "BENCH-002",
+#   "case_output_dir": "data/sweep_SWEEP-XX/ABC123/"
+# }
+# Response: VerificationReportDTO(passed, field_results, errors)
+```
+
+---
+
+## Build Order
+
+### Phase 1: GoldStandardLoader + Template Registry
+1. Create `GoldStandardLoader` in `api_server/services/`
+2. Create `ColdStartCaseDTO` Pydantic model in `api_server/models.py`
+3. Implement `GoldStandardLoader.list_cases()` using existing `load_cold_start_whitelist()`
+4. Implement `GoldStandardLoader.build_pipeline_spec()` with template lookup
+5. Create pre-built template registry for all 30 ColdStartCases
+6. Add `GET /gold-standard-cases` and `POST /pipelines/from-gold-standard/{case_id}` endpoints
+7. Add unit tests
+
+**Dependency:** None — uses only existing `cold_start.py`.
+
+### Phase 2: BenchmarkVerificationService
+1. Create `BenchmarkVerificationService` in `api_server/services/`
+2. Implement `verify_case()` delegating to `BenchmarkSuite` from knowledge_compiler
+3. Implement output parser for OpenFOAM results
+4. Add schema v5 migration to `pipeline_db.py`
+5. Add `POST /verifications` and `GET /verifications/{case_id}` endpoints
+6. Add unit tests with mock BenchmarkSuite
+
+**Dependency:** Phase 1 (GoldStandardLoader provides case metadata for verification).
+
+### Phase 3: ComparisonService + BenchmarkSuite Bridge
+1. Add `verify_against_benchmark()` to `ComparisonService`
+2. Add provenance hash computation functions
+3. Wire provenance population into `run_wrapper` diagnostics
+4. Update `update_case_result()` to compute + store provenance fields
+5. Add integration tests: full pipeline -> verification -> comparison
+
+**Dependency:** Phase 2 complete.
+
+---
+
+## Anti-Patterns to Avoid
+
+### Don't convert domain dataclasses to Pydantic in knowledge_compiler
+Rich domain dataclasses (`ColdStartCase`, `BenchmarkCase`, `PhysicsPlan`) live in knowledge_compiler and must NOT be converted to Pydantic there. The bridge layer translates them to Pydantic DTOs at the API boundary. This keeps knowledge_compiler decoupled from api_server's HTTP layer.
+
+### Don't make SweepRunner aware of GoldStandardLoader
+SweepRunner creates pipelines from a base pipeline template + param_grid. The base pipeline for a sweep is pre-created via `POST /pipelines/from-gold-standard/{case_id}`, and SweepRunner operates on it unchanged.
+
+### Don't duplicate BenchmarkSuite storage
+BenchmarkSuite already manages JSON file storage at `.benchmarks/`. `BenchmarkVerificationService` uses an in-process BenchmarkSuite instance. Comparison results are stored in SQLite via the `comparisons` table extension.
+
+---
+
+## Open Questions
+
+1. **SU2 platform support**: ColdStartWhitelist has `platform: "SU2"` cases. Will SU2 cases use a separate step type, or will they be handled via generic Docker runner?
+
+2. **Parametric sweep with GoldStandard cases**: Can a SweepRunner base pipeline come from a GoldStandard template? The current ColdStartCase has a single `solver_command` string — param-grid overrides (e.g., varying Reynolds number) need a design.
+
+3. **mesh_seed_hash / solver_config_hash computation**: These provenance fields are defined in schema v4 but not populated. Should they be computed by `run_wrapper` from the actual case directory post-execution, or should they come from the ColdStartWhitelist YAML?
+
+4. **BenchmarkSuite storage path**: The `.benchmarks/` default path must be configurable for api_server deployment. Should use `DATA_DIR / ".benchmarks"` to match where `pipelines.db` lives.
 
 ---
 
@@ -439,8 +466,14 @@ Dashboard                api_server                 knowledge_compiler / Docker
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Integration points | HIGH | All existing components clearly identified; job_service delegation pattern understood |
-| Data model design | MEDIUM | Pipeline model structure clear; step dependency JSON format needs refinement during implementation |
-| WebSocket extension | HIGH | Protocol extension is additive, no breaking changes |
-| Build order | MEDIUM | Phases 1-3 are clearly sequential; Phases 4-7 have some parallelism |
-| Option A recommendation | HIGH | Appropriate for current scale; no microservice infrastructure to protect |
+| Integration points identified | MEDIUM-HIGH | Single existing bridge confirmed; rest inferred from parallel system analysis |
+| Build order | HIGH | Clear dependency chain; Phase 1 has no external deps |
+| Data flow | MEDIUM | Template registry approach is sound; SU2/sweep questions unresolved |
+| Anti-patterns | HIGH | No-conversion and no-duplication rules are unambiguous |
+
+---
+
+## Sources
+
+- Code analysis: `cold_start.py`, `benchmark_replay.py`, `comparison_service.py`, `pipeline_db.py`, `pipeline_executor.py`, `sweep_runner.py`, `step_wrappers.py`, `orchestrator/contract.py`, `orchestrator/interfaces.py`, `phase2c/knowledge_compiler.py`
+- Project definition: `.planning/PROJECT.md` v1.8.0 goals

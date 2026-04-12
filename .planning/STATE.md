@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.8.0
 milestone_name: System Integration & GoldStandard Expansion
-status: Defining requirements
+status: Creating roadmap
 last_updated: "2026-04-12T12:55:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -25,7 +25,7 @@ progress:
 
 **Milestone v1.8.0: IN PROGRESS — Defining requirements**
 All v1.7.0 phases complete. v1.8.0 planning started.
-**Next:** Research → Requirements → Roadmap
+**Next:** Plan Phase 35 (GoldStandard Registry & Priority Cases)
 
 ## Key Context from v1.7.0
 

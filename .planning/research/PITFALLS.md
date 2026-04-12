@@ -1,461 +1,390 @@
-# Domain Pitfalls: Adding Pipeline Orchestration to AI-CFD Harness
+# Domain Pitfalls: GoldStandard Implementation + System Integration
 
-**Project:** AI-CFD Knowledge Harness v1.7.0
+**Project:** AI-CFD Knowledge Harness v1.8.0
 **Researched:** 2026-04-12
-**Domain:** Pipeline Orchestration for Scientific Computing (CFD/Simulation)
+**Domain:** GoldStandard CFD case implementation + knowledge_compiler / api_server integration
 **Confidence:** MEDIUM-HIGH
 
-> This document covers pitfalls specific to **adding** pipeline orchestration to an existing CFD/scientific visualization system. It assumes FastAPI + WebSocket server, React dashboard, trame VTK viewer in Docker, Python knowledge_compiler, and OpenFOAM Docker solver are already operational.
+> This document covers pitfalls specific to (1) implementing 24 new GoldStandard CFD cases and (2) bridging `knowledge_compiler/` GoldStandardLoader with `api_server/` pipeline/services. It assumes existing v1.7.0 infrastructure is operational.
 
 ---
 
-## 1. Introduction
+## 1. GoldStandard Implementation Pitfalls
 
-Adding pipeline orchestration to an existing system carries distinct risks from building one from scratch. The existing components have established behaviors, communication patterns, and failure modes. Disrupting these while adding orchestration introduces specific integration pitfalls that are not obvious from workflow engine documentation alone.
+Mistakes that cause GoldStandard cases to produce wrong reference data, fail validation, or generate misleading literature comparisons.
 
-This document assumes **existing components are working** and focuses on pitfalls that arise when wrapping them in an orchestration layer.
+### 1.1: Literature Data Extracted Incorrectly
 
----
-
-## 2. Critical Pitfalls
-
-Mistakes that cause pipeline failures, data loss, or integration breakage.
-
-### 2.1: Pipeline State Hides Individual Component Failures
-
-**What goes wrong:** When orchestration wraps existing components, failures in underlying components get absorbed by the pipeline's retry/continuation logic, making the actual failure hard to diagnose.
-
-**Why it happens:** Existing components (knowledge_compiler, OpenFOAM solver, trame viewer) have their own error handling. When wrapped in pipeline tasks, exceptions may be caught at multiple layers, creating ambiguous stack traces. The orchestrator retries or marks a step "completed" based on exit codes, but the component's internal state (diverged mesh, corrupted output) is not visible.
-
-**Consequences:**
-- Pipeline reports "success" but downstream steps fail with cryptic errors
-- OpenFOAM divergence is detected but the pipeline continues because the Docker container exited cleanly
-- Residual data is partial but treated as valid by the comparison engine
-
-**Prevention:**
-- Instrument each wrapped component with structured result objects that include: exit code, validation checks passed/failed, and a machine-readable status enum
-- Never rely solely on process exit codes to determine component success
-- Propagate component-level diagnostic data (residual history, mesh quality metrics) through the pipeline state
-
-**Detection:**
-- Pipeline execution logs show "completed" but downstream WebSocket messages contain stale data
-- Dashboard DAG shows all nodes green but case comparison yields NaN values
-
----
-
-### 2.2: Docker Container Lifecycle Ownership Conflicts
-
-**What goes wrong:** The existing system launches Docker containers (OpenFOAM solver, trame viewer) independently. Adding an orchestrator that also manages containers creates lifecycle conflicts -- two processes trying to start/stop the same container.
+**What goes wrong:** Reference values in `get_expected_*` functions do not match the primary source paper.
 
 **Why it happens:**
-- Trame viewer has its own Docker lifecycle manager (`TrameSessionManager`) with idle timeout and auto-launch
-- Pipeline orchestrator may independently launch Docker containers for the same purpose
-- `docker kill` from pipeline abort overwrites graceful shutdown in `TrameSessionManager`
+- Rounding errors when transcribing tabulated data from PDFs or websites
+- Unit conversion errors (Pa vs kPa, dimensionless vs scaled)
+- Wrong row/column mapping in table lookup (y/L position vs value)
+- Interpolation between tabulated Reynolds numbers without documenting the method
+- Re values in the paper differ from the tutorial case parameters (e.g., Ghia 1982 uses Re based on lid velocity and cavity size, but the tutorial may specify a different definition)
 
 **Consequences:**
-- Orphaned containers accumulate (memory leak of Docker processes)
-- Race condition: pipeline thinks container is ready but `TrameSessionManager` has not yet started it
-- Double-termination of containers causes port conflicts on restart
+- GoldStandard returns incorrect reference values
+- LiteratureComparison reports PASS when simulation is actually off
+- Or worse: reports FAIL for a correct simulation
+- Analogy engine propagates wrong reference data through the knowledge chain
 
 **Prevention:**
-- Designate exactly **one** component as the Docker lifecycle owner. Options:
-  - **Option A:** Pipeline orchestrator owns all container lifecycle; disable `TrameSessionManager`'s auto-launch
-  - **Option B:** `TrameSessionManager` continues owning viewer containers; pipeline only manages solver containers
-- Use container labels to identify ownership: `pipeline.owned=true` vs `trame.managed=true`
-- Never issue `docker kill` directly; always go through the owning component's shutdown method
+- Always cite the specific table/equation number from the primary source (not a secondary source)
+- For interpolated Re values, use linear interpolation and document the method explicitly
+- Verify unit consistency between the paper's definition and the tutorial case's parameterization
+- For each `get_expected_*` function: add a `__docstring__` that references the exact paper, table, and column
+- Add assertions that sanity-check reference values against known physical bounds (e.g., shock angle must be between Mach angle and 90 deg)
 
 **Detection:**
-- `docker ps` shows multiple orphaned containers after pipeline runs
-- `TrameViewer.tsx` logs show "session already exists" errors during pipeline execution
-- Port 8080 (trame) conflicts after pipeline restarts a crashed job
+- Cross-reference the tabulated values against the primary paper
+- Add a unit test that verifies reference values against known analytic solutions (e.g., for inviscid wedge, the shock angle computed from theta-beta-M relation must match the tabulated reference value to within 0.01 deg)
 
 ---
 
-### 2.3: WebSocket Connection Loss During Long-Running Simulation
+### 1.2: Mesh Strategy Mismatch in GoldStandard
 
-**What goes wrong:** CFD simulations can run for hours. WebSocket connections to the dashboard drop due to timeouts, network interruptions, or browser tab suspension. The pipeline continues running but the client has no visibility.
+**What goes wrong:** A GoldStandard is implemented for a case that the whitelist marks as "mesh_strategy: A" (ready mesh), but the implementation uses a programmatic mesh generator (mesh_strategy: B), or vice versa.
 
 **Why it happens:**
-- FastAPI/WebSocket default timeout behavior may close idle connections
-- Browser tabs suspend WebSocket connections after inactivity (especially mobile)
-- Dashboard `ConnectionManager` (in-memory) loses track of reconnecting clients
-- Pipeline progress events queue but have nowhere to send when no client is connected
+- The 6 existing GoldStandards (`cold_start.py`, `backward_facing_step.py`, `inviscid_bump.py`, `inviscid_wedge.py`, `laminar_flat_plate.py`, `lid_driven_cavity.py`) are not yet validated against the mesh_strategy declared in `cold_start_whitelist.yaml`
+- For example, `inviscid_wedge.py` declares it uses CGNS mesh (ready mesh, mesh_strategy A), but the GoldStandard `ReportSpec` does not encode the mesh file path or validate its presence
+- The `GoldStandardLoader` in `phase9_report/gold_standard_loader.py` uses `_case_type_loaders` that import from `knowledge_compiler.phase1.gold_standards.*`, but those modules do not expose a `get_mesh_strategy()` function
 
 **Consequences:**
-- User loses real-time convergence monitoring during a critical divergence event
-- DivergenceDetector sends `divergence_alert` WebSocket message but no client receives it
-- User cannot abort a diverging job because the abort button is disconnected
+- The analogy engine (E1-E6) may select a GoldStandard for a case that requires a different mesh setup than what the target case provides
+- Pipeline tries to run a GoldStandard case without the expected mesh file, producing a silent failure
+- `GoldStandardLoader.get_reference_data()` returns data but the corresponding simulation cannot be reproduced
 
 **Prevention:**
-- Implement **connection resilience** in `ConnectionManager`:
-  - Server-side message buffering with `missed_message` query on reconnect
-  - Client sends last-received sequence number on reconnect
-  - Server replays buffered messages above sequence number
-- Add a **persistence layer** for critical pipeline events:
-  - Write `divergence_alert`, `job_complete`, `job_failed` to a Redis/persistent queue
-  - Dashboard polls or receives these on reconnect
-- Use `WebSocket.ping()` heartbeats at 30-second intervals to keep connection alive
-- Never assume a connected client will stay connected for the duration of a pipeline run
+- Each GoldStandard module must expose a `get_mesh_info()` function returning: `{mesh_strategy: "A"|"B", mesh_file_path: str|None, mesh_hash: str|None}`
+- The `GoldStandardLoader` must check mesh_strategy compatibility before returning reference data
+- For mesh_strategy A (ready mesh): validate that the mesh file exists and matches the declared hash before returning reference values
+- Encode `mesh_strategy` explicitly in the `ReportSpec` produced by each GoldStandard's `create_*_spec()` function
 
 **Detection:**
-- Dashboard shows frozen residual chart mid-simulation with no error message
-- `divergence_alert` is logged server-side but user never sees it
-- User reports "pipeline was running but dashboard showed nothing"
+- GoldStandard test suite runs each case with both mesh strategies and verifies that the appropriate error is raised for mismatched strategies
+- Integration test: run `GoldStandardLoader.get_reference_data()` and verify the returned dict includes `mesh_strategy`
 
 ---
 
-### 2.4: Stale Cache Returning Invalid Results After Solver Divergence
+### 1.3: Solver Config Not Captured in GoldStandard
 
-**What goes wrong:** Pipeline or component-level caching returns a previous successful result when the current run diverged but cache has not been invalidated.
+**What goes wrong:** The GoldStandard's `ReportSpec` does not encode the solver configuration that was used to generate the reference data. Different solver settings (turbulence model, discretization schemes, convergence criteria) produce different results.
 
 **Why it happens:**
-- Prefect documentation explicitly warns: "Cached states never expire unless `cache_expiration` is explicitly provided"
-- If a pipeline step uses a cached solver result but the case parameters changed slightly, the cached (potentially diverged) result is returned without re-running
-- Cross-case comparison uses cached mesh/field data that may be from a failed run
+- `lid_driven_cavity.py`'s `CavityGateValidator` checks `required_plots` and `required_metrics` but does not validate solver configuration
+- The whitelist entries declare `solver_command` (e.g., "blockMesh && icoFoam") but the GoldStandard modules do not store or expose this
+- Reference data from Ghia 1982 was computed with a specific solver and mesh density; using a different solver or mesh may legitimately produce different numbers
 
 **Consequences:**
-- Pipeline reports "completed" using stale data from a previous successful run
-- Cross-case comparison produces misleading results because some cases are from cache, others fresh
-- User exports results thinking they correspond to current parameters when they do not
+- A case runs with k-epsilon turbulence but the GoldStandard reference data was produced with DNS -- the comparison is meaningless
+- Pipeline generates a case with different solver settings and reports misleading PASS/WARN/FAIL
+- The analogy engine transfers a GoldStandard to a case with incompatible physics
 
 **Prevention:**
-- Always invalidate cache when: case parameters change, mesh topology changes, solver settings change
-- Use content-addressable caching: hash case parameters + solver config + mesh seed -> cache key
-- Distinguish between "result not yet computed" and "result computed with different parameters"
-- For cross-case comparison, explicitly validate that all compared cases used the same solver version and settings
+- Each GoldStandard module must expose a `get_solver_config()` function returning: `{solver_name: str, turbulence_model: str|None, discretization_schemes: Dict[str,str], convergence_criteria: Dict[str,float]}`
+- The `LiteratureComparison` result must include a `solver_config_compatible: bool` field
+- Before comparing, `GoldStandardLoader.compare_with_reference()` must verify that the simulated case's solver config is compatible with the GoldStandard's solver config
 
 **Detection:**
-- Pipeline completes instantly (no actual computation) for a case that should have run
-- Cross-case comparison shows suspiciously identical results for different parameter sets
-- Export shows results that do not match the case parameters selected
+- `GoldStandardLoader.get_reference_data()` returns a dict that includes `solver_config` -- if a case's solver config is absent or incompatible, the comparison returns `status: INCOMPATIBLE` instead of PASS/WARN/FAIL
 
 ---
 
-### 2.5: Pipeline State Persistence Gap Between Steps
+### 1.4: Validation Threshold Too Tight or Too Loose
 
-**What goes wrong:** Pipeline state is not persisted at the right granularity. If the pipeline crashes or is manually stopped between steps, all state from completed steps is lost and must be recomputed.
+**What goes wrong:** The `LiteratureComparison` uses hardcoded `threshold_pct` (default 5.0%) that is inappropriate for the metric and the physics.
 
 **Why it happens:**
-- Pipeline orchestration typically serializes state at the **run level** but not at the **step level**
-- OpenFOAM solver produces intermediate results at each iteration, but pipeline only saves final state
-- If pipeline stops after `generate` but before `run`, the generated case must be recreated
-- If pipeline stops after `run` but before `visualize`, the solver output is available but not linked to the pipeline context
+- Different metrics have fundamentally different error characteristics: centerline velocity profiles can be compared point-by-point (error < 1% is achievable for well-resolved cases), but pressure jump ratios may have 10-15% uncertainty due to scheme differences
+- Using the same threshold for all metrics produces false FAILs or false PASSes
+- The threshold is not documented in the `LiteratureComparison` result
 
 **Consequences:**
-- Long-running parametric sweeps must restart from scratch after interruption
-- Intermediate data (checkpoint files, residuals at each iteration) is lost
-- Pipeline resume produces a **new** case ID rather than continuing the original run, breaking traceability
+- High-quality simulations fail validation for metrics where 5% is excellent
+- Low-quality simulations pass validation for metrics where 20% error is still "reasonable"
+- Users cannot understand why a given threshold was chosen
 
 **Prevention:**
-- Implement **step-level checkpointing**: after each pipeline step completes, write a checkpoint that includes:
-  - Step completed, outputs produced, input hashes consumed
-  - Docker container state (paused, not terminated)
-  - Intermediate data paths (not just final results)
-- Designate a **pipeline state directory** per run: `pipelines/{pipeline_id}/{step_id}/`
-- On resume: detect existing checkpoint, validate outputs exist, skip to first incomplete step
-- Use **deterministic case IDs**: `pipeline_id + step_index + parameter_hash` not random UUID
+- Each `get_expected_*` function must return a dict that includes `metric_thresholds: Dict[str, float]` -- per-metric thresholds instead of a global default
+- For new GoldStandards, research the typical error range for each metric in the literature (e.g., Ghia 1982 notes that centerline velocities are accurate to within 1-2% for well-resolved simulations)
+- Document the threshold rationale in the metric specification
 
 **Detection:**
-- After pipeline restart, case list shows duplicate entries for the same parameters
-- Parametric sweep resume recalculates all previously completed cases
-- Pipeline logs show different case IDs for what user believes is one continuous run
+- Cross-validation: run the GoldStandard case with the reference solver and mesh; the resulting error should be well within the declared threshold
+- If the GoldStandard itself fails its own validation test, the threshold is wrong
+
+---
+
+### 1.5: Analytic Reference Values Computed Incorrectly
+
+**What goes wrong:** For compressible flow GoldStandards, analytic relations (e.g., theta-beta-M for oblique shocks, Blasius solution for flat plate) are implemented with numerical errors.
+
+**Why it happens:**
+- The `get_expected_shock_angle()` in `inviscid_wedge.py` uses a bisection loop. If the convergence tolerance (`abs(theta_calc - theta) < 1e-10`) is too tight for the numeric type, the loop may exit with an inaccurate result
+- The Mach angle computation (`asin(1.0 / M1)`) returns NaN if M1 < 1 (supersonic check missing)
+- No test verifies that `get_expected_shock_angle()` produces the expected result to within a documented tolerance
+
+**Consequences:**
+- The GoldStandard returns a wrong shock angle reference value
+- All SU2-02 cases validated against this reference will be systematically wrong
+- The error may be small (e.g., 0.1 deg) but still exceeds the validation threshold
+
+**Prevention:**
+- For each analytic function: add a test that verifies the output against a known analytic solution or a high-precision reference (e.g., `get_expected_shock_angle(M=2.0, theta=15.0)` should return 45.34 deg -- verify to 0.01 deg)
+- Add explicit preconditions: raise `ValueError` if `mach_number <= 1.0` (not supersonic)
+- Document the expected precision of each analytic function in its docstring
+- Use `math.fsum` for accumulated sums to minimize floating-point error
+
+**Detection:**
+- Unit test: for `get_expected_shock_angle`, test at known solutions (e.g., M=2.0, theta=10/15/20 deg) against published theta-beta-M tables
+- For `get_expected_ghia_data`, verify that the returned profile arrays have the correct length (41 positions) and are symmetric where expected
+
+---
+
+### 1.6: ReportSpec Schema Version Drift
+
+**What goes wrong:** New GoldStandards are implemented with updated `ReportSpec` schema fields that are incompatible with the schema version used by the existing pipeline.
+
+**Why it happens:**
+- The 6 existing GoldStandards use `create_*_spec()` functions that return `ReportSpec` objects
+- If a new GoldStandard adds fields to `ReportSpec` (e.g., new fields in `PlotSpec` or `MetricSpec`), the existing `CavityGateValidator.validate_report_spec()` may break or silently skip validation
+- The `GoldStandardLoader` in `phase9_report/gold_standard_loader.py` only handles 3 case types (`lid_driven_cavity`, `backward_facing_step`, `laminar_flat_plate`) -- adding 24 more without a scalable registration pattern causes code sprawl
+
+**Consequences:**
+- New GoldStandards cannot be loaded via `GoldStandardLoader` because they are not registered
+- Pipeline fails when trying to validate a new case against an unregistered GoldStandard
+- Gate validation silently passes because it only checks a subset of fields
+
+**Prevention:**
+- Implement a **registration decorator** for GoldStandards: `@register_gold_standard("su2_cylinder")` that registers the module's `get_expected_*` and `create_*_spec` functions in a central registry
+- `GoldStandardLoader` should iterate over registered GoldStandards instead of hardcoding case type mappings
+- Before implementing new GoldStandards, verify the current `ReportSpec` schema version and ensure new fields have backward-compatible defaults
+- Add a schema version field to `ReportSpec` and validate it in `CavityGateValidator`
+
+**Detection:**
+- `GoldStandardLoader.get_reference_data()` is called with a case type and returns `None` -- this should be a loud error, not a silent empty dict
+- `GoldStandardLoader` integration test: call `get_reference_data()` for every registered GoldStandard and verify non-empty return
+
+---
+
+## 2. System Integration Pitfalls
+
+Mistakes that arise when bridging `knowledge_compiler/` GoldStandardLoader with `api_server/` PipelineExecutor/ComparisonService.
+
+### 2.1: Circular Import Between knowledge_compiler and api_server
+
+**What goes wrong:** `api_server/services/knowledge_service.py` imports `from knowledge_compiler.runtime import KnowledgeRegistry`, and `knowledge_compiler` modules may transitively import from `api_server`, creating a circular dependency.
+
+**Why it happens:**
+- `KnowledgeService._get_registry()` does a lazy import inside a method: `from knowledge_compiler.runtime import KnowledgeRegistry`
+- This is a deferred import pattern that avoids startup circular imports
+- However, if any `knowledge_compiler` module (e.g., in `phase3/orchestrator/`) imports from `api_server.models`, and `api_server.models` imports something that eventually imports `knowledge_compiler`, the deferred import in `knowledge_service.py` will also fail at runtime
+
+**Consequences:**
+- FastAPI server fails to start with `ImportError: cannot import name 'X' from 'knowledge_compiler'`
+- The error is intermittent and depends on import order, making it hard to reproduce
+- Tests that import both modules fail
+
+**Prevention:**
+- Enforce a strict **layering rule**: `api_server/` may import from `knowledge_compiler/`, but `knowledge_compiler/` may NOT import from `api_server/`
+- Use an **interface pattern**: `api_server/services/knowledge_service.py` defines an abstract interface, and `knowledge_compiler/` provides an implementation via a plugin registration (not a direct import)
+- All cross-boundary imports must go through an abstract base class or Protocol, not a concrete module
+- Add a `conftest.py` test that imports both modules in isolation and verifies no circular import
+
+**Detection:**
+- CI test: `python -c "from api_server.services.knowledge_service import KnowledgeService; from knowledge_compiler.phase1.gold_standards.lid_driven_cavity import get_expected_ghia_data"` -- must succeed
+- Add a top-level `__init__.py` assertion that verifies no `api_server` imports exist in `knowledge_compiler/` tree
+
+---
+
+### 2.2: GoldStandardLoader Not Thread-Safe Under PipelineExecutor
+
+**What goes wrong:** `GoldStandardLoader` uses instance state (`_case_type_loaders` dict) and lazy-loaded imports, which are not safe under concurrent access from multiple pipeline threads.
+
+**Why it happens:**
+- `GoldStandardLoader.__init__()` sets `self._case_type_loaders: Dict[str, Callable[..., Optional[Dict[str, Any]]]]`
+- `self._registry` in `KnowledgeService` is a shared mutable reference across requests
+- `PipelineExecutor` runs in a dedicated `threading.Thread` (not async), and multiple steps may call `GoldStandardLoader` concurrently
+- Python's GIL protects individual bytecode operations but not complex state transitions
+
+**Consequences:**
+- Race condition: one thread is iterating over `_case_type_loaders` while another modifies it (adds a new GoldStandard registration)
+- `KnowledgeService._get_registry()` may initialize `_registry` twice, with the second overwriting the first
+- In production with concurrent pipeline runs, sporadic `KeyError` or `AttributeError` occurs
+
+**Prevention:**
+- `GoldStandardLoader` should be **stateless**: all registration happens at module load time via a module-level registry dict, not in `__init__`
+- If state is needed, use a `threading.Lock` around all state mutations
+- `KnowledgeService` should be instantiated **once per FastAPI request** (not singleton) to avoid shared mutable state across requests
+- For concurrent pipeline access, create a new `GoldStandardLoader` instance per pipeline run
+
+**Detection:**
+- Load test: create 10 concurrent pipeline runs that all call `GoldStandardLoader.get_reference_data()` simultaneously -- should produce identical results with no errors
+- Stress test with pytest-xdist: run the full pipeline test suite with 4 workers, verify no intermittent import or state errors
+
+---
+
+### 2.3: API Contract Mismatch Between GoldStandardLoader and ComparisonService
+
+**What goes wrong:** `ComparisonService` expects certain fields from `GoldStandardLoader.get_reference_data()`, but new GoldStandards return different field names or structures.
+
+**Why it happens:**
+- `GoldStandardLoader.get_reference_data()` returns `Dict[str, Any]` -- the caller must know the exact field names
+- `ComparisonService.build_metrics_table()` in `comparison_service.py` reads `case.result_summary.get("final_residual")` -- this field name must match what the pipeline's run step produces
+- `LiteratureComparison` (in `gold_standard_loader.py`) has fields: `metric_name, simulated_value, reference_value, error_pct, unit, reference_source, reynolds_number, status`
+- But `ComparisonService` produces `MetricsRow` with fields: `case_id, params, final_residual, execution_time, diff_pct`
+- These two models are **incompatible**: `LiteratureComparison` is about literature comparison, `MetricsRow` is about case-vs-case comparison
+
+**Consequences:**
+- `ComparisonService.create_comparison()` calls `GoldStandardLoader.compare_with_reference()` but the result cannot be stored in the `ComparisonResponse` model because `LiteratureComparison` fields are not in `ComparisonResponse`
+- The cross-case comparison (PO-03) and literature comparison (D-03/D-04) are two different operations with incompatible data models
+- The `delta_field` computation in `ComparisonService` produces `.vtu` files but the GoldStandard reference does not have a field-level delta -- the comparison is scalar-only
+
+**Prevention:**
+- Define a unified `ReferenceComparison` model that encompasses both literature comparison and case-vs-case comparison: `{metric_name, simulated_value, reference_value, error_pct, unit, reference_source, reference_type: "literature"|"case", reynolds_number, status}`
+- `ComparisonResponse` should contain a `literature_comparisons: List[ReferenceComparison]` field alongside `metrics_table`
+- `GoldStandardLoader` should be injectable into `ComparisonService` (not hardcoded import), so the comparison logic can be unit-tested independently
+
+**Detection:**
+- Integration test: create a GoldStandard case, run it through the pipeline, then call `ComparisonService.create_comparison()` with a `ComparisonCreate` that includes literature reference -- verify the result includes literature comparison data
+
+---
+
+### 2.4: Provenance Metadata Gap for GoldStandard Cases
+
+**What goes wrong:** GoldStandard cases in the pipeline do not carry provenance metadata, causing `ComparisonService.check_provenance_mismatch()` to flag GoldStandard cases as mismatched against each other or against user cases.
+
+**Why it happens:**
+- `check_provenance_mismatch()` compares `openfoam_version`, `compiler_version`, `mesh_seed_hash`, `solver_config_hash` across cases
+- GoldStandard cases may have been run with different mesh files or solver versions than user cases
+- The `GoldStandardLoader` does not return provenance metadata, so there is no way to know what provenance the reference data was generated under
+- `ComparisonResponse` has `provenance_mismatch: List[ProvenanceMismatchItem]` -- if all compared cases have no provenance data, the list is empty (false negative)
+
+**Consequences:**
+- Comparing a user case against a GoldStandard case always produces a provenance mismatch warning, even when the settings are equivalent
+- The provenance mismatch is informational but not actionable: the user does not know what specific setting differs
+- Analogy engine transfers a GoldStandard to a case with different turbulence model, and this is not flagged
+
+**Prevention:**
+- `GoldStandardLoader.get_reference_data()` must return a `provenance` dict alongside the reference values: `{openfoam_version: str|None, compiler_version: str|None, mesh_seed_hash: str|None, solver_config_hash: str|None, mesh_strategy: str}`
+- `LiteratureComparison` result must include the provenance of the reference data so consumers can see whether comparison is apples-to-apples
+- `ComparisonService.check_provenance_mismatch()` should accept an optional `reference_provenance` parameter and compare cases against the GoldStandard's provenance, not just against each other
+
+**Detection:**
+- Test: create a comparison with 3 user cases and 1 GoldStandard case -- `provenance_mismatch` should include items for each field that differs between the user cases and the GoldStandard reference
+
+---
+
+### 2.5: Path Assumptions in ComparisonService Break in Docker
+
+**What goes wrong:** `ComparisonService.get_convergence_data()` and `compute_delta()` hardcode filesystem paths (`data/sweeps/{sweep_id}/{combination_hash}/`) that may not resolve correctly when the pipeline runs inside Docker containers.
+
+**Why it happens:**
+- `get_convergence_data()` constructs `case_dir = Path(f"data/sweeps/{case.sweep_id}/{case.combination_hash}")` with a relative path
+- When running in Docker, the working directory may be different, or the `data/` directory may be volume-mounted at a different location
+- `compute_delta_field()` writes `delta_script_{script_id}.py` to `output_dir` and then executes it via `docker exec`, but the script path inside the container may not match the path on the host
+
+**Consequences:**
+- Convergence data parsing returns empty list because the log file is not found
+- Delta field computation fails with "Case directory not found"
+- The comparison completes but with no data, producing an empty `metrics_table`
+
+**Prevention:**
+- Use **absolute paths** derived from environment variables: `case_dir = Path(os.environ.get("DATA_DIR", "/app/data")) / f"sweeps/{case.sweep_id}/{case.combination_hash}"`
+- `compute_delta_field()` should volume-mount the output directory into the ParaView container and use container-absolute paths in the pvpython script
+- Add a path resolution step: if the case directory does not exist at the expected path, search parent directories or raise a descriptive error
+
+**Detection:**
+- Integration test: run a pipeline inside Docker and verify that `ComparisonService.get_convergence_data()` returns non-empty convergence history
+- Verify that `delta_vtu_url` in `ComparisonResponse` resolves to a downloadable file
 
 ---
 
 ## 3. Moderate Pitfalls
 
-Issues that cause incorrect behavior or degraded UX, but do not cause complete pipeline failure.
+### 3.1: GoldStandard Registration Is Ad-Hoc
 
-### 3.1: Blocking Sync Operations in Async Pipeline Callbacks
+**What goes wrong:** Each new GoldStandard is added by editing `GoldStandardLoader._case_type_loaders` dict directly, creating a growing list of if/elif imports that is hard to maintain.
 
-**What goes wrong:** Using `def` (sync) route handlers that call blocking OpenFOAM I/O operations inside async pipeline callbacks, freezing the event loop.
+**Prevention:** Use a module-level `GOLD_STANDARD_REGISTRY` dict populated via import-time side effects. Each GoldStandard module registers itself on import.
 
-**Why it happens:**
-- FastAPI runs sync route handlers in a threadpool but pipeline orchestrator callbacks may be async contexts
-- OpenFOAM I/O operations (reading log files, writing mesh files) are blocking and can take seconds
-- If orchestrator callback uses `async def` but calls blocking I/O without `await`, the event loop stalls
+### 3.2: Error swallowed in GoldStandardLoader._load_* functions
 
-**Prevention:**
-- When calling blocking I/O from async contexts, use `asyncio.to_thread()` or offload to a worker process
-- Explicitly separate: async coordination (WebSocket, scheduling) vs blocking computation (solver I/O, mesh generation)
-- Do not wrap blocking operations in `await` unless they are truly async-compatible
+**What goes wrong:** The `_load_lid_cavity`, `_load_backward_step`, and `_load_flat_plate` functions in `GoldStandardLoader` catch all exceptions and return empty dicts. This silently hides import errors, ValueError from wrong Re, and AttributeError from API changes.
 
----
+**Prevention:** Return a result that includes an `error` field. Callers should check `if not result or result.get("error")` and propagate or log appropriately. Never catch all exceptions silently.
 
-### 3.2: Parametric Sweep Resource Contention
+### 3.3: LiteratureComparison status thresholds are undocumented
 
-**What goes wrong:** Batch scheduling launches multiple OpenFOAM containers simultaneously, causing resource contention that degrades all simulations or causes OOM kills.
+**What goes wrong:** `compare_with_reference()` uses hardcoded threshold logic (PASS <= threshold, WARN <= 2*threshold, FAIL > 2*threshold) without documenting the rationale.
 
-**Why it happens:**
-- Each OpenFOAM Docker container consumes significant memory (2-8 GB depending on mesh size)
-- Default Docker resource limits may not be set; containers compete for host resources
-- Trame viewer containers also consume GPU/memory when active
-- No **resource pool manager** coordinates concurrent simulation capacity
-
-**Prevention:**
-- Implement a **resource pool** that tracks available host memory/GPU and limits concurrent solver runs
-- Set explicit Docker resource limits per container: `--memory`, `--cpus`, `--gpus`
-- For parametric sweeps, use a **staggered launch** pattern: start next case when previous reaches `runStartTime` rather than waiting for full completion
-- Monitor host resource usage and scale down concurrency when memory pressure is detected
+**Prevention:** Document the threshold logic in the docstring and make the multiplier configurable via a `warn_multiplier` parameter with default 2.0.
 
 ---
 
-### 3.3: Cross-Case Comparison Version Mismatch
+## 4. Phase-Specific Warnings
 
-**What goes wrong:** Comparing cases that used different OpenFOAM versions, solver settings, or mesh generation configs produces misleading comparative results.
-
-**Why it happens:**
-- Cases created at different times may have been generated with different `knowledge_compiler` versions
-- OpenFOAM Docker image may have been updated between case runs
-- Mesh refinement levels or boundary condition defaults may have changed
-- Comparison engine does not automatically detect or flag these differences
-
-**Prevention:**
-- Store **provenance metadata** with every case: `openfoam_version`, `compiler_version`, `mesh_seed_hash`, `solver_config_hash`
-- Before comparison, run a **compatibility check**: compare provenance metadata of all selected cases
-- Flag mismatches explicitly in UI rather than silently proceeding
-- Store comparison results with the provenance of the cases compared
-
----
-
-### 3.4: Pipeline DAG Visualization Stale State
-
-**What goes wrong:** Dashboard DAG visualization shows pipeline as "running" when individual steps have actually completed or failed, because DAG updates are driven by WebSocket push without polling fallback.
-
-**Why it happens:**
-- DAG state is driven by WebSocket messages from orchestrator to dashboard
-- If WebSocket disconnects (see 2.3), DAG stops updating
-- Client-side DAG may show a step as "running" because it received `step_started` but no `step_completed`
-- No polling fallback to sync actual pipeline state
-
-**Prevention:**
-- Implement **optimistic UI with reconciliation**: dashboard shows expected state based on last event, but periodically polls `/api/pipelines/{id}/status` to reconcile
-- DAG nodes should have explicit **staleness indicators**: if node has been "running" for > expected_duration, show warning
-- Store pipeline state in a persistent backend (not just in-memory) so any dashboard instance can retrieve current state
+| Pitfall | Severity | Phase | Mitigation |
+|---------|----------|-------|-----------|
+| 1.1 Literature data extraction | Critical | GoldStandard implementation | Unit tests against primary sources |
+| 1.2 Mesh strategy mismatch | Critical | GoldStandard implementation | `get_mesh_info()` function + schema encoding |
+| 1.3 Solver config not captured | High | GoldStandard implementation | `get_solver_config()` function + compatibility check |
+| 1.4 Validation threshold inappropriate | High | GoldStandard implementation | Per-metric thresholds in `get_expected_*` return |
+| 1.5 Analytic values computed incorrectly | High | GoldStandard implementation | Analytic function unit tests against published tables |
+| 1.6 ReportSpec schema drift | High | GoldStandard implementation | Registration decorator + schema versioning |
+| 2.1 Circular import | Critical | System integration | Layering rule enforcement + import isolation test |
+| 2.2 GoldStandardLoader thread safety | High | System integration | Stateless design + per-run instance |
+| 2.3 API contract mismatch | High | System integration | Unified `ReferenceComparison` model |
+| 2.4 Provenance metadata gap | Medium | System integration | Provenance in `get_reference_data()` return |
+| 2.5 Path assumptions in Docker | Medium | System integration | Absolute paths from env vars + volume mount validation |
+| 3.1 Ad-hoc registration | Low | GoldStandard implementation | Module-level registry |
+| 3.2 Swallowed errors in _load_* | Medium | GoldStandard implementation | Explicit error field in return dict |
+| 3.3 Undocumented threshold rationale | Low | GoldStandard implementation | Docstring + configurable multiplier |
 
 ---
 
-### 3.5: DAG Cycle Detection False Positives
+## 5. Priority Checklist
 
-**What goes wrong:** Complex parametric sweep pipelines with dynamic branching create apparent cycles that trigger DAG validation errors, even when the graph is actually a DAG.
+Before implementing any new GoldStandard, these must be resolved:
 
-**Why it happens:**
-- Cross-case comparison may create a virtual edge between cases that is not a real dependency but a logical relationship
-- Parametric sweep with conditional branching (`if mesh_quality < threshold, refine_mesh`) creates dynamic edges
-- DAG validation libraries may flag these as cycles
-
-**Prevention:**
-- Clearly separate **data dependency edges** (real execution order) from **metadata edges** (comparison relationships)
-- Store comparison relationships in a separate graph structure, not in the pipeline DAG
-- For conditional branching, use explicit `Condition` nodes with deterministic predicate evaluation, not implicit control flow
-
----
-
-## 4. Minor Pitfalls
-
-Cosmetic or UX issues that are annoying but do not cause incorrect results.
-
-### 4.1: Pipeline Abort Does Not Clean Up Child Processes
-
-**What goes wrong:** Clicking "abort" on a running pipeline kills the orchestrator's view of the pipeline but orphaned Docker containers and background processes continue running.
-
-**Prevention:** Implement a **cleanup handler** that on pipeline abort: stops all Docker containers started by that pipeline, kills background Python processes spawned by that pipeline, removes temporary case directories not yet persisted.
-
-### 4.2: Scheduler DST and Timezone Mismatch
-
-**What goes wrong:** Batch jobs scheduled with cron-like expressions fire at wrong times due to DST transitions, or scheduled times appear incorrect because server uses UTC but dashboard shows local time.
-
-**Prevention:** Always store and transmit pipeline scheduled times in UTC. Display in user's local timezone only at UI layer. Never use interval schedules < 24 hours for time-sensitive triggers (see Prefect scheduling docs).
-
-### 4.3: WebSocket Message Ordering Not Guaranteed
-
-**What goes wrong:** Pipeline events arrive at dashboard in non-chronological order (e.g., `step_complete` arrives before `step_started`), causing DAG to show incorrect state transitions.
-
-**Prevention:** Attach monotonic sequence numbers to all pipeline events. On client, maintain a **sequence log** and apply events in order. Discard late-arriving events with lower sequence numbers than already processed.
+- [ ] `get_mesh_info()` function defined and implemented in all 6 existing GoldStandards
+- [ ] `get_solver_config()` function defined and implemented in all 6 existing GoldStandards
+- [ ] `LiteratureComparison` extended to include `solver_config_compatible` and `reference_type`
+- [ ] `ComparisonResponse` updated to include `literature_comparisons` field
+- [ ] `GoldStandardLoader` registration decorator implemented (not hardcoded dict)
+- [ ] Import isolation test passes: no circular import between `api_server/` and `knowledge_compiler/`
+- [ ] Path resolution uses environment-derived absolute paths, not relative paths
+- [ ] Per-metric thresholds defined for each existing GoldStandard metric
 
 ---
 
-## 5. Integration Pitfalls
-
-Pitfalls at the boundary between existing components and the new orchestration layer.
-
-### 5.1: FastAPI Background Tasks vs. Dedicated Orchestrator
-
-**What goes wrong:** Adding pipeline orchestration inside the existing FastAPI server using `BackgroundTasks` creates coupling between HTTP request lifecycle and pipeline lifecycle.
-
-**Why it happens:**
-- FastAPI `BackgroundTasks` are tied to the request lifecycle; if the server restarts, background tasks are lost
-- Long-running pipelines outlive HTTP requests; `BackgroundTasks` are not designed for multi-hour runs
-- The existing FastAPI server was designed for request-response, not pipeline orchestration
-
-**Prevention:**
-- Use a **dedicated orchestrator process** (separate from FastAPI) that communicates via:
-  - Redis queue or PostgreSQL for job dispatch
-  - FastAPI for status polling and WebSocket subscription
-  - File system or object storage for large result payloads
-- FastAPI acts as the **API facade** and WebSocket hub; the actual pipeline execution runs in an independent process or worker pool
-
----
-
-### 5.2: knowledge_compiler Integration Without Idempotency
-
-**What goes wrong:** Pipeline triggers `knowledge_compiler` multiple times with same parameters, producing duplicate or conflicting case definitions.
-
-**Why it happens:**
-- `knowledge_compiler` was designed for one-off case generation, not pipeline reuse
-- If pipeline retries a `generate` step, it creates a new case with different ID but same parameters
-- Downstream `run` step may pick up the wrong case file if multiple versions exist
-
-**Prevention:**
-- Implement **idempotent generation**: if a case with matching parameters already exists, return its ID instead of creating new
-- Add a **generation lock**: prevent concurrent generation of the same parameter set
-- Store `knowledge_compiler` outputs in a versioned case directory: `cases/{param_hash}/{version}/`
-
----
-
-### 5.3: Trame Viewer Session Pool Collision
-
-**What goes wrong:** Pipeline visualization steps compete with interactive dashboard users for the trame session pool.
-
-**Why it happens:**
-- `TrameSessionManager` has an idle timeout (30 min) and max session limit
-- Pipeline automated visualization requests consume a session slot
-- When a user later tries to open an interactive viewer, all sessions are occupied by pipeline runs
-- Or vice versa: user holds sessions open, pipeline cannot get a slot for automated screenshots
-
-**Prevention:**
-- Separate **interactive** and **pipeline** trame session pools with different priority queues
-- Pipeline visualization sessions should be **ephemeral**: acquire session, render, release, without waiting for user interaction
-- Set shorter idle timeout (e.g., 5 min) for pipeline sessions vs. 30 min for interactive
-- Use a **session lease** system: pipeline holds lease for the minimum time needed
-
----
-
-## 6. Phase-Specific Warnings
-
-Which phase should address each pitfall.
-
-| Pitfall | Severity | Phase Recommendation | Notes |
-|---------|----------|----------------------|-------|
-| 2.1 State hides failures | Critical | PO-01 (Orchestration Engine) | Must be addressed in engine design, not deferred |
-| 2.2 Docker lifecycle conflicts | Critical | PO-01 (Orchestration Engine) | Requires deciding ownership model early |
-| 2.3 WebSocket disconnection | Critical | PO-01 (Orchestration Engine) | Connection resilience is foundational |
-| 2.4 Stale cache invalidation | High | PO-02 (Batch Scheduling) | Caching strategy must be designed with batch in mind |
-| 2.5 Step-level persistence gap | High | PO-04 (Pipeline Persistence) | Explicit phase for state persistence |
-| 3.1 Blocking async | Medium | PO-01 (Orchestration Engine) | FastAPI integration pattern |
-| 3.2 Resource contention | Medium | PO-02 (Batch Scheduling) | Resource pool design |
-| 3.3 Version mismatch | Medium | PO-03 (Cross-Case Comparison) | Provenance tracking |
-| 3.4 DAG stale state | Medium | PO-05 (DAG Visualization) | Polling fallback |
-| 3.5 DAG cycle false positive | Low | PO-05 (DAG Visualization) | Graph structure design |
-| 4.1 Abort cleanup | Low | PO-01 (Orchestration Engine) | Cleanup handler |
-| 4.2 DST/timezone | Low | Any scheduling phase | Simple if caught early |
-| 4.3 Message ordering | Low | PO-01 (Orchestration Engine) | Sequence numbering |
-| 5.1 FastAPI vs orchestrator | Critical | PO-01 (Orchestration Engine) | Architectural decision |
-| 5.2 Compiler idempotency | High | PO-01 (Orchestration Engine) | Generation locking |
-| 5.3 Session pool collision | Medium | PO-01 (Orchestration Engine) | Pool separation |
-
----
-
-## 7. Prevention Summary
-
-### Critical Path Checklist for PO-01 (Orchestration Engine)
-
-Before PO-01 is complete, these must be resolved:
-
-- [ ] **Docker ownership model** decided: orchestrator owns all containers OR TrameSessionManager continues owning viewer containers exclusively
-- [ ] **Structured result objects** defined for each wrapped component (not just exit codes)
-- [ ] **Connection resilience** designed: message buffering + sequence numbering + polling fallback
-- [ ] **Orchestrator process** is separate from FastAPI HTTP lifecycle
-- [ ] **Cleanup handler** registered for abort signal
-- [ ] **Resource pool** designed (even if not implemented yet) to prevent unbounded concurrent runs
-
-### Later Phase Items
-
-- PO-02: Add cache invalidation strategy + resource pool implementation
-- PO-03: Provenance metadata schema for cross-case comparison
-- PO-04: Step-level checkpointing + deterministic case ID scheme
-- PO-05: DAG staleness indicators + polling fallback
-
----
-
-## 8. Confidence Assessment
+## 6. Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Docker lifecycle pitfalls | HIGH | Well-documented, multiple sources agree |
-| WebSocket disconnection | HIGH | Standard real-time systems issue, documented in FastAPI docs |
-| State persistence | MEDIUM | General workflow engine patterns verified; CFD-specific checkpoint granularity needs validation |
-| Cross-case comparison | MEDIUM | Version mismatch is a known scientific workflow issue; specific OpenFOAM provenance schema not confirmed |
-| Resource contention | HIGH | Noisy neighbor problem documented across all workflow engines |
-| Integration anti-patterns | MEDIUM | FastAPI BackgroundTasks vs dedicated orchestrator is an architectural pattern, not CFD-specific |
+| GoldStandard implementation pitfalls | MEDIUM | Based on existing code patterns in `lid_driven_cavity.py` and `inviscid_wedge.py`; analytic function risks verified by code inspection |
+| Literature data extraction | MEDIUM | Cross-reference risk is standard in scientific computing; specific error modes inferred from code structure |
+| System integration pitfalls | MEDIUM-HIGH | Based on code inspection of `knowledge_service.py`, `comparison_service.py`, and `gold_standard_loader.py`; thread safety risk is architectural |
+| Circular import risk | HIGH | Lazy import pattern in `knowledge_service.py` is a known risk; layering rule is a standard mitigation |
+| Path assumption risk | MEDIUM | Docker volume mount patterns are documented in project; specific paths are verified from code |
 
 ---
 
-## 9. Sources
+## 7. Sources
 
 | Source | URL | Confidence | What it verifies |
-|--------|-----|------------|------------------|
-| Prefect Documentation: Task timeouts | https://docs.prefect.io/latest/concepts/tasks/ | HIGH | ThreadPoolTaskRunner timeout limitations with blocking operations |
-| Prefect Documentation: Caching | https://docs.prefect.io/latest/concepts/tasks/ | HIGH | Cache expiration never expires by default |
-| Prefect Documentation: State management | https://docs.prefect.io/latest/concepts/states/ | HIGH | State manipulation can hide failures; `AwaitingRetry` behavior |
-| Prefect Documentation: Schedules | https://docs.prefect.io/latest/concepts/schedules/ | HIGH | Cron limitations, DST handling, scheduler constraints |
-| Apache Airflow Documentation: Executor pitfalls | https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/executor/index.html | HIGH | Noisy neighbor, container startup latency, hybrid executor issues |
-| Apache Airflow Documentation: DAGs | https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html | HIGH | Trigger rule cascade, DAG state management, `depends_on_past` behavior |
-| Apache Airflow Documentation: Tasks | https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/tasks.html | HIGH | Task dependencies, XCom fundamentals, zombie task detection |
-| Apache Airflow Documentation: Sensors | https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/sensors.html | MEDIUM | Poke vs reschedule mode, soft_fail, timeout configuration |
-| Snakemake Documentation | https://snakemake.readthedocs.io/en/stable/snakefiles/deployment.html | MEDIUM | Deployment reproducibility, conda environment issues |
-| FastAPI Documentation: WebSocket | https://fastapi.tiangolo.com/advanced/websockets/ | HIGH | WebSocket connection lifecycle, disconnect handling, ConnectionManager pattern |
-| FastAPI Documentation: Async | https://fastapi.tiangolo.com/async/ | HIGH | async/await patterns, blocking event loop, background tasks |
-| Docker Documentation: Dockerfile best practices | https://docs.docker.com/develop/develop-images/dockerfile_best-practices/ | HIGH | Ephemeral containers, graceful shutdown with exec, volume mounting |
-| pytest Documentation: Flaky tests | https://docs.pytest.org/en/latest/explanation/flaky.html | MEDIUM | Flaky test root causes, timing issues, test isolation |
-
----
-
-## RESEARCH COMPLETE
-
-**Project:** AI-CFD Knowledge Harness v1.7.0
-**Mode:** Ecosystem (Pitfalls Research)
-**Confidence:** MEDIUM-HIGH
-
-### Key Findings
-
-- **Critical integration risk (2.2):** Docker lifecycle ownership conflict between `TrameSessionManager` and new pipeline orchestrator must be resolved before PO-01 begins
-- **WebSocket resilience (2.3):** Long-running CFD simulations require connection resilience with message buffering and polling fallback -- the existing in-memory `ConnectionManager` will lose events on disconnect
-- **State visibility (2.1):** Pipeline abstraction must instrument components with structured result objects, not just rely on exit codes, to prevent silent failures propagating through the pipeline
-- **Architectural decision (5.1):** FastAPI `BackgroundTasks` must NOT be used for pipeline orchestration -- requires dedicated independent process
-- **Provenance tracking (3.3):** Cross-case comparison needs explicit version metadata to prevent comparing results from different OpenFOAM/compiler versions
-
-### Files Created
-
-| File | Purpose |
-|------|---------|
-| `/Users/Zhuanz/Desktop/notion-cfd-harness/.planning/research/PITFALLS.md` | Domain pitfalls for pipeline orchestration v1.7.0 |
-
-### Confidence Assessment
-
-| Area | Level | Reason |
-|------|-------|--------|
-| Docker lifecycle | HIGH | Well-documented across workflow engines; applies to existing TrameSessionManager |
-| WebSocket disconnection | HIGH | FastAPI docs confirm; standard real-time systems problem |
-| State persistence | MEDIUM | General patterns verified; CFD-specific checkpoint granularity needs PO-04 validation |
-| Cross-case comparison | MEDIUM | Provenance mismatch is known in scientific workflows; specific schema needs design |
-| Integration anti-patterns | MEDIUM | FastAPI BackgroundTasks vs dedicated orchestrator is architectural, not CFD-specific |
-
-### Roadmap Implications
-
-- **PO-01 must resolve:** Docker ownership model, orchestrator/FastAPI separation, connection resilience, cleanup handler, structured result objects
-- **PO-02 must implement:** Resource pool + cache invalidation (deferring these to batch phase risks resource exhaustion)
-- **PO-03 must track:** Provenance metadata schema design
-- **PO-04 must implement:** Step-level checkpointing with deterministic case IDs
-
-### Open Questions
-
-- Does `TrameSessionManager` currently support labeling containers for ownership tracking?
-- Is there an existing Redis or PostgreSQL queue available for job dispatch, or will one need to be introduced?
-- What is the expected maximum parametric sweep size? (Affects resource pool sizing)
-- Should pipeline abort attempt to pause Docker containers for later resume, or terminate completely?
+|--------|-----|------------|-----------------|
+| Ghia 1982 paper | Journal of Computational Physics 48(3) | HIGH | Primary reference data for lid-driven cavity |
+| Armaly 1983 paper | J. Fluid Mech. 127 | HIGH | Backward-facing step reattachment lengths |
+| SU2 Tutorials official docs | https://su2code.github.io/tutorials/ | HIGH | Case parameters, mesh files, solver configs |
+| OpenFOAM Tutorial Guide | https://www.openfoam.com/documentation/tutorial-guide/ | HIGH | OF case setup and solver commands |
+| Python threading docs | https://docs.python.org/3/library/threading.html | HIGH | Thread safety and GIL limitations |
+| FastAPI import patterns | https://fastapi.tiangolo.com/ | MEDIUM | Best practices for service layer isolation |
 
 ---
 
 *Research conducted: 2026-04-12*
-*Next step: Review with architecture team before PO-01 phase begins*
+*Files read: PROJECT.md, cold_start.py, comparison_service.py, 34-REVIEW.md, gold_standard_loader.py, knowledge_service.py, pipeline_executor.py (partial), lid_driven_cavity.py, inviscid_wedge.py, cold_start_whitelist.yaml, existing PITFALLS.md*
