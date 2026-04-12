@@ -15,7 +15,7 @@
 
 ### Phases
 
-- [ ] **Phase 29: Foundation — Data Models + SQLite Persistence** — Pipeline and PipelineStep models with SQLite persistence
+- [x] **Phase 29: Foundation — Data Models + SQLite Persistence** — Pipeline and PipelineStep models with SQLite persistence (completed 2026-04-12)
 - [ ] **Phase 30: PO-01 Orchestration Engine** — State machine, DAG traversal, component wrapping, WebSocket events, cleanup handler, async separation
 - [ ] **Phase 31: Pipeline REST API + React Dashboard** — Full CRUD and control endpoints, PipelinesPage and PipelineDetailPage
 - [ ] **Phase 32: PO-02 Parametric Sweep** — SweepRunner, concurrency control, aggregate progress, output organization
@@ -41,7 +41,11 @@
 4. User can delete a pipeline via `DELETE /pipelines/{id}`, removing all persisted state
 5. Server restart does not lose any pipeline definitions — SQLite persistence verified
 
-**Plans:** TBD
+**Plans:** 2/2 plans complete
+
+Plans:
+- [x] 29-01-PLAN.md — Pydantic models (Pipeline/Step/DAG) + SQLite schema init
+- [x] 29-02-PLAN.md — CRUD service, REST router, main.py wiring
 
 ---
 
@@ -157,12 +161,12 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 29. Foundation — Data Models + SQLite | 0/1 | Not started | — |
-| 30. PO-01 Orchestration Engine | 0/1 | Not started | — |
-| 31. Pipeline REST API + React Dashboard | 0/1 | Not started | — |
-| 32. PO-02 Parametric Sweep | 0/1 | Not started | — |
-| 33. PO-05 DAG Visualization | 0/1 | Not started | — |
-| 34. PO-03 Cross-Case Comparison | 0/1 | Not started | — |
+| 29. Foundation — Data Models + SQLite | 2/2 | Complete    | 2026-04-12 |
+| 30. PO-01 Orchestration Engine | 0/TBD | Not started | — |
+| 31. Pipeline REST API + React Dashboard | 0/TBD | Not started | — |
+| 32. PO-02 Parametric Sweep | 0/TBD | Not started | — |
+| 33. PO-05 DAG Visualization | 0/TBD | Not started | — |
+| 34. PO-03 Cross-Case Comparison | 0/TBD | Not started | — |
 
 ---
 
