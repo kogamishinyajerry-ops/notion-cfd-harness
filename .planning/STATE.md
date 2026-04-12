@@ -1,15 +1,9 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.6.0
-milestone_name: — ParaView Web to Trame Migration
-status: completed
-last_updated: "2026-04-12T02:30:17.335Z"
-progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+milestone: v1.7.0
+milestone_name: Pipeline Orchestration & Automation
+status: defining_requirements
+last_updated: "2026-04-12"
 ---
 
 # State
@@ -18,51 +12,35 @@ progress:
 
 - **Name**: AI-CFD Knowledge Harness
 - **Root**: /Users/Zhuanz/Desktop/notion-cfd-harness
-- **Version**: v1.6.0
-- **Milestone**: v1.6.0 — ParaView Web to Trame Migration
+- **Version**: v1.7.0
+- **Milestone**: v1.7.0 — Pipeline Orchestration & Automation
 
 ## Current Position
 
-Phase: 27 (integration-feature-parity) — EXECUTING
-Plan: 2 of 2
-**Active milestone:** v1.6.0 ParaView Web to Trame Migration
-**Active phase:** Phase 24 (RPC Protocol Migration)
-**Status:** v1.6.0 milestone complete
-**Next:** `/gsd-plan-phase 25`
+Phase: Not started (defining requirements)
+Plan: —
+**Active milestone:** v1.7.0 Pipeline Orchestration & Automation
+**Status:** Defining requirements
+**Next:** Requirements gathering in progress
 
-## Phase Structure
+## Active Milestone Context
 
-| Phase | Goal | Requirements |
-|-------|------|--------------|
-| 23 - Trame Backend Skeleton | Trame + Docker integration, minimal sphere rendering | TRAME-01.1–01.4 |
-| 24 - RPC Protocol Migration | 13 @exportRpc → @ctrl.add/@state.change, UUID registry | TRAME-02.1–02.6 |
-| 25 - Session Manager Adaptation | TrameSessionManager, Docker lifecycle, idle timeout | TRAME-03.1–03.4 |
-| 26 - Vue Frontend + Iframe Bridge | Vue.js viewer, CFDViewerBridge.ts, postMessage wiring | TRAME-04.1–04.6 |
-| 27 - Integration + Feature Parity | End-to-end validation, all v1.4.0/v1.5.0 features | TRAME-05.1–05.6 |
-| 28 - Cleanup + Old File Removal | Delete ParaView Web artifacts, no broken imports | TRAME-06.1–06.5 |
+**Goal:** 将孤立的组件（case generation → solver execution → convergence monitoring → 3D visualization → report generation）串联为端-to-end自动化流水线
 
-## Coverage
+**Target features (TBD — requirements in progress):**
+- PO-01: Pipeline 编排引擎
+- PO-02: 批量作业调度
+- PO-03: 跨 case 比较引擎
+- PO-04: Pipeline 状态持久化与恢复
+- PO-05: Pipeline 可视化 DAG
 
-- **31/31** requirements mapped across 6 phases
-- **0** orphaned requirements
-- **0** duplicate mappings
-
-## Key Architecture Decisions
+## Key Architecture (from v1.6.0)
 
 - `@exportRpc` → `@ctrl.add`/`@state.change` (trame reactive pattern)
 - React dashboard embeds trame Vue.js viewer as iframe
 - `CFDViewerBridge.ts` uses `window.postMessage` for React-Vue communication
-- Filter registry uses UUID keys (not Python `id()`) for restart stability
-- `InvokeEvent` calls removed entirely (trame auto-pushes on state mutation)
-- Single `pvpython /trame_server.py --port N` replaces `entrypoint_wrapper.sh` + launcher
-
-## Research Notes (commit `291cccc`)
-
-- MEDIUM confidence — no official migration guide exists
-- Phase 1 must validate trame + ParaView 5.10 compatibility explicitly
-- Phase 4 must validate `VtkLocalView` Apple Silicon Safari WebGL behavior
-- `html_view.screenshot()` resolution behavior needs practical verification
-- Multi-session isolation via `get_server(name=session_id)` needs runtime test
+- Filter registry uses UUID keys
+- `TrameSessionManager` — Docker lifecycle, 30-min idle timeout
 
 ## Blockers
 
@@ -70,4 +48,4 @@ None — roadmap ready for planning
 
 ## Session Continuity
 
-After approval: run `/gsd-plan-phase 23` to begin Phase 23 planning
+After requirements confirmed: spawn 4 parallel researchers → define requirements → create roadmap

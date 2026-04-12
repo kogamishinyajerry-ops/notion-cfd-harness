@@ -1,6 +1,6 @@
 # AI-CFD Knowledge Harness — Project
 
-**Version:** v1.6.0 (Next)
+**Version:** v1.7.0 (Next)
 **Status:** Planning
 
 ---
@@ -100,15 +100,27 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 
 **Archive:** `.planning/milestones/v1.6.0-ROADMAP.md`
 
-## v1.7.0 — Next (Planning)
+## v1.7.0 — Pipeline Orchestration & Automation (Planning)
 
-**Goal:** TBD — start with `/gsd-new-milestone` to define next milestone scope.
+**Goal:** 将孤立的组件（case generation → solver execution → convergence monitoring → 3D visualization → report generation）串联为端到端自动化流水线，一键触发全流程。
+
+**Target features:**
+- **PO-01**: Pipeline 编排引擎 — 输入自然语言/参数，依次触发 generate → run → monitor → visualize → report
+- **PO-02**: 批量作业调度 — 支持参数化扫描（parametric sweep）和批量运行
+- **PO-03**: 跨 case 比较引擎 — 对比多个 case 的收敛历史、场分布、关键指标
+- **PO-04**: Pipeline 状态持久化与恢复 — 中断后可恢复
+- **PO-05**: Pipeline 可视化 DAG — Dashboard 展示作业依赖关系图
+
+**Key context:**
+- v1.6.0刚完成Trame迁移，所有可视化基础设施就绪
+- 当前各组件通过独立API调用工作，需要 orchestration layer 串联
+- 项目根部（api_server + dashboard）与 knowledge_compiler/ 平行发展
 
 **Archive:** `.planning/milestones/v1.6.0-ROADMAP.md`
 
 ## Evolution
 
-*Last updated: 2026-04-12 — v1.6.0 shipped, v1.7.0 planning started*
+*Last updated: 2026-04-12 — v1.7.0 planning started*
 
 **After each phase transition** (via `/gsd-transition`):
 1. Requirements invalidated? → Move to Out of Scope with reason
