@@ -71,8 +71,8 @@ Inherited from project-wide convention (pre-populated from codebase — `theme.c
 | 3xl | 64px | Page-level vertical rhythm |
 
 Exceptions:
-- Combination count preview chip: 4px vertical padding, 12px horizontal (not on scale; intentional compact chip).
-- Touch targets for row-level action buttons (Remove param row): minimum 36px height.
+- Combination count preview chip: 4px vertical padding, 16px horizontal (fixed: 12px → 16px to align with 8pt grid).
+- Touch targets for row-level action buttons (Remove param row): minimum 40px height (fixed: 36px → 40px to align with 8pt grid).
 
 ---
 
