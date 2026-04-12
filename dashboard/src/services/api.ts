@@ -14,6 +14,8 @@ import type {
   KnowledgeQueryRequest,
   SystemStatus,
   PaginatedResponse,
+  Pipeline,
+  PipelineListResponse,
 } from './types';
 
 class ApiClient {
@@ -152,6 +154,81 @@ class ApiClient {
       body: JSON.stringify(request),
     });
     return response.data;
+  }
+
+  // Pipelines
+  async getPipelines(): Promise<Pipeline[]> {
+    const response = await this.request<PipelineListResponse>('/pipelines');
+    return response.pipelines;
+  }
+
+  async getPipeline(id: string): Promise<Pipeline> {
+    return this.request<Pipeline>(`/pipelines/${id}`);
+  }
+
+  async createPipeline(data: {
+    name: string;
+    description?: string;
+    steps: Array<{
+      step_id: string;
+      step_type: string;
+      step_order: number;
+      depends_on: string[];
+      params: Record<string, unknown>;
+    }>;
+    config?: Record<string, unknown>;
+  }): Promise<Pipeline> {
+    return this.request<Pipeline>('/pipelines', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updatePipeline(id: string, data: Partial<{
+    name: string;
+    description: string;
+    config: Record<string, unknown>;
+  }>): Promise<Pipeline> {
+    return this.request<Pipeline>(`/pipelines/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deletePipeline(id: string): Promise<void> {
+    await this.request(`/pipelines/${id}`, { method: 'DELETE' });
+  }
+
+  async startPipeline(id: string): Promise<{ status: string; pipeline_id: string }> {
+    return this.request<{ status: string; pipeline_id: string }>(`/pipelines/${id}/start`, {
+      method: 'POST',
+    });
+  }
+
+  async pausePipeline(id: string): Promise<{ status: string; pipeline_id: string }> {
+    return this.request<{ status: string; pipeline_id: string }>(`/pipelines/${id}/pause`, {
+      method: 'POST',
+    });
+  }
+
+  async resumePipeline(id: string): Promise<{ status: string; pipeline_id: string }> {
+    return this.request<{ status: string; pipeline_id: string }>(`/pipelines/${id}/resume`, {
+      method: 'POST',
+    });
+  }
+
+  async cancelPipeline(id: string): Promise<{ status: string; pipeline_id: string }> {
+    return this.request<{ status: string; pipeline_id: string }>(`/pipelines/${id}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  async getPipelineSteps(id: string): Promise<unknown[]> {
+    return this.request<unknown[]>(`/pipelines/${id}/steps`);
+  }
+
+  async getPipelineEvents(id: string): Promise<unknown[]> {
+    return this.request<unknown[]>(`/pipelines/${id}/events`);
   }
 }
 
