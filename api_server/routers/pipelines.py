@@ -6,7 +6,7 @@ REST API endpoints for pipeline CRUD operations and DAG management.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -198,3 +198,112 @@ async def cancel_pipeline(pipeline_id: str):
     await cleanup.cancel_and_cleanup(pipeline_id)
 
     return {"status": "cancelling", "pipeline_id": pipeline_id}
+
+
+@router.get("/pipelines/{pipeline_id}/steps", response_model=List[dict], tags=["pipelines"])
+async def get_pipeline_steps(pipeline_id: str):
+    """
+    Get all steps for a pipeline with their current statuses.
+
+    Returns a list of step objects with: step_id, step_type, step_order, depends_on, params, status.
+    """
+    service = get_pipeline_service()
+    pipeline = service.get_pipeline(pipeline_id)
+    if not pipeline:
+        raise HTTPException(status_code=404, detail=f"Pipeline not found: {pipeline_id}")
+
+    steps = []
+    for step in pipeline.steps:
+        step_dict = {
+            "id": step.step_id,
+            "pipeline_id": pipeline_id,
+            "step_type": step.step_type.value if hasattr(step.step_type, 'value') else step.step_type,
+            "step_order": step.step_order,
+            "depends_on": step.depends_on,
+            "params": step.params,
+            "status": step.status.value if hasattr(step.status, 'value') else step.status,
+        }
+        steps.append(step_dict)
+    return steps
+
+
+@router.get("/pipelines/{pipeline_id}/events", response_model=List[dict], tags=["pipelines"])
+async def get_pipeline_events(pipeline_id: str):
+    """
+    Get buffered pipeline events (last 100).
+
+    Returns events with sequence numbers for reconnect replay.
+    """
+    from api_server.services.pipeline_websocket import get_event_bus
+
+    service = get_pipeline_service()
+    pipeline = service.get_pipeline(pipeline_id)
+    if not pipeline:
+        raise HTTPException(status_code=404, detail=f"Pipeline not found: {pipeline_id}")
+
+    bus = get_event_bus()
+    events = bus.get_buffer(pipeline_id)
+    return [e.to_dict() for e in events]
+
+
+@router.post("/pipelines/{pipeline_id}/pause", tags=["pipelines"])
+async def pause_pipeline(pipeline_id: str):
+    """
+    Pause a running pipeline.
+
+    Signals the PipelineExecutor to pause after the current step completes.
+    Transitions pipeline status to PAUSED.
+    """
+    from api_server.services.pipeline_executor import get_pipeline_executor
+
+    service = get_pipeline_service()
+    pipeline = service.get_pipeline(pipeline_id)
+    if not pipeline:
+        raise HTTPException(status_code=404, detail=f"Pipeline not found: {pipeline_id}")
+
+    pipeline_status = pipeline.status.value if hasattr(pipeline.status, 'value') else pipeline.status
+    running_statuses = ("running", "monitoring", "visualizing", "reporting")
+    if pipeline_status not in running_statuses:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot pause pipeline in state '{pipeline_status}'. Only RUNNING pipelines can be paused."
+        )
+
+    executor = get_pipeline_executor(pipeline_id)
+    if executor:
+        executor.pause()
+
+    service.update_pipeline_status(pipeline_id, PipelineStatus.PAUSED)
+
+    return {"status": "paused", "pipeline_id": pipeline_id}
+
+
+@router.post("/pipelines/{pipeline_id}/resume", tags=["pipelines"])
+async def resume_pipeline(pipeline_id: str):
+    """
+    Resume a paused pipeline.
+
+    Signals the PipelineExecutor to continue. Transitions pipeline status back to RUNNING.
+    """
+    from api_server.services.pipeline_executor import get_pipeline_executor
+
+    service = get_pipeline_service()
+    pipeline = service.get_pipeline(pipeline_id)
+    if not pipeline:
+        raise HTTPException(status_code=404, detail=f"Pipeline not found: {pipeline_id}")
+
+    pipeline_status = pipeline.status.value if hasattr(pipeline.status, 'value') else pipeline.status
+    if pipeline_status != "paused":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot resume pipeline in state '{pipeline_status}'. Only PAUSED pipelines can be resumed."
+        )
+
+    executor = get_pipeline_executor(pipeline_id)
+    if executor:
+        executor.resume()
+
+    service.update_pipeline_status(pipeline_id, PipelineStatus.RUNNING)
+
+    return {"status": "resumed", "pipeline_id": pipeline_id}
+
