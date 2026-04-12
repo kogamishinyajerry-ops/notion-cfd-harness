@@ -101,3 +101,197 @@ def init_pipeline_db() -> None:
     conn.close()
 
     _INITIALIZED = True
+
+
+import json
+import logging
+import uuid
+from datetime import datetime, timezone
+from typing import List, Optional
+
+from api_server.models import (
+    JobStatus,
+    PipelineCreate,
+    PipelineResponse,
+    PipelineStatus,
+    PipelineStep,
+    PipelineUpdate,
+    StepType,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class PipelineDBService:
+    """CRUD operations for Pipeline and PipelineStep entities using SQLite."""
+
+    def __init__(self):
+        init_pipeline_db()
+
+    # --- Pipeline CRUD ---
+
+    def create_pipeline(self, spec: PipelineCreate) -> PipelineResponse:
+        """Create a new pipeline with its steps."""
+        pipeline_id = f"PIPELINE-{uuid.uuid4().hex[:8].upper()}"
+        now = datetime.now(timezone.utc).isoformat()
+
+        config_json = json.dumps(spec.config)
+        status = PipelineStatus.PENDING.value
+
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO pipelines (id, name, description, status, config, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (pipeline_id, spec.name, spec.description, status, config_json, now, now))
+
+        # Insert steps
+        for step in spec.steps:
+            step_type_val = step.step_type.value if hasattr(step.step_type, 'value') else step.step_type
+            cursor.execute("""
+                INSERT INTO pipeline_steps (pipeline_id, step_id, step_type, step_order, depends_on, params, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                pipeline_id,
+                step.step_id,
+                step_type_val,
+                step.step_order,
+                json.dumps(step.depends_on),
+                json.dumps(step.params),
+                JobStatus.PENDING.value,
+            ))
+
+        conn.commit()
+        conn.close()
+
+        logger.info(f"Created pipeline: {pipeline_id}")
+        return self.get_pipeline(pipeline_id)
+
+    def get_pipeline(self, pipeline_id: str) -> Optional[PipelineResponse]:
+        """Get a pipeline by ID with all its steps."""
+        conn = get_pipeline_db_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM pipelines WHERE id = ?", (pipeline_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            conn.close()
+            return None
+
+        # Load steps
+        cursor.execute("SELECT * FROM pipeline_steps WHERE pipeline_id = ? ORDER BY step_order", (pipeline_id,))
+        step_rows = cursor.fetchall()
+        conn.close()
+
+        steps = []
+        for sr in step_rows:
+            depends_on = json.loads(sr["depends_on"])
+            params = json.loads(sr["params"])
+            steps.append(PipelineStep(
+                step_id=sr["step_id"],
+                step_type=StepType(sr["step_type"]),
+                step_order=sr["step_order"],
+                depends_on=depends_on,
+                params=params,
+                status=JobStatus(sr["status"]),
+            ))
+
+        config = json.loads(row["config"])
+        return PipelineResponse(
+            id=row["id"],
+            name=row["name"],
+            description=row["description"],
+            status=PipelineStatus(row["status"]),
+            steps=steps,
+            config=config,
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
+
+    def list_pipelines(self) -> List[PipelineResponse]:
+        """List all pipelines."""
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM pipelines ORDER BY created_at DESC")
+        ids = [r["id"] for r in cursor.fetchall()]
+        conn.close()
+
+        results = []
+        for pid in ids:
+            p = self.get_pipeline(pid)
+            if p:
+                results.append(p)
+        return results
+
+    def update_pipeline(self, pipeline_id: str, update: PipelineUpdate) -> Optional[PipelineResponse]:
+        """Update a PENDING pipeline's name/description/config/status."""
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT status FROM pipelines WHERE id = ?", (pipeline_id,))
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return None
+
+        current_status = row["status"]
+        if current_status != PipelineStatus.PENDING.value:
+            conn.close()
+            raise ValueError(f"Cannot update pipeline with status '{current_status}'. Only PENDING pipelines can be updated.")
+
+        now = datetime.now(timezone.utc).isoformat()
+        fields = []
+        values = []
+
+        if update.name is not None:
+            fields.append("name = ?")
+            values.append(update.name)
+        if update.description is not None:
+            fields.append("description = ?")
+            values.append(update.description)
+        if update.config is not None:
+            fields.append("config = ?")
+            values.append(json.dumps(update.config))
+        if update.status is not None:
+            fields.append("status = ?")
+            values.append(update.status.value)
+
+        fields.append("updated_at = ?")
+        values.append(now)
+        values.append(pipeline_id)
+
+        cursor.execute(f"UPDATE pipelines SET {', '.join(fields)} WHERE id = ?", values)
+        conn.commit()
+        conn.close()
+
+        logger.info(f"Updated pipeline: {pipeline_id}")
+        return self.get_pipeline(pipeline_id)
+
+    def delete_pipeline(self, pipeline_id: str) -> bool:
+        """Delete a pipeline and all its steps (ON DELETE CASCADE)."""
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM pipelines WHERE id = ?", (pipeline_id,))
+        deleted = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+
+        if deleted:
+            logger.info(f"Deleted pipeline: {pipeline_id}")
+        return deleted
+
+
+# --- Module-level singleton getter (matches CaseService pattern) ---
+
+_pipeline_service: Optional[PipelineDBService] = None
+
+
+def get_pipeline_db_service() -> PipelineDBService:
+    """Get or create the PipelineDBService singleton."""
+    global _pipeline_service
+    if _pipeline_service is None:
+        _pipeline_service = PipelineDBService()
+    return _pipeline_service
