@@ -1,0 +1,89 @@
+/* SweepCreatePage.css */
+
+.sweep-create .create-header {
+  margin-bottom: var(--spacing-lg, 24px);
+}
+
+.sweep-create h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: var(--spacing-md, 16px);
+}
+
+.sweep-create .create-form {
+  max-width: 720px;
+}
+
+.sweep-create .form-section {
+  margin-bottom: var(--spacing-xl, 32px);
+}
+
+.sweep-create .form-section h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-md, 16px);
+}
+
+.param-grid-builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm, 8px);
+  margin-bottom: var(--spacing-md, 16px);
+}
+
+.param-row {
+  display: flex;
+  gap: var(--spacing-sm, 8px);
+  align-items: center;
+}
+
+.param-key {
+  width: 180px;
+  flex-shrink: 0;
+}
+
+.param-values {
+  flex: 1;
+}
+
+.combination-count-chip {
+  display: inline-block;
+  padding: 4px 16px;
+  background: var(--bg-tertiary, #eeeeee);
+  border-radius: 16px;
+  font-size: 0.875rem;
+  color: var(--text-secondary, #666);
+  margin-top: var(--spacing-sm, 8px);
+}
+
+.combination-count-chip.zero {
+  color: var(--color-failed, #ef4444);
+}
+
+.combination-count-chip.warning {
+  color: var(--color-running, #f59e0b);
+  font-weight: 600;
+}
+
+.form-hint {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--text-secondary, #666);
+  margin-top: var(--spacing-xs, 4px);
+}
+
+.btn-remove {
+  background: none;
+  border: 1px solid var(--color-failed, #ef4444);
+  color: var(--color-failed, #ef4444);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  min-height: 40px;
+}
+
+.btn-remove:hover {
+  background: var(--color-failed, #ef4444);
+  color: white;
+}
