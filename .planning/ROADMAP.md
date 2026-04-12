@@ -72,7 +72,12 @@ Plans:
 | GS-03 | 6 Priority Case Implementations | ✅ Complete |
 | GS-04 | Mesh/Solver Metadata Functions | ✅ Complete |
 
-### Phase 36: System Integration
+### Phase 36: System Integration (2 plans, 2 waves)
+
+**Plans:**
+- [ ] 36-01-PLAN.md — Wave 1: GS-05 GOLDSTANDARD StepType + GS-06 validate_against_gold_standard()
+- [ ] 36-02-PLAN.md — Wave 2: GS-07 from-gold-standard endpoint + GS-08 Provenance hash computation
+
 | Requirement | Description | Status |
 |-------------|-------------|--------|
 | GS-05 | GOLDSTANDARD Step Type in PipelineExecutor | Pending |
