@@ -136,3 +136,78 @@ export interface ServiceStatus {
   status: 'up' | 'down';
   latency_ms?: number;
 }
+
+// Pipeline types
+export interface Pipeline {
+  id: string;
+  name: string;
+  description?: string;
+  status: PipelineStatus;
+  steps: PipelineStep[];
+  config: PipelineConfig;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export type PipelineStatus =
+  | 'PENDING'
+  | 'RUNNING'
+  | 'MONITORING'
+  | 'VISUALIZING'
+  | 'REPORTING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'PAUSED';
+
+export interface PipelineStep {
+  id: string;
+  pipeline_id: string;
+  step_type: StepType;
+  step_order: number;
+  depends_on: string[];
+  params: Record<string, unknown>;
+  status: StepStatus;
+  result?: StepResult;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export type StepType = 'generate' | 'run' | 'monitor' | 'visualize' | 'report';
+export type StepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
+
+export interface StepResult {
+  status: 'success' | 'diverged' | 'validation_failed' | 'error';
+  exit_code: number;
+  validation_checks?: Record<string, boolean>;
+  diagnostics?: Record<string, unknown>;
+}
+
+export interface PipelineConfig {
+  dag: Record<string, string[]>;
+}
+
+export interface PipelineEvent {
+  sequence: number;
+  type:
+    | 'pipeline_started'
+    | 'step_started'
+    | 'step_completed'
+    | 'step_failed'
+    | 'pipeline_completed'
+    | 'pipeline_failed'
+    | 'pipeline_cancelled'
+    | 'pipeline_paused'
+    | 'pipeline_resumed';
+  pipeline_id: string;
+  step_id?: string;
+  timestamp: string;
+  data?: Record<string, unknown>;
+}
+
+export interface PipelineListResponse {
+  pipelines: Pipeline[];
+  total: number;
+}
