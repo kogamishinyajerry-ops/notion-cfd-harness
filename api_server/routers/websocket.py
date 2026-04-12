@@ -4,6 +4,7 @@ WebSocket Router
 Real-time job progress streaming via WebSocket connections.
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -124,3 +125,85 @@ async def get_websocket_status(
     return {
         "total_connections": manager.get_total_connections(),
     }
+
+
+# =========================================================================
+# Pipeline WebSocket Endpoint (PIPE-05)
+# =========================================================================
+HEARTBEAT_INTERVAL = 30  # seconds (PIPE-05: WebSocket.ping() every 30s)
+
+
+@router.websocket("/ws/pipelines/{pipeline_id}")
+async def pipeline_websocket(
+    websocket: WebSocket,
+    pipeline_id: str,
+    last_seq: int = Query(default=0, description="Last received sequence number for replay"),
+):
+    """
+    Real-time pipeline event stream with connection resilience.
+
+    Protocol:
+    1. Client connects to /ws/pipelines/{pipeline_id}?last_seq=N
+    2. Server validates pipeline_id exists in DB; closes with 4004 if not found
+    3. Server replays all buffered events with sequence > last_seq
+    4. Server streams new events as they are published
+    5. Server sends WebSocket.ping() every 30 seconds
+    6. On disconnect, server unregisters subscriber queue
+
+    Event shape:
+    {
+      "type": "pipeline_started" | "step_started" | "step_completed" | "step_failed" |
+              "pipeline_completed" | "pipeline_failed" | "pipeline_cancelled",
+      "pipeline_id": str,
+      "sequence": int,
+      "timestamp": str,
+      "payload": dict
+    }
+    """
+    from api_server.services.pipeline_db import get_pipeline_db_service
+    from api_server.services.pipeline_websocket import get_event_bus
+
+    # Validate pipeline exists before accepting connection
+    db = get_pipeline_db_service()
+    pipeline = db.get_pipeline(pipeline_id)
+    if pipeline is None:
+        await websocket.close(code=4004, reason=f"Pipeline not found: {pipeline_id}")
+        return
+
+    await websocket.accept()
+    bus = get_event_bus()
+
+    # Subscribe to new events
+    subscriber_queue = bus.subscribe(pipeline_id)
+
+    try:
+        # Replay missed events above last_seq
+        missed = bus.replay_from(pipeline_id, last_seq=last_seq)
+        for event in missed:
+            await websocket.send_json(event.to_dict())
+
+        # Stream new events + heartbeat
+        while True:
+            try:
+                # Wait for next event with heartbeat timeout
+                event = await asyncio.wait_for(
+                    subscriber_queue.get(),
+                    timeout=HEARTBEAT_INTERVAL
+                )
+                await websocket.send_json(event.to_dict())
+            except asyncio.TimeoutError:
+                # Send heartbeat ping (PIPE-05: every 30s)
+                await websocket.send_bytes(b"")   # send_bytes keeps connection alive
+                try:
+                    await websocket.send_text('{"type":"ping"}')
+                except Exception:
+                    break  # connection lost
+            except Exception as e:
+                logger.warning(f"Pipeline WS error for {pipeline_id}: {e}")
+                break
+
+    except Exception as e:
+        logger.warning(f"Pipeline WebSocket disconnected for {pipeline_id}: {e}")
+    finally:
+        bus.unsubscribe(pipeline_id, subscriber_queue)
+        logger.info(f"Pipeline WebSocket closed: {pipeline_id}")
