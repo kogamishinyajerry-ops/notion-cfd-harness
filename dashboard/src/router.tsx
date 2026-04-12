@@ -8,6 +8,9 @@ import {
   ReportsPage,
   ReportViewerPage,
   SettingsPage,
+  PipelinesPage,
+  PipelineDetailPage,
+  PipelineCreatePage,
 } from './pages';
 
 export const router = createBrowserRouter([
@@ -23,6 +26,9 @@ export const router = createBrowserRouter([
       { path: 'jobs/:jobId', element: <JobDetailPage /> },
       { path: 'reports', element: <ReportsPage /> },
       { path: 'reports/:reportId', element: <ReportViewerPage /> },
+      { path: 'pipelines', element: <PipelinesPage /> },
+      { path: 'pipelines/new', element: <PipelineCreatePage /> },
+      { path: 'pipelines/:pipelineId', element: <PipelineDetailPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

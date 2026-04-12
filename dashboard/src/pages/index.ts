@@ -5,3 +5,6 @@ export { default as SettingsPage } from './SettingsPage';
 export { default as DashboardPage } from './DashboardPage';
 export { default as JobDetailPage } from './JobDetailPage';
 export { default as ReportViewerPage } from './ReportViewerPage';
+export { default as PipelinesPage } from './PipelinesPage';
+export { default as PipelineDetailPage } from './PipelineDetailPage';
+export { default as PipelineCreatePage } from './PipelineCreatePage';
