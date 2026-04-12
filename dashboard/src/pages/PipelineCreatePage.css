@@ -1,0 +1,193 @@
+.pipeline-create {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.create-header {
+  margin-bottom: var(--sp-6);
+}
+
+.back-link {
+  color: var(--accent-color);
+  font-size: 14px;
+  text-decoration: none;
+  display: inline-block;
+  margin-bottom: var(--sp-2);
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.create-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.form-section {
+  margin-bottom: var(--sp-8);
+}
+
+.form-section h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.form-group {
+  margin-bottom: var(--sp-4);
+}
+
+.form-group label {
+  display: block;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-1);
+}
+
+.required {
+  color: var(--color-failed);
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.form-textarea.mono {
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.steps-builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.step-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: var(--sp-4);
+}
+
+.step-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--sp-4);
+}
+
+.step-number {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.step-card-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.btn-move {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.btn-move:hover {
+  color: var(--accent-color);
+}
+
+.btn-remove {
+  background: none;
+  border: none;
+  color: var(--color-failed);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.btn-remove:hover {
+  text-decoration: underline;
+}
+
+.depends-on-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 14px;
+  cursor: pointer;
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--bg-secondary);
+  border-radius: 4px;
+}
+
+.checkbox-label input {
+  cursor: pointer;
+}
+
+.no-deps-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.btn-add-step {
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px dashed var(--border-color);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.btn-add-step:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.form-error-banner {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--color-failed);
+  border-radius: 4px;
+  padding: var(--sp-3) var(--sp-4);
+  color: var(--color-failed);
+  font-size: 14px;
+  margin-bottom: var(--sp-6);
+}
+
+.form-actions {
+  display: flex;
+  gap: var(--sp-4);
+  justify-content: flex-end;
+}
