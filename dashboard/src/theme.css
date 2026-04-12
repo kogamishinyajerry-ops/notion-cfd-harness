@@ -29,6 +29,9 @@
   --color-paused: #8b5cf6;
   --color-skipped: #facc15;
 
+  /* Sweep status colors */
+  --color-sweep-active: #3b82f6; /* Sweep actively dispatching combinations (RUNNING but not all started) */
+
   /* Geometry preview colors */
   --color-preview-bg: #f8fafc;
   --color-grid: #e2e8f0;

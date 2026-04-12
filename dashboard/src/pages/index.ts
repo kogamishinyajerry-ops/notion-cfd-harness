@@ -8,3 +8,6 @@ export { default as ReportViewerPage } from './ReportViewerPage';
 export { default as PipelinesPage } from './PipelinesPage';
 export { default as PipelineDetailPage } from './PipelineDetailPage';
 export { default as PipelineCreatePage } from './PipelineCreatePage';
+export { default as SweepsPage } from './SweepsPage';
+export { default as SweepCreatePage } from './SweepCreatePage';
+export { default as SweepDetailPage } from './SweepDetailPage';

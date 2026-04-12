@@ -11,6 +11,9 @@ import {
   PipelinesPage,
   PipelineDetailPage,
   PipelineCreatePage,
+  SweepsPage,
+  SweepCreatePage,
+  SweepDetailPage,
 } from './pages';
 
 export const router = createBrowserRouter([
@@ -29,6 +32,9 @@ export const router = createBrowserRouter([
       { path: 'pipelines', element: <PipelinesPage /> },
       { path: 'pipelines/new', element: <PipelineCreatePage /> },
       { path: 'pipelines/:pipelineId', element: <PipelineDetailPage /> },
+      { path: 'sweeps', element: <SweepsPage /> },
+      { path: 'sweeps/new', element: <SweepCreatePage /> },
+      { path: 'sweeps/:sweepId', element: <SweepDetailPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

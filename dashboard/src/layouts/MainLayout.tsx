@@ -33,6 +33,9 @@ export default function MainLayout() {
           <NavLink to="/pipelines" className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>
             Pipelines
           </NavLink>
+          <NavLink to="/sweeps" className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>
+            Sweeps
+          </NavLink>
           <NavLink to="/reports" className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>
             Reports
           </NavLink>
