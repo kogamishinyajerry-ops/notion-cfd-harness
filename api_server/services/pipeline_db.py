@@ -63,6 +63,8 @@ def init_pipeline_db() -> None:
     Creates:
         - pipelines table
         - pipeline_steps table
+        - sweeps + sweep_cases tables (schema v3)
+        - provenance columns on sweep_cases + comparisons table (schema v4)
         - schema_version table (for tracking)
     """
     global _INITIALIZED
@@ -169,6 +171,45 @@ def init_pipeline_db() -> None:
         except sqlite3.OperationalError:
             pass  # table already exists
         cursor.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (3)")
+        conn.commit()
+
+    # Schema v4: provenance columns on sweep_cases + comparisons table (PIPE-11)
+    cursor.execute("SELECT COUNT(*) as cnt FROM schema_version WHERE version >= 4")
+    if cursor.fetchone()["cnt"] == 0:
+        # Provenance columns on sweep_cases
+        for col, col_type in [
+            ("openfoam_version", "TEXT"),
+            ("compiler_version", "TEXT"),
+            ("mesh_seed_hash", "TEXT"),
+            ("solver_config_hash", "TEXT"),
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE sweep_cases ADD COLUMN {col} {col_type}")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
+        # Comparisons table
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS comparisons (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    reference_case_id TEXT NOT NULL,
+                    case_ids TEXT NOT NULL,  -- JSON list
+                    provenance_mismatch TEXT,  -- JSON list of {field, values}
+                    convergence_data TEXT,     -- JSON: {case_id: [{iteration, Ux, Uy, Uz, p}, ...]}
+                    metrics_table TEXT,        -- JSON: [{case_id, params, final_residual, execution_time, diff_pct}, ...]
+                    delta_case_a_id TEXT,
+                    delta_case_b_id TEXT,
+                    delta_field_name TEXT,
+                    delta_vtu_path TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+        except sqlite3.OperationalError:
+            pass  # table already exists
+        cursor.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (4)")
         conn.commit()
 
     conn.commit()
