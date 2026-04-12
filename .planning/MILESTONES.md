@@ -1,5 +1,21 @@
 # Milestones
 
+## v1.6.0 ParaView Web to Trame Migration (Shipped: 2026-04-12)
+
+**Phases completed:** 6 phases, 8 plans, 11 tasks
+
+**Key accomplishments:**
+
+- Automated checks (Tasks 1-2):
+- New file: `api_server/services/trame_session_manager.py`
+- None
+- Vue iframe postMessage listener with camera polling every 500ms, 14 command types wired, ready signal on load
+- Commit:
+- `test_trame_viewer_component.py`
+- Before:
+
+---
+
 ## v1.5.0 Advanced Visualization (Shipped: 2026-04-11)
 
 **Phases completed:** 4 phases, 4 plans, 4 tasks

@@ -32,6 +32,7 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 | v1.3.0 | 12-14 | ✅ Shipped | 2026-04-11 |
 | v1.4.0 | 15-18 | ✅ Shipped | 2026-04-11 |
 | v1.5.0 | 19-22 | ✅ Shipped | 2026-04-11 |
+| v1.6.0 | 23-28 | ✅ Shipped | 2026-04-12 |
 
 ## v1.3.0 — Real-time Convergence Monitoring ✅
 
@@ -79,29 +80,35 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 
 **Archive:** `.planning/milestones/v1.5.0-ROADMAP.md`
 
-## v1.6.0 — ParaView Web → Trame Migration (Planning)
+## v1.6.0 — ParaView Web → Trame Migration ✅
 
 **Goal:** Replace ParaView Web infrastructure (wslink/vtkmodules/web) with trame (Kitware's official successor), achieving full feature parity with a modern reactive state architecture.
 
-**Target features:**
-- **TRAME-01**: Trame backend skeleton (trame + trame-vtk + trame-vuetify in Docker)
-- **TRAME-02**: RPC protocol migration (@exportRpc → @ctrl.add/@state.change, 13 RPCs)
-- **TRAME-03**: FastAPI Session Manager adaptation (TrameSessionManager replacing ParaViewWebManager)
-- **TRAME-04**: Vue.js frontend + React iframe bridge (CFDViewerBridge.ts + postMessage)
-- **TRAME-05**: Integration + feature parity validation
-- **TRAME-06**: Cleanup + old ParaView Web file removal
+**Delivered:**
+- **TRAME-01**: Trame backend skeleton — `pvpython /trame_server.py` in Docker, trame-vtk + trame-vuetify
+- **TRAME-02**: All 7 `@exportRpc` → `@ctrl.add`/`@state.change`, UUID filter registry
+- **TRAME-03**: `TrameSessionManager` — Docker lifecycle, 30-min idle timeout, job auto-launch
+- **TRAME-04**: React-Vue iframe bridge — `CFDViewerBridge.ts` with origin-restricted postMessage, `TrameViewer.tsx`
+- **TRAME-05**: Feature parity validated — 102 Python + 22 JS tests passing
+- **TRAME-06**: 6 ParaView Web artifacts deleted (entrypoint_wrapper.sh, paraview_adv_protocols.py, paraview_web_launcher.py, ParaViewViewer.tsx, ParaViewViewer.css, paraviewProtocol.ts)
 
-**Research:** `.planning/research/SUMMARY.md` (4 agents + synthesizer, commit `291cccc`)
+**Key decisions:**
+- `@exportRpc` → `@ctrl.add`/`@state.change` (trame reactive pattern)
+- React dashboard embeds trame Vue.js viewer as iframe
+- Filter registry uses UUID keys (not Python `id()`) for restart stability
+- `InvokeEvent` calls removed entirely (trame auto-pushes on state mutation)
 
-**Key risks:**
-- No official migration guide — full rewrite, not port
-- React dashboard must embed Vue.js viewer as iframe (postMessage bridge)
-- `InvokeEvent` calls have no trame equivalent — must be replaced with state mutation
-- Filter `id()` registry keys are unstable across restarts — need UUID replacement
+**Archive:** `.planning/milestones/v1.6.0-ROADMAP.md`
+
+## v1.7.0 — Next (Planning)
+
+**Goal:** TBD — start with `/gsd-new-milestone` to define next milestone scope.
+
+**Archive:** `.planning/milestones/v1.6.0-ROADMAP.md`
 
 ## Evolution
 
-*Last updated: 2026-04-11 — v1.5.0 shipped, v1.6.0 planning started*
+*Last updated: 2026-04-12 — v1.6.0 shipped, v1.7.0 planning started*
 
 **After each phase transition** (via `/gsd-transition`):
 1. Requirements invalidated? → Move to Out of Scope with reason
