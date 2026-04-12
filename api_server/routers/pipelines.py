@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from api_server.models import (
     PipelineCreate,
@@ -103,15 +103,98 @@ async def update_pipeline(pipeline_id: str, update: PipelineUpdate):
 
 
 @router.delete("/pipelines/{pipeline_id}", status_code=204, tags=["pipelines"])
-async def delete_pipeline(pipeline_id: str):
+async def delete_pipeline(
+    pipeline_id: str,
+    cancel: bool = Query(default=False, description="If true, cancel running pipeline before deletion"),
+):
     """
     Delete a pipeline and all its persisted state.
 
-    Removes the pipeline from data/pipelines.db.
+    If cancel=true, cancels a running pipeline first and stops its Docker containers.
     Raises 404 if not found.
     """
+    from api_server.services.cleanup_handler import get_cleanup_handler
+
     service = get_pipeline_service()
+    pipeline = service.get_pipeline(pipeline_id)
+    if not pipeline:
+        raise HTTPException(status_code=404, detail=f"Pipeline not found: {pipeline_id}")
+
+    if cancel:
+        pipeline_status = pipeline.status.value if hasattr(pipeline.status, 'value') else pipeline.status
+        running_statuses = ("running", "monitoring", "visualizing", "reporting")
+        if pipeline_status in running_statuses:
+            cleanup = get_cleanup_handler()
+            await cleanup.cancel_and_cleanup(pipeline_id)
+
     deleted = service.delete_pipeline(pipeline_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Pipeline not found: {pipeline_id}")
     return None
+
+
+# =========================================================================
+# Pipeline Control Endpoints (PIPE-02, PIPE-06)
+# =========================================================================
+
+@router.post("/pipelines/{pipeline_id}/start", tags=["pipelines"])
+async def start_pipeline(pipeline_id: str, request: Request):
+    """
+    Start pipeline execution.
+
+    Transitions pipeline from PENDING -> RUNNING and launches PipelineExecutor
+    in a dedicated background thread.
+
+    Returns 409 if pipeline is already running.
+    Returns 404 if pipeline not found.
+    """
+    from api_server.services.pipeline_executor import start_pipeline_executor
+    import asyncio
+
+    service = get_pipeline_service()
+    pipeline = service.get_pipeline(pipeline_id)
+    if not pipeline:
+        raise HTTPException(status_code=404, detail=f"Pipeline not found: {pipeline_id}")
+
+    pipeline_status = pipeline.status.value if hasattr(pipeline.status, 'value') else pipeline.status
+    if pipeline_status not in ("pending",):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Pipeline is already in state '{pipeline_status}'. Only PENDING pipelines can be started."
+        )
+
+    if not pipeline.steps:
+        raise HTTPException(status_code=400, detail="Pipeline has no steps to execute")
+
+    try:
+        loop = asyncio.get_event_loop()
+        start_pipeline_executor(pipeline_id, loop)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    return {"status": "started", "pipeline_id": pipeline_id}
+
+
+@router.post("/pipelines/{pipeline_id}/cancel", tags=["pipelines"])
+async def cancel_pipeline(pipeline_id: str):
+    """
+    Cancel a running pipeline.
+
+    Signals PipelineExecutor to cancel, stops Docker containers started by
+    pipeline steps (solver containers only — trame viewer containers are
+    managed by TrameSessionManager and are NOT stopped).
+
+    Gives running steps 10 seconds to finish before force-killing containers.
+    COMPLETED step outputs are preserved.
+    """
+    from api_server.services.cleanup_handler import get_cleanup_handler
+
+    service = get_pipeline_service()
+    pipeline = service.get_pipeline(pipeline_id)
+    if not pipeline:
+        raise HTTPException(status_code=404, detail=f"Pipeline not found: {pipeline_id}")
+
+    cleanup = get_cleanup_handler()
+    await cleanup.cancel_and_cleanup(pipeline_id)
+
+    return {"status": "cancelling", "pipeline_id": pipeline_id}

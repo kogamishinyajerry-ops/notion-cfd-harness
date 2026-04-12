@@ -48,6 +48,12 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Pipeline cleanup on shutdown (PIPE-06)
+    from api_server.services.cleanup_handler import get_cleanup_handler
+    cleanup_handler = get_cleanup_handler()
+    await cleanup_handler.cleanup_on_server_shutdown()
+    logger.info("Pipeline cleanup completed on shutdown")
+
     # Stop Trame idle monitor
     await trame_manager.stop_idle_monitor()
     logger.info("Shutting down AI-CFD Knowledge Harness API")
