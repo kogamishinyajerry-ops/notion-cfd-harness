@@ -388,3 +388,75 @@ class PipelineListResponse(BaseModel):
     """Response model for listing pipelines."""
     pipelines: List[PipelineResponse]
     total: int
+
+
+# =============================================================================
+# Sweep Models (PIPE-10 — Parametric Sweep)
+# =============================================================================
+
+
+class SweepStatus(str, Enum):
+    """Sweep execution status"""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class SweepCaseStatus(str, Enum):
+    """Status of a single combination case within a sweep"""
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class SweepCreate(BaseModel):
+    """Request model for creating a sweep."""
+    name: str = Field(..., description="Sweep name", min_length=1, max_length=64)
+    description: Optional[str] = Field(default=None, description="Optional description", max_length=256)
+    base_pipeline_id: str = Field(..., description="ID of the base pipeline template")
+    param_grid: Dict[str, List[Any]] = Field(..., description="Parameter grid, e.g. {'velocity': [1, 2, 5], 'resolution': [50, 100]}")
+    max_concurrent: int = Field(default=2, ge=1, le=10, description="Max concurrent Docker containers")
+
+
+class SweepCaseResponse(BaseModel):
+    """Response model for a single combination case."""
+    id: str
+    sweep_id: str
+    param_combination: Dict[str, Any]  # e.g. {'velocity': 1, 'resolution': 50}
+    combination_hash: str  # first 8 chars of hash for display
+    pipeline_id: Optional[str] = None
+    status: SweepCaseStatus
+    result_summary: Optional[Dict[str, Any]] = None  # final_residual, execution_time, etc.
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        use_enum_values = True
+
+
+class SweepResponse(BaseModel):
+    """Response model for a sweep."""
+    id: str
+    name: str
+    description: Optional[str]
+    base_pipeline_id: str
+    param_grid: Dict[str, List[Any]]
+    max_concurrent: int
+    status: SweepStatus
+    total_combinations: int
+    completed_combinations: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        use_enum_values = True
+
+
+class SweepListResponse(BaseModel):
+    """Response model for listing sweeps."""
+    sweeps: List[SweepResponse]
+    total: int
