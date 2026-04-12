@@ -12,6 +12,7 @@ Docker ownership contract (from step_wrappers.py):
 """
 import asyncio
 import logging
+import re
 import subprocess
 from typing import List, Optional
 
@@ -20,6 +21,20 @@ from api_server.models import PipelineStatus
 logger = logging.getLogger(__name__)
 
 GRACEFUL_TIMEOUT_SECONDS = 10  # PIPE-06: 10s before force-kill
+
+# Valid pipeline_id pattern: alphanumeric, hyphens, underscores only
+_PIPELINE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_pipeline_id(pipeline_id: str) -> None:
+    """
+    Validate that pipeline_id is safe for use in shell commands.
+
+    Raises:
+        ValueError: If pipeline_id contains invalid characters
+    """
+    if not _PIPELINE_ID_PATTERN.match(pipeline_id):
+        raise ValueError(f"Invalid pipeline_id: {pipeline_id!r}. Must match {_PIPELINE_ID_PATTERN.pattern}")
 
 
 class CleanupHandler:
@@ -30,6 +45,7 @@ class CleanupHandler:
         Find Docker containers labeled pipeline_id=<pipeline_id>.
         Returns list of container IDs. Does NOT include trame containers.
         """
+        _validate_pipeline_id(pipeline_id)
         try:
             result = subprocess.run(
                 ["docker", "ps", "-q", "--filter", f"label=pipeline_id={pipeline_id}"],
