@@ -24,13 +24,13 @@ class TestLoadWhitelist:
         """默认路径加载成功"""
         wl = load_cold_start_whitelist()
         assert isinstance(wl, ColdStartWhitelist)
-        assert wl.total_count == 55
+        assert wl.total_count == 30
 
     def test_load_explicit_path(self):
         """指定路径加载"""
         path = str(Path(__file__).parent.parent / "data" / "cold_start_whitelist.yaml")
         wl = load_cold_start_whitelist(path=path)
-        assert wl.total_count == 55
+        assert wl.total_count == 30
 
     def test_load_nonexistent_raises(self):
         """文件不存在抛 FileNotFoundError"""
@@ -81,26 +81,26 @@ class TestFiltering:
     def test_core_seeds(self):
         wl = load_cold_start_whitelist()
         seeds = wl.core_seeds()
-        assert len(seeds) == 28
+        assert len(seeds) == 13
         assert all(c.is_core_seed for c in seeds)
 
     def test_by_platform_openfoam(self):
         wl = load_cold_start_whitelist()
         of_cases = wl.by_platform("OpenFOAM")
-        assert len(of_cases) == 26
+        assert len(of_cases) == 6
         assert all(c.platform == "OpenFOAM" for c in of_cases)
 
     def test_by_platform_su2(self):
         wl = load_cold_start_whitelist()
         su2_cases = wl.by_platform("SU2")
-        assert len(su2_cases) == 29
+        assert len(su2_cases) == 24
 
     def test_by_tier(self):
         wl = load_cold_start_whitelist()
         bridge = wl.by_tier("bridge")
         breadth = wl.by_tier("breadth")
-        assert len(bridge) == 16
-        assert len(breadth) == 11
+        assert len(bridge) == 8
+        assert len(breadth) == 9
 
     def test_ready_mesh_cases(self):
         wl = load_cold_start_whitelist()
@@ -134,19 +134,19 @@ class TestStatistics:
     def test_platform_counts(self):
         wl = load_cold_start_whitelist()
         counts = wl.platform_counts
-        assert counts["OpenFOAM"] == 26
-        assert counts["SU2"] == 29
+        assert counts["OpenFOAM"] == 6
+        assert counts["SU2"] == 24
 
     def test_tier_counts(self):
         wl = load_cold_start_whitelist()
         counts = wl.tier_counts
-        assert counts["core_seed"] == 28
-        assert counts["bridge"] == 16
-        assert counts["breadth"] == 11
+        assert counts["core_seed"] == 13
+        assert counts["bridge"] == 8
+        assert counts["breadth"] == 9
 
     def test_total_count(self):
         wl = load_cold_start_whitelist()
-        assert wl.total_count == 55
+        assert wl.total_count == 30
 
 
 # ============================================================================
