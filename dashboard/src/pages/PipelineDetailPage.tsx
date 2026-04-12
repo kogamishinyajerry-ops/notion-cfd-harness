@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../services/api';
 import pipelineWs from '../services/pipelineWs';
-import type { Pipeline, PipelineStatus, PipelineEvent } from '../services/types';
+import type { Pipeline, PipelineStatus, PipelineEvent, PipelineStep } from '../services/types';
 import type { StepStatus } from '../services/types';
+import DAGCanvas from '../components/DAGCanvas';
 import './PipelineDetailPage.css';
 
-type ActiveTab = 'steps' | 'events' | 'config';
+type ActiveTab = 'dag' | 'events' | 'config';
 
 const STATUS_CLASS_MAP: Record<PipelineStatus, string> = {
   PENDING: 'status-pending',
@@ -54,10 +55,10 @@ export default function PipelineDetailPage() {
   const [events, setEvents] = useState<PipelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('steps');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('dag');
   const [wsState, setWsState] = useState<'connected' | 'reconnecting' | 'polling'>('reconnecting');
   const [controlLoading, setControlLoading] = useState<string | null>(null);
-  const [expandedStep, setExpandedStep] = useState<string | null>(null);
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
 
   const loadPipeline = useCallback(async () => {
     if (!pipelineId) return;
@@ -163,6 +164,14 @@ export default function PipelineDetailPage() {
       return () => clearInterval(interval);
     }
   }, [pipelineId, pipeline?.status, wsState, loadPipeline]);
+
+  const handleNodeClick = useCallback((step: PipelineStep) => {
+    setSelectedStepId(step.id);
+  }, []);
+
+  const handleCloseDrawer = useCallback(() => {
+    setSelectedStepId(null);
+  }, []);
 
   const handleControl = async (action: 'start' | 'pause' | 'resume' | 'cancel') => {
     if (!pipelineId) return;
@@ -282,39 +291,20 @@ export default function PipelineDetailPage() {
       )}
 
       <div className="job-content-tabs">
-        <button className={`tab-btn ${activeTab === 'steps' ? 'active' : ''}`} onClick={() => setActiveTab('steps')}>Steps</button>
+        <button className={`tab-btn ${activeTab === 'dag' ? 'active' : ''}`} onClick={() => setActiveTab('dag')}>DAG</button>
         <button className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`} onClick={() => setActiveTab('events')}>Events</button>
         <button className={`tab-btn ${activeTab === 'config' ? 'active' : ''}`} onClick={() => setActiveTab('config')}>Config</button>
       </div>
 
       <div className="tab-content">
-        {activeTab === 'steps' && (
-          <div className="steps-view">
-            {pipeline.steps.length === 0 ? (
-              <p className="empty-text">No steps defined.</p>
-            ) : (
-              pipeline.steps.map((step) => (
-                <div key={step.id} className={`step-row border-left-${step.status.toLowerCase()}`}>
-                  <div className="step-row-header">
-                    <span className="step-name">{step.id}</span>
-                    <span className="step-type-badge">{step.step_type}</span>
-                    <span className={`status-badge ${getStepStatusClass(step.status)}`}>{step.status}</span>
-                    <button className="btn-expand" onClick={() => setExpandedStep(expandedStep === step.id ? null : step.id)}>
-                      {expandedStep === step.id ? 'Collapse' : 'Expand'}
-                    </button>
-                  </div>
-                  <div className="step-row-meta">
-                    <span>Order: {step.step_order}</span>
-                    {step.depends_on.length > 0 && <span>Depends on: {step.depends_on.join(', ')}</span>}
-                    <span>{formatDuration(step.started_at, step.completed_at)}</span>
-                  </div>
-                  {expandedStep === step.id && step.result && (
-                    <pre className="step-result">{JSON.stringify(step.result, null, 2)}</pre>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+        {activeTab === 'dag' && (
+          <DAGCanvas
+            steps={pipeline.steps}
+            config={pipeline.config}
+            selectedStepId={selectedStepId}
+            onNodeClick={handleNodeClick}
+            onCloseDrawer={handleCloseDrawer}
+          />
         )}
 
         {activeTab === 'events' && (
