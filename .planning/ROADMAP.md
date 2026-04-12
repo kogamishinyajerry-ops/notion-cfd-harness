@@ -57,13 +57,19 @@ For full phase details, see: `.planning/milestones/v1.7.0-ROADMAP.md`
 3. **WR-01/WR-02 修复** — pvpython docker path + subprocess trame session cleanup
 4. **Phase 5 验收** — 301 tests pass + Opus 审查 Pass
 
-### Phase 35: GoldStandard Registry & Priority Cases
+### Phase 35: GoldStandard Registry & Priority Cases (2 plans, 2 waves)
+**Plans:** 2 plans
+
+Plans:
+- [ ] 35-01-PLAN.md — Wave 1: GS-01 GoldStandardRegistry + GS-02 Bridge Service + REST API
+- [ ] 35-02-PLAN.md — Wave 2: GS-03 6 Priority Cases + GS-04 Mesh/Solver Metadata
+
 | Requirement | Description | Status |
 |-------------|-------------|--------|
-| GS-01 | GoldStandardRegistry + GoldStandardLoader | Planning |
-| GS-02 | Bridge Service + REST API | Planning |
-| GS-03 | 6 Priority Case Implementations | Planning |
-| GS-04 | Mesh/Solver Metadata Functions | Planning |
+| GS-01 | GoldStandardRegistry + GoldStandardLoader | Planned |
+| GS-02 | Bridge Service + REST API | Planned |
+| GS-03 | 6 Priority Case Implementations | Planned |
+| GS-04 | Mesh/Solver Metadata Functions | Planned |
 
 ### Phase 36: System Integration
 | Requirement | Description | Status |
