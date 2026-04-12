@@ -433,6 +433,8 @@ class SweepCaseResponse(BaseModel):
     result_summary: Optional[Dict[str, Any]] = None  # final_residual, execution_time, etc.
     created_at: datetime
     updated_at: datetime
+    convergence_data: Optional[List[Dict[str, Any]]] = Field(default=None, description="Per-iteration convergence history from solver log")
+    provenance: Optional["ProvenanceMetadata"] = Field(default=None, description="Solver provenance metadata")
 
     class Config:
         use_enum_values = True
@@ -460,3 +462,72 @@ class SweepListResponse(BaseModel):
     """Response model for listing sweeps."""
     sweeps: List[SweepResponse]
     total: int
+
+
+# =============================================================================
+# Provenance & Comparison Models (PIPE-11, PIPE-12)
+# =============================================================================
+
+
+class ProvenanceMetadata(BaseModel):
+    """Provenance metadata for a sweep case."""
+    openfoam_version: Optional[str] = Field(default=None, description="OpenFOAM version (e.g. v10)")
+    compiler_version: Optional[str] = Field(default=None, description="Compiler version")
+    mesh_seed_hash: Optional[str] = Field(default=None, description="Deterministic hash of mesh configuration")
+    solver_config_hash: Optional[str] = Field(default=None, description="Deterministic hash of solver control parameters")
+
+
+class ConvergenceDataPoint(BaseModel):
+    """Single iteration data point from convergence log."""
+    iteration: int
+    Ux: Optional[float] = None
+    Uy: Optional[float] = None
+    Uz: Optional[float] = None
+    p: Optional[float] = None
+
+
+class MetricsRow(BaseModel):
+    """Single row in the comparison metrics table."""
+    case_id: str
+    params: str  # human-readable: "velocity=1, resolution=50"
+    final_residual: Optional[float] = None
+    execution_time: Optional[float] = None  # seconds
+    diff_pct: Optional[float] = None  # percentage vs reference case
+
+
+class ProvenanceMismatchItem(BaseModel):
+    """Describes a provenance field that differs across compared cases."""
+    field: str  # openfoam_version | compiler_version | mesh_seed_hash | solver_config_hash
+    values: List[str]
+
+
+class ComparisonCreate(BaseModel):
+    """Request to create a new comparison."""
+    name: Optional[str] = Field(default=None, description="Optional human-readable name")
+    reference_case_id: str = Field(..., description="Case ID to use as reference for diff_pct")
+    case_ids: List[str] = Field(..., description="All case IDs to include (must include reference_case_id)", min_length=2)
+    delta_case_a_id: Optional[str] = Field(default=None, description="Case A for delta field (CaseB - CaseA)")
+    delta_case_b_id: Optional[str] = Field(default=None, description="Case B for delta field (CaseB - CaseA)")
+    delta_field_name: str = Field(default="p", description="Scalar field name for delta computation")
+
+
+class ComparisonResponse(BaseModel):
+    """Response for a single comparison result."""
+    id: str
+    name: Optional[str]
+    reference_case_id: str
+    case_ids: List[str]
+    provenance_mismatch: List[ProvenanceMismatchItem]
+    convergence_data: Dict[str, List[Dict[str, Any]]]  # case_id -> list of data points
+    metrics_table: List[MetricsRow]
+    delta_case_a_id: Optional[str]
+    delta_case_b_id: Optional[str]
+    delta_field_name: Optional[str]
+    delta_vtu_url: Optional[str]  # set if delta was computed
+    created_at: datetime
+    updated_at: datetime
+
+
+class ComparisonListResponse(BaseModel):
+    """List of comparisons."""
+    comparisons: List[ComparisonResponse]
