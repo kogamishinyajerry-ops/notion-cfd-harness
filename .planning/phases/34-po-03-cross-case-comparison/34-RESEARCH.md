@@ -515,22 +515,22 @@ export default function ConvergenceOverlay({ series }: { series: SeriesDef[] }) 
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Where is convergence history stored?**
    - What we know: `monitor_wrapper` sets `diagnostics["final_residual"]` on success. Step `result_json` is persisted in `pipeline_steps.result_json`.
    - What's unclear: Per-iteration residual history — does it exist anywhere in the case output directory (e.g., `solver.log`, `postProcessing/residuals/`), or is it only streamed live via WebSocket?
-   - Recommendation: Check `knowledge_compiler` for log file conventions. If residuals ARE in the case directory, implement a `parse_residual_log(case_dir)` function. If NOT, scope the convergence overlay to show only final residual values as horizontal reference lines.
+   - **Resolution (ACCEPTED RISK):** Convergence history is confirmed parseable from `log.{solver_name}` in the case output directory. Solver stdout/stderr is redirected to `log.{solver}` per `openfoam_docker.py` investigation. Regex patterns: `Time = ([\d.]+)` for iteration, `(Ux|Uy|Uz|p) = ([\d.e+-]+)` for residuals. If logs are missing, `parse_convergence_log()` returns `[]` and the UI shows an empty state. This is an acceptable risk — the comparison engine degrades gracefully.
 
 2. **What is the exact ParaView/VTK pipeline for field subtraction?**
    - What we know: `simple.Calculator` can compute per-point expressions. ParaView has `PointDataToCellData` and `CellDataToPointData` filters.
    - What's unclear: The exact filter chain needed to safely subtract two arrays from two different case readers when mesh topologies are identical.
-   - Recommendation: Prototype on the API server with `pvpython` before writing the trame RPC. Test with two real cases from Phase 32 sweep runs.
+   - **Resolution (ACCEPTED RISK):** The delta field implementation will use `pvpython` in the ParaView container with a `ProgrammableFilter` using numpy array subtraction (`b - a`). Initial prototype will be built with an error-state fallback in the UI. This is an accepted risk — if the pipeline fails at runtime, the UI shows an error message and allows retry.
 
 3. **What provenance fields are actually available at case creation time?**
    - What we know: The Docker image is tagged (e.g., `cfd-workbench:openfoam-v10`). OpenFOAM version is in `$FOAM_API_VERSION` env var in the container.
    - What's unclear: Whether compiler version and mesh seed hash are captured anywhere in the pipeline step params or config.
-   - Recommendation: Add provenance as advisory metadata (warning only, not blocking). Start with `openfoam_version` from Docker image tag; mark `mesh_seed_hash` and `solver_config_hash` as future enhancements.
+   - **Resolution (ACCEPTED RISK):** Provenance fields will be nullable. All four fields (`openfoam_version`, `compiler_version`, `mesh_seed_hash`, `solver_config_hash`) are added as nullable TEXT columns. The UI handles empty provenance gracefully with "—" display. Provenance mismatch detection is advisory only (warning banner), not a blocking error.
 
 ---
 
