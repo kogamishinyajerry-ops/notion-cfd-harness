@@ -288,6 +288,25 @@ class InviscidBumpGateValidator:
 
 
 # ============================================================================
+# GoldStandard Auto-Registration
+# ============================================================================
+
+def register(registry: "GoldStandardRegistry") -> None:
+    """Register this GoldStandard case with the global registry.
+
+    Called by GoldStandardRegistry._register_all_cases() via importlib.
+    """
+    registry.register(
+        case_id="inviscid_bump",
+        spec_factory=create_inviscid_bump_spec,
+        validator_class=InviscidBumpGateValidator,
+        reference_fn=None,
+        mesh_info_fn=None,
+        solver_config_fn=None,
+    )
+
+
+# ============================================================================
 # Export
 # ============================================================================
 
@@ -296,4 +315,5 @@ __all__ = [
     "create_inviscid_bump_spec",
     "InviscidBumpGateValidator",
     "get_expected_pressure_ratio",
+    "register",
 ]

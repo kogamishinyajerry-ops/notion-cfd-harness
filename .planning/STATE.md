@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.8.0
 milestone_name: System Integration & GoldStandard Expansion
-status: Creating roadmap
-last_updated: "2026-04-12T12:55:00.000Z"
+status: Planning complete
+last_updated: "2026-04-12T13:35:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 0
@@ -23,9 +23,11 @@ progress:
 
 ## Current Position
 
-**Milestone v1.8.0: IN PROGRESS — Defining requirements**
-All v1.7.0 phases complete. v1.8.0 planning started.
-**Next:** Plan Phase 35 (GoldStandard Registry & Priority Cases)
+**Milestone v1.8.0: COMPLETE — Phase 35 planned, ready to execute**
+- Phase 35: Planned (2 plans, 2 waves)
+- Phase 36-38: Pending
+
+**Next:** `/gsd-execute-phase 35 --wave 1`
 
 ## Key Context from v1.7.0
 
@@ -42,17 +44,23 @@ All v1.7.0 phases complete. v1.8.0 planning started.
 3. **WR-01/WR-02 修复** — pvpython docker path + subprocess cleanup
 4. **Phase 5 验收** — 301 tests pass + Opus review Pass
 
+## Phase 35 Status
+
+- **Plan**: 35-01 (Wave 1: GS-01 Registry + GS-02 Bridge API) + 35-02 (Wave 2: GS-03 6 cases + GS-04 mesh/solver metadata)
+- **Files to create**: `registry.py`, `gold_standard_service.py`, `gold_standards.py` (router), 6 case modules
+
 ## Blockers
 
-None — roadmap ready for planning
+None — Phase 35 ready for execution
 
 ## Dependencies
 
 - Phase 35 (GoldStandard expansion) — depends on Phase 29 (pipeline data models) + existing GoldStandardLoader
 - Phase 36 (System integration) — depends on Phase 35
 - Phase 37 (Bug fixes) — depends on Phase 30/31
+- Phase 38 (Phase 5 validation) — depends on all prior phases
 
 ## Session Continuity
 
-v1.7.0 milestone complete. v1.8.0 planning in progress.
-Next step: `/gsd-plan-phase 35` to plan Phase 35 (GoldStandard Expansion).
+v1.7.0 milestone complete. v1.8.0 Phase 35 planned.
+Next step: `/gsd-execute-phase 35 --wave 1`

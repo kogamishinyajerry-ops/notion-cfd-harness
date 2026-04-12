@@ -328,6 +328,25 @@ class InviscidWedgeGateValidator:
 
 
 # ============================================================================
+# GoldStandard Auto-Registration
+# ============================================================================
+
+def register(registry: "GoldStandardRegistry") -> None:
+    """Register this GoldStandard case with the global registry.
+
+    Called by GoldStandardRegistry._register_all_cases() via importlib.
+    """
+    registry.register(
+        case_id="inviscid_wedge",
+        spec_factory=create_inviscid_wedge_spec,
+        validator_class=InviscidWedgeGateValidator,
+        reference_fn=None,
+        mesh_info_fn=None,
+        solver_config_fn=None,
+    )
+
+
+# ============================================================================
 # Export
 # ============================================================================
 
@@ -336,4 +355,5 @@ __all__ = [
     "create_inviscid_wedge_spec",
     "InviscidWedgeGateValidator",
     "get_expected_shock_angle",
+    "register",
 ]

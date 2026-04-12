@@ -293,6 +293,25 @@ class LaminarFlatPlateGateValidator:
 
 
 # ============================================================================
+# GoldStandard Auto-Registration
+# ============================================================================
+
+def register(registry: "GoldStandardRegistry") -> None:
+    """Register this GoldStandard case with the global registry.
+
+    Called by GoldStandardRegistry._register_all_cases() via importlib.
+    """
+    registry.register(
+        case_id="laminar_flat_plate",
+        spec_factory=create_laminar_flat_plate_spec,
+        validator_class=LaminarFlatPlateGateValidator,
+        reference_fn=None,
+        mesh_info_fn=None,
+        solver_config_fn=None,
+    )
+
+
+# ============================================================================
 # Export
 # ============================================================================
 
@@ -301,4 +320,5 @@ __all__ = [
     "create_laminar_flat_plate_spec",
     "LaminarFlatPlateGateValidator",
     "get_expected_blasius_cf",
+    "register",
 ]

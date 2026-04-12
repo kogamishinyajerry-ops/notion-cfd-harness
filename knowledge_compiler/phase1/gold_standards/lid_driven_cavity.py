@@ -414,6 +414,25 @@ class CavityGateValidator:
 
 
 # ============================================================================
+# GoldStandard Auto-Registration
+# ============================================================================
+
+def register(registry: "GoldStandardRegistry") -> None:
+    """Register this GoldStandard case with the global registry.
+
+    Called by GoldStandardRegistry._register_all_cases() via importlib.
+    """
+    registry.register(
+        case_id="lid_driven_cavity",
+        spec_factory=create_lid_driven_cavity_spec,
+        validator_class=CavityGateValidator,
+        reference_fn=None,  # reference data via get_expected_ghia_data() with Re argument
+        mesh_info_fn=None,
+        solver_config_fn=None,
+    )
+
+
+# ============================================================================
 # Export
 # ============================================================================
 
@@ -422,4 +441,5 @@ __all__ = [
     "create_lid_driven_cavity_spec",
     "CavityGateValidator",
     "get_expected_ghia_data",
+    "register",
 ]

@@ -335,6 +335,25 @@ class BackwardStepGateValidator:
 
 
 # ============================================================================
+# GoldStandard Auto-Registration
+# ============================================================================
+
+def register(registry: "GoldStandardRegistry") -> None:
+    """Register this GoldStandard case with the global registry.
+
+    Called by GoldStandardRegistry._register_all_cases() via importlib.
+    """
+    registry.register(
+        case_id="backward_facing_step",
+        spec_factory=create_backward_facing_step_spec,
+        validator_class=BackwardStepGateValidator,
+        reference_fn=None,
+        mesh_info_fn=None,
+        solver_config_fn=None,
+    )
+
+
+# ============================================================================
 # Export
 # ============================================================================
 
@@ -343,4 +362,5 @@ __all__ = [
     "create_backward_facing_step_spec",
     "BackwardStepGateValidator",
     "get_expected_reattachment_length",
+    "register",
 ]
