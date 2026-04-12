@@ -16,8 +16,8 @@
 ### Phases
 
 - [x] **Phase 29: Foundation — Data Models + SQLite Persistence** — Pipeline and PipelineStep models with SQLite persistence (completed 2026-04-12)
-- [ ] **Phase 30: PO-01 Orchestration Engine** — State machine, DAG traversal, component wrapping, WebSocket events, cleanup handler, async separation
-- [ ] **Phase 31: Pipeline REST API + React Dashboard** — Full CRUD and control endpoints, PipelinesPage and PipelineDetailPage
+- [x] **Phase 30: PO-01 Orchestration Engine** — State machine, DAG traversal, component wrapping, WebSocket events, cleanup handler, async separation (completed 2026-04-12)
+- [x] **Phase 31: Pipeline REST API + React Dashboard** — Full CRUD and control endpoints, PipelinesPage and PipelineDetailPage (completed 2026-04-12)
 - [ ] **Phase 32: PO-02 Parametric Sweep** — SweepRunner, concurrency control, aggregate progress, output organization
 - [ ] **Phase 33: PO-05 DAG Visualization** — @xyflow/react DAG viewer with live status updates
 - [ ] **Phase 34: PO-03 Cross-Case Comparison** — Comparison engine and dashboard UI
@@ -66,7 +66,7 @@ Plans:
 6. On `CANCELLED` or `FAILED`: Docker containers started by pipeline steps are stopped, background processes are killed, but COMPLETED step outputs are preserved; abort gives running steps 10 seconds to finish before force-kill
 7. Blocking I/O (OpenFOAM file I/O, mesh generation) runs in a dedicated background thread/process — NOT in FastAPI BackgroundTasks — so the event loop remains responsive; `asyncio.to_thread()` used for any blocking calls inside async handlers
 
-**Plans:** TBD
+**Plans:** 4/4 plans complete
 
 **UI hint:** no
 
@@ -87,7 +87,13 @@ Plans:
 4. Dashboard receives real-time WebSocket updates on PipelineDetailPage — step statuses change without page refresh
 5. If WebSocket disconnects, dashboard falls back to polling and auto-reconnects; no manual refresh required
 
-**Plans:** TBD
+**Plans:** 4/4 plans complete
+
+Plans:
+- [ ] 31-pipeline-rest-api-react-dashboard/31-01-PLAN.md — Backend: PipelineStatus PAUSED enum, pause/resume threading, steps/events/pause/resume REST endpoints
+- [ ] 31-pipeline-rest-api-react-dashboard/31-02-PLAN.md — Frontend types, API client methods, WebSocket service
+- [ ] 31-pipeline-rest-api-react-dashboard/31-03-PLAN.md — PipelinesPage, PipelineDetailPage, PipelineCreatePage
+- [ ] 31-pipeline-rest-api-react-dashboard/31-04-PLAN.md — Routes, nav, theme CSS variables, exports + human verify
 
 **UI hint:** yes
 
@@ -162,8 +168,8 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 29. Foundation — Data Models + SQLite | 2/2 | Complete    | 2026-04-12 |
-| 30. PO-01 Orchestration Engine | 0/TBD | Not started | — |
-| 31. Pipeline REST API + React Dashboard | 0/TBD | Not started | — |
+| 30. PO-01 Orchestration Engine | 4/4 | Complete    | 2026-04-12 |
+| 31. Pipeline REST API + React Dashboard | 4/4 | Complete   | 2026-04-12 |
 | 32. PO-02 Parametric Sweep | 0/TBD | Not started | — |
 | 33. PO-05 DAG Visualization | 0/TBD | Not started | — |
 | 34. PO-03 Cross-Case Comparison | 0/TBD | Not started | — |

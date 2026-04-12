@@ -235,10 +235,12 @@ class PipelineExecutor:
                     skipped.add(step.step_id)
                 continue
 
-            # Wait if paused
-            if self.pause_event.is_set():
+            # Wait if paused — loop handles spurious wakeups and resume-between-check-and-wait race
+            while self._paused:
                 logger.info(f"PipelineExecutor {self.pipeline_id}: paused, waiting to resume...")
                 self.pause_event.wait()
+                # Spurious wakeup or resume() cleared the event — loop will re-check _paused
+            if not self.is_cancelled():
                 logger.info(f"PipelineExecutor {self.pipeline_id}: resumed")
 
             # Check if all dependencies are completed
@@ -357,7 +359,7 @@ def start_pipeline_executor(pipeline_id: str, loop: asyncio.AbstractEventLoop) -
             raise ValueError(f"Pipeline {pipeline_id} is already running")
         executor = PipelineExecutor(pipeline_id, loop)
         _ACTIVE_EXECUTORS[pipeline_id] = executor
-    executor.start()
+        executor.start()  # start inside lock to prevent duplicate executor race
     return executor
 
 
