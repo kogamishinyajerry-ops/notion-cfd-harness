@@ -1,0 +1,31 @@
+{
+  "record_id": "CREC-1-1775989807",
+  "created_at": 1775989807.2384331,
+  "error_type": "incorrect_data",
+  "wrong_output": {
+    "converged": true,
+    "residual": 0.001
+  },
+  "correct_output": {
+    "converged": true,
+    "residual": 1e-05
+  },
+  "human_reason": "检测到 negative_pressure 类型的异常，位置: generator",
+  "evidence": [
+    "validation_id: VAL-1775989807",
+    "timestamp: 2026-04-12T18:30:07.238445",
+    "attempt_count: 0",
+    "anomaly: negative_pressure at generator"
+  ],
+  "impact_scope": "single_case",
+  "root_cause": "边界条件设置不正确，inlet速度偏大导致收敛困难需要降低松弛因子",
+  "fix_action": "修正入口速度为1.0 m/s并降低松弛因子至0.3加速收敛",
+  "needs_replay": true,
+  "severity": "medium",
+  "replay_status": "pending",
+  "linked_spec_ids": [],
+  "linked_constraint_ids": [],
+  "source_case_id": null,
+  "source_validation_id": "VAL-1775989807",
+  "approved": false
+}

@@ -1,0 +1,33 @@
+{
+  "record_id": "CREC-1-1775988647",
+  "created_at": 1775988647.436409,
+  "error_type": "missing_data",
+  "wrong_output": {
+    "anomaly": null,
+    "solver_result": "Inline correction: max_u_centerline = 0.95",
+    "action_taken": "corrected"
+  },
+  "correct_output": {
+    "suggested_actions": [
+      "Corrected max_u_centerline from report"
+    ],
+    "retry_strategy": {}
+  },
+  "human_reason": "Inline correction from report TEST-001: max_u_centerline",
+  "evidence": [
+    "validation_id: REPORT-1775988647",
+    "timestamp: 2026-04-12T18:10:47.436416",
+    "attempt_count: 1"
+  ],
+  "impact_scope": "single_case",
+  "root_cause": "未知异常",
+  "fix_action": "需要人工审查和修正",
+  "needs_replay": false,
+  "severity": "medium",
+  "replay_status": "pending",
+  "linked_spec_ids": [],
+  "linked_constraint_ids": [],
+  "source_case_id": null,
+  "source_validation_id": "REPORT-1775988647",
+  "approved": false
+}

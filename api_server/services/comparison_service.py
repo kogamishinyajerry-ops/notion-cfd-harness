@@ -68,11 +68,11 @@ def parse_convergence_log(case_output_dir: Path, solver_name: str = "simpleFoam"
             if current:
                 results.append(current)
             current = {"iteration": len(results)}
-        residual_match = residual_pattern.search(line)
-        if residual_match and current is not None:
-            field_name = residual_match.group(1)  # Ux, Uy, Uz, p
-            value = float(residual_match.group(2))
-            current[field_name] = value
+        # Use findall to capture ALL residual matches on the same line
+        residual_matches = residual_pattern.findall(line)
+        if residual_matches and current is not None:
+            for field_name, value_str in residual_matches:
+                current[field_name] = float(value_str)
 
     if current:
         results.append(current)

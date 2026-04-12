@@ -21,12 +21,14 @@ def test_parse_convergence_log_parses_time_and_residuals(tmp_path):
     assert result[1]["p"] == pytest.approx(0.1)
 
 
-def test_comparison_service_metrics_table(sample_cases, temp_db):
-    # Import here to avoid early init
+def test_comparison_service_smoke(temp_db):
+    """Smoke test: SweepDBService instantiates and has comparison methods."""
     from api_server.services.pipeline_db import SweepDBService
-    svc = SweepDBService(temp_db)
-    # (Implementation pending — this is a scaffold)
-    assert True, "Service initialized"
+    svc = SweepDBService()
+    assert hasattr(svc, 'get_all_completed_cases')
+    assert hasattr(svc, 'add_comparison')
+    assert hasattr(svc, 'get_comparison')
+    assert hasattr(svc, 'list_comparisons')
 
 
 def test_parse_convergence_log_missing_file(tmp_path):
