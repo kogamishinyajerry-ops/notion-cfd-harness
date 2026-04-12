@@ -298,7 +298,7 @@ class PipelineStep(BaseModel):
     step_order: int = Field(..., description="Execution order (0-indexed)")
     depends_on: List[str] = Field(default_factory=list, description="List of step_ids this step depends on")
     params: Dict[str, Any] = Field(default_factory=dict, description="Step-specific parameters")
-    status: JobStatus = Field(default=JobStatus.PENDING, description="Step execution status")
+    status: PipelineStatus = Field(default=PipelineStatus.PENDING, description="Step execution status")
 
     class Config:
         use_enum_values = True

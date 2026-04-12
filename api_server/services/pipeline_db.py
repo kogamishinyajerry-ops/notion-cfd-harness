@@ -5,11 +5,23 @@ SQLite schema initialization and connection factory for pipelines.db.
 Handles table creation and provides a shared connection factory.
 """
 
+import json
+import logging
 import sqlite3
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from api_server.config import DATA_DIR
+from api_server.models import (
+    PipelineCreate,
+    PipelineResponse,
+    PipelineStatus,
+    PipelineStep,
+    PipelineUpdate,
+    StepType,
+)
 
 _DB_PATH: Optional[Path] = None
 _INITIALIZED: bool = False
@@ -103,22 +115,6 @@ def init_pipeline_db() -> None:
     _INITIALIZED = True
 
 
-import json
-import logging
-import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
-
-from api_server.models import (
-    JobStatus,
-    PipelineCreate,
-    PipelineResponse,
-    PipelineStatus,
-    PipelineStep,
-    PipelineUpdate,
-    StepType,
-)
-
 logger = logging.getLogger(__name__)
 
 
@@ -159,7 +155,7 @@ class PipelineDBService:
                 step.step_order,
                 json.dumps(step.depends_on),
                 json.dumps(step.params),
-                JobStatus.PENDING.value,
+                PipelineStatus.PENDING.value,
             ))
 
         conn.commit()
@@ -196,7 +192,7 @@ class PipelineDBService:
                 step_order=sr["step_order"],
                 depends_on=depends_on,
                 params=params,
-                status=JobStatus(sr["status"]),
+                status=PipelineStatus(sr["status"]),
             ))
 
         config = json.loads(row["config"])
