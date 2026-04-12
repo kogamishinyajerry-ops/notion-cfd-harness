@@ -1,5 +1,27 @@
 # Milestones
 
+## v1.7.0 Pipeline Orchestration & Automation (Shipped: 2026-04-12)
+
+**Phases completed:** 6 phases, 15 plans, 26 tasks
+
+**Key accomplishments:**
+
+- Pydantic Pipeline/PipelineStep models and SQLite schema infrastructure for pipelines.db
+- PipelineDBService CRUD operations wired to REST API at /api/v1/pipelines
+- StepStatus enum, StepResult model, PipelineExecutor with background threading.Thread and Kahn's DAG sort — the core state machine for pipeline orchestration.
+- Five step type wrappers (generate/run/monitor/visualize/report) with idempotency cache, asyncio.to_thread() for blocking I/O, and PIPE-04 Docker ownership separation documented at module level.
+- PipelineEventBus with 100-event ring buffer, monotonic sequence numbers, subscriber queues, and /ws/pipelines/{pipeline_id} endpoint with 30-second heartbeat + reconnect replay.
+- CleanupHandler with Docker docker-stop + force-kill, REST start/cancel/delete endpoints wired into FastAPI router and main.py lifespan shutdown.
+- Pipeline pause/resume control via threading.Event, plus steps/events GET endpoints — PIPE-08 complete
+- TypeScript types, API client methods, WebSocket service, and config entries for pipeline orchestration frontend — ready for page development.
+- Three React pipeline pages delivered: PipelinesPage list with filter bar, PipelineDetailPage with real-time WebSocket updates, and PipelineCreatePage with DAG builder form and circular dependency validation.
+- Pipeline pages fully wired: routes registered, nav linked, CSS variables available, pages exported
+- Plan:
+- Interactive DAG viewer with @xyflow/react replacing the Steps list — dagre auto-layout, real-time node color updates, and 360px step detail drawer
+- One-liner:
+
+---
+
 ## v1.6.0 ParaView Web to Trame Migration (Shipped: 2026-04-12)
 
 **Phases completed:** 6 phases, 8 plans, 11 tasks
