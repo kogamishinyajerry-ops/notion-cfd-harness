@@ -167,7 +167,7 @@ async def start_pipeline(pipeline_id: str, request: Request):
         raise HTTPException(status_code=400, detail="Pipeline has no steps to execute")
 
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         start_pipeline_executor(pipeline_id, loop)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
