@@ -11,7 +11,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from api_server.config import DATA_DIR
 from api_server.models import (
@@ -24,6 +24,11 @@ from api_server.models import (
     StepResultStatus,
     StepStatus,
     StepType,
+    SweepStatus,
+    SweepCaseStatus,
+    SweepCreate,
+    SweepResponse,
+    SweepCaseResponse,
 )
 
 _DB_PATH: Optional[Path] = None
@@ -124,6 +129,47 @@ def init_pipeline_db() -> None:
         except sqlite3.OperationalError:
             pass  # column already exists
         cursor.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (2)")
+
+    # Schema v3: sweep tables (PIPE-10)
+    cursor.execute("SELECT COUNT(*) as cnt FROM schema_version WHERE version >= 3")
+    if cursor.fetchone()["cnt"] == 0:
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sweeps (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    base_pipeline_id TEXT NOT NULL,
+                    param_grid TEXT NOT NULL DEFAULT '{}',
+                    max_concurrent INTEGER NOT NULL DEFAULT 2,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    total_combinations INTEGER NOT NULL DEFAULT 0,
+                    completed_combinations INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+        except sqlite3.OperationalError:
+            pass  # table already exists
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sweep_cases (
+                    id TEXT PRIMARY KEY,
+                    sweep_id TEXT NOT NULL,
+                    param_combination TEXT NOT NULL DEFAULT '{}',
+                    combination_hash TEXT NOT NULL,
+                    pipeline_id TEXT,
+                    status TEXT NOT NULL DEFAULT 'queued',
+                    result_summary TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (sweep_id) REFERENCES sweeps(id) ON DELETE CASCADE
+                )
+            """)
+        except sqlite3.OperationalError:
+            pass  # table already exists
+        cursor.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (3)")
+        conn.commit()
 
     conn.commit()
     conn.close()
@@ -345,3 +391,235 @@ def get_pipeline_db_service() -> PipelineDBService:
     if _pipeline_service is None:
         _pipeline_service = PipelineDBService()
     return _pipeline_service
+
+
+# =============================================================================
+# SweepDBService — CRUD for sweeps and sweep_cases (PIPE-10)
+# =============================================================================
+
+
+class SweepDBService:
+    """CRUD operations for Sweep and SweepCase entities using SQLite."""
+
+    def __init__(self):
+        init_pipeline_db()
+
+    def create_sweep(self, spec: SweepCreate, total_combinations: int) -> SweepResponse:
+        """Create a new sweep with initial QUEUED cases for each param combination."""
+        import itertools
+        import uuid as _uuid
+
+        sweep_id = f"SWEEP-{_uuid.uuid4().hex[:8].upper()}"
+        now = datetime.now(timezone.utc).isoformat()
+
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO sweeps (id, name, description, base_pipeline_id, param_grid, max_concurrent, status, total_combinations, completed_combinations, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            sweep_id,
+            spec.name,
+            spec.description,
+            spec.base_pipeline_id,
+            json.dumps(spec.param_grid),
+            spec.max_concurrent,
+            SweepStatus.PENDING.value,
+            total_combinations,
+            0,
+            now,
+            now,
+        ))
+
+        # Create one SweepCase per param combination
+        for combo in itertools.product(*spec.param_grid.values()):
+            param_dict = dict(zip(spec.param_grid.keys(), combo))
+            combo_str = json.dumps(param_dict, sort_keys=True)
+            combo_hash = _uuid.uuid5(_uuid.NAMESPACE_DNS, combo_str).hex[:8]
+            case_id = f"CASE-{_uuid.uuid4().hex[:8].upper()}"
+            cursor.execute("""
+                INSERT INTO sweep_cases (id, sweep_id, param_combination, combination_hash, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                case_id,
+                sweep_id,
+                combo_str,
+                combo_hash,
+                SweepCaseStatus.QUEUED.value,
+                now,
+                now,
+            ))
+
+        conn.commit()
+        conn.close()
+
+        logger.info(f"Created sweep: {sweep_id} with {total_combinations} combinations")
+        return self.get_sweep(sweep_id)
+
+    def get_sweep(self, sweep_id: str) -> Optional[SweepResponse]:
+        """Get a sweep by ID."""
+        conn = get_pipeline_db_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM sweeps WHERE id = ?", (sweep_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return None
+
+        return SweepResponse(
+            id=row["id"],
+            name=row["name"],
+            description=row["description"],
+            base_pipeline_id=row["base_pipeline_id"],
+            param_grid=json.loads(row["param_grid"]),
+            max_concurrent=row["max_concurrent"],
+            status=SweepStatus(row["status"]),
+            total_combinations=row["total_combinations"],
+            completed_combinations=row["completed_combinations"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
+
+    def list_sweeps(self) -> List[SweepResponse]:
+        """List all sweeps."""
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM sweeps ORDER BY created_at DESC")
+        ids = [r["id"] for r in cursor.fetchall()]
+        conn.close()
+
+        results = []
+        for sid in ids:
+            s = self.get_sweep(sid)
+            if s:
+                results.append(s)
+        return results
+
+    def update_sweep_status(self, sweep_id: str, status: SweepStatus) -> None:
+        """Update a sweep's status."""
+        now = datetime.now(timezone.utc).isoformat()
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE sweeps SET status=?, updated_at=? WHERE id=?",
+            (status.value, now, sweep_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def increment_completed(self, sweep_id: str) -> int:
+        """Atomically increment completed_combinations counter. Returns new count."""
+        now = datetime.now(timezone.utc).isoformat()
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE sweeps SET completed_combinations = completed_combinations + 1, updated_at=? WHERE id=?",
+            (now, sweep_id),
+        )
+        conn.commit()
+        cursor.execute("SELECT completed_combinations FROM sweeps WHERE id=?", (sweep_id,))
+        count = cursor.fetchone()["completed_combinations"]
+        conn.close()
+        return count
+
+    def delete_sweep(self, sweep_id: str) -> bool:
+        """Delete a sweep and all its cases (ON DELETE CASCADE)."""
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM sweeps WHERE id = ?", (sweep_id,))
+        deleted = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        if deleted:
+            logger.info(f"Deleted sweep: {sweep_id}")
+        return deleted
+
+    def get_sweep_cases(self, sweep_id: str) -> List[SweepCaseResponse]:
+        """Get all cases for a sweep."""
+        conn = get_pipeline_db_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM sweep_cases WHERE sweep_id = ? ORDER BY combination_hash", (sweep_id,))
+        rows = cursor.fetchall()
+        conn.close()
+
+        cases = []
+        for row in rows:
+            result_summary = json.loads(row["result_summary"]) if row["result_summary"] else None
+            cases.append(SweepCaseResponse(
+                id=row["id"],
+                sweep_id=row["sweep_id"],
+                param_combination=json.loads(row["param_combination"]),
+                combination_hash=row["combination_hash"],
+                pipeline_id=row["pipeline_id"],
+                status=SweepCaseStatus(row["status"]),
+                result_summary=result_summary,
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+            ))
+        return cases
+
+    def get_case(self, case_id: str) -> Optional[SweepCaseResponse]:
+        """Get a single sweep case by ID."""
+        conn = get_pipeline_db_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM sweep_cases WHERE id = ?", (case_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return None
+
+        result_summary = json.loads(row["result_summary"]) if row["result_summary"] else None
+        return SweepCaseResponse(
+            id=row["id"],
+            sweep_id=row["sweep_id"],
+            param_combination=json.loads(row["param_combination"]),
+            combination_hash=row["combination_hash"],
+            pipeline_id=row["pipeline_id"],
+            status=SweepCaseStatus(row["status"]),
+            result_summary=result_summary,
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
+
+    def update_case_pipeline_id(self, case_id: str, pipeline_id: str) -> None:
+        """Assign a pipeline_id to a queued case and set status to RUNNING."""
+        now = datetime.now(timezone.utc).isoformat()
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE sweep_cases SET pipeline_id=?, status=?, updated_at=? WHERE id=?",
+            (pipeline_id, SweepCaseStatus.RUNNING.value, now, case_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def update_case_result(self, case_id: str, status: SweepCaseStatus, result_summary: Optional[Dict[str, Any]]) -> None:
+        """Update case status and result summary."""
+        now = datetime.now(timezone.utc).isoformat()
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE sweep_cases SET status=?, result_summary=?, updated_at=? WHERE id=?",
+            (status.value, json.dumps(result_summary) if result_summary else None, now, case_id),
+        )
+        conn.commit()
+        conn.close()
+
+
+# --- Module-level singleton getter ---
+
+_sweep_service: Optional[SweepDBService] = None
+
+
+def get_sweep_db_service() -> SweepDBService:
+    """Get or create the SweepDBService singleton."""
+    global _sweep_service
+    if _sweep_service is None:
+        _sweep_service = SweepDBService()
+    return _sweep_service
