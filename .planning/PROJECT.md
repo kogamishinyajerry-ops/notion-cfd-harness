@@ -1,6 +1,6 @@
 # AI-CFD Knowledge Harness — Project
 
-**Version:** v1.7.0 (Next)
+**Version:** v1.8.0 (Next)
 **Status:** Planning
 
 ---
@@ -33,6 +33,7 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 | v1.4.0 | 15-18 | ✅ Shipped | 2026-04-11 |
 | v1.5.0 | 19-22 | ✅ Shipped | 2026-04-11 |
 | v1.6.0 | 23-28 | ✅ Shipped | 2026-04-12 |
+| v1.7.0 | 29-34 | ✅ Shipped | 2026-04-12 |
 
 ## v1.3.0 — Real-time Convergence Monitoring ✅
 
@@ -100,27 +101,40 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 
 **Archive:** `.planning/milestones/v1.6.0-ROADMAP.md`
 
-## v1.7.0 — Pipeline Orchestration & Automation (Planning)
+## v1.7.0 — Pipeline Orchestration & Automation ✅
 
 **Goal:** 将孤立的组件（case generation → solver execution → convergence monitoring → 3D visualization → report generation）串联为端到端自动化流水线，一键触发全流程。
 
-**Target features:**
-- **PO-01**: Pipeline 编排引擎 — 输入自然语言/参数，依次触发 generate → run → monitor → visualize → report
-- **PO-02**: 批量作业调度 — 支持参数化扫描（parametric sweep）和批量运行
-- **PO-03**: 跨 case 比较引擎 — 对比多个 case 的收敛历史、场分布、关键指标
-- **PO-04**: Pipeline 状态持久化与恢复 — 中断后可恢复
-- **PO-05**: Pipeline 可视化 DAG — Dashboard 展示作业依赖关系图
+**Delivered:**
+- **PIPE-01**: Pipeline/Step Pydantic models + SQLite persistence in `data/pipelines.db`
+- **PIPE-02 ~ PIPE-07**: PO-01 Orchestration Engine — PipelineExecutor with Kahn's DAG topological sort, `StepResult` structured result objects (status enum), 5 step type wrappers (generate/run/monitor/visualize/report), `PipelineEventBus` WebSocket with 100-event ring buffer + 30s heartbeat, `CleanupHandler` docker-stop, `asyncio.to_thread()` async separation
+- **PIPE-08 ~ PIPE-09**: Full REST API (POST/GET/PUT/DELETE /pipelines, /pipelines/{id}/start/pause/resume/cancel, /pipelines/{id}/steps/events) + React Dashboard (PipelinesPage, PipelineDetailPage with real-time WebSocket updates, PipelineCreatePage with DAG builder + circular dependency validation)
+- **PIPE-10**: PO-02 Parametric Sweep — SweepRunner with `itertools.product` expansion, concurrency control (max N Docker containers), aggregate progress, `sweep_{id}/{combination_hash}/` output organization
+- **PIPE-13**: PO-05 DAG Visualization — `@xyflow/react` replacing Steps list, dagre auto-layout, live node color updates, 360px step detail drawer
+- **PIPE-11 ~ PIPE-12**: PO-03 Cross-Case Comparison — `ComparisonService` with provenance mismatch detection + convergence log parser + pvpython delta field, REST API 6 endpoints, React ConvergenceOverlay (Recharts log-scale LineChart), DeltaFieldViewer (trame iframe), MetricsTable (sortable, CSV/JSON export)
 
-**Key context:**
-- v1.6.0刚完成Trame迁移，所有可视化基础设施就绪
-- 当前各组件通过独立API调用工作，需要 orchestration layer 串联
-- 项目根部（api_server + dashboard）与 knowledge_compiler/ 平行发展
+**Key decisions:**
+- Pipeline orchestrator runs in dedicated `threading.Thread` NOT FastAPI BackgroundTasks (PIPE-07 / PITFALL 5.1)
+- Docker container ownership: pipeline owns all containers, `TrameSessionManager` retains viewer containers on idle timeout (PIPE-04 / PITFALL 2.2)
+- `Status` enum (success/diverged/validation_failed/error) over raw exit_code (PIPE-03 / PITFALL 2.1)
+- Schema v4: 4 provenance columns on `sweep_cases` + `comparisons` table
 
-**Archive:** `.planning/milestones/v1.6.0-ROADMAP.md`
+**Archive:** `.planning/milestones/v1.7.0-ROADMAP.md`
+
+## v1.8.0 — Next Milestone (Planning)
+
+**Goal:** TBD — pending requirements gathering
+
+**Candidate directions:**
+- PO-04: Pipeline State Persistence & Recovery (crash resume)
+- GoldStandard expansion: implement GoldStandard for 24 missing cold start cases (SU2-02 supersonic wedge, SU2-04 cylinder compressible, SU2-09 turbulent flat plate, SU2-10 von Karman vortex, SU2-19 ONERA M6, OF-04 VOF dam break, etc.)
+- Integration: bridge `knowledge_compiler/` (GoldStandardLoader, BenchmarkSuite) with `api_server/` (PipelineExecutor, ComparisonService)
+- WR-01/WR-02 fixes: docker script path for pvpython delta field, subprocess cleanup for trame sessions
+- Phase 5 validation: confirm 301 tests still pass with v1.7.0 changes
 
 ## Evolution
 
-*Last updated: 2026-04-12 — v1.7.0 planning started*
+*Last updated: 2026-04-12 — v1.7.0 shipped, v1.8.0 planning*
 
 **After each phase transition** (via `/gsd-transition`):
 1. Requirements invalidated? → Move to Out of Scope with reason
