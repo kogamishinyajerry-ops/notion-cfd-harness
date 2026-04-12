@@ -121,16 +121,15 @@ AI-CFD Knowledge Harness is an intelligent system for Computational Fluid Dynami
 
 **Archive:** `.planning/milestones/v1.7.0-ROADMAP.md`
 
-## v1.8.0 — Next Milestone (Planning)
+## v1.8.0 — System Integration & GoldStandard Expansion (Planning)
 
-**Goal:** TBD — pending requirements gathering
+**Goal:** 桥接知识编译系统与流水线系统，扩展冷启动黄金样例覆盖。
 
-**Candidate directions:**
-- PO-04: Pipeline State Persistence & Recovery (crash resume)
-- GoldStandard expansion: implement GoldStandard for 24 missing cold start cases (SU2-02 supersonic wedge, SU2-04 cylinder compressible, SU2-09 turbulent flat plate, SU2-10 von Karman vortex, SU2-19 ONERA M6, OF-04 VOF dam break, etc.)
-- Integration: bridge `knowledge_compiler/` (GoldStandardLoader, BenchmarkSuite) with `api_server/` (PipelineExecutor, ComparisonService)
-- WR-01/WR-02 fixes: docker script path for pvpython delta field, subprocess cleanup for trame sessions
-- Phase 5 validation: confirm 301 tests still pass with v1.7.0 changes
+**Target features:**
+1. **GoldStandard 扩展** — 为 24 个缺失冷启动案例实现 GoldStandard，重点高价值：supersonic wedge (SU2-02), cylinder compressible (SU2-04), turbulent flat plate (SU2-09), von Karman vortex (SU2-10), ONERA M6 (SU2-19), VOF dam break (OF-04)
+2. **系统集成** — `knowledge_compiler/` GoldStandardLoader ↔ `api_server/` PipelineExecutor/ComparisonService 桥接
+3. **WR-01/WR-02 修复** — pvpython docker script path (stdin cat) + subprocess trame session cleanup
+4. **Phase 5 验收** — 301 tests 确认 + Opus 审查 Pass 确认
 
 ## Evolution
 
