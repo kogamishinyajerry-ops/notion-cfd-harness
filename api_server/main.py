@@ -21,7 +21,7 @@ from api_server.config import (
     PORT,
     REDOC_URL,
 )
-from api_server.routers import cases, jobs, knowledge, status, auth, websocket, visualization
+from api_server.routers import cases, jobs, knowledge, status, auth, websocket, visualization, pipelines
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,11 @@ async def lifespan(app: FastAPI):
     # Start Trame idle monitor
     trame_manager = get_trame_session_manager()
     trame_manager.start_idle_monitor()
+
+    # Initialize pipeline database
+    from api_server.services.pipeline_db import init_pipeline_db
+    init_pipeline_db()
+    logger.info("Pipeline database initialized: data/pipelines.db")
 
     yield
 
@@ -88,6 +93,7 @@ def create_app() -> FastAPI:
     app.include_router(knowledge.router, prefix=API_PREFIX, tags=["knowledge"])
     app.include_router(websocket.router, tags=["websocket"])
     app.include_router(visualization.router, prefix=API_PREFIX, tags=["visualization"])
+    app.include_router(pipelines.router, prefix=API_PREFIX, tags=["pipelines"])
 
     @app.get("/", tags=["root"])
     async def root():
