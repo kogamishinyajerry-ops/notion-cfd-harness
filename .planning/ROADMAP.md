@@ -75,15 +75,15 @@ Plans:
 ### Phase 36: System Integration (2 plans, 2 waves)
 
 **Plans:**
-- [ ] 36-01-PLAN.md — Wave 1: GS-05 GOLDSTANDARD StepType + GS-06 validate_against_gold_standard()
-- [ ] 36-02-PLAN.md — Wave 2: GS-07 from-gold-standard endpoint + GS-08 Provenance hash computation
+- [x] 36-01-PLAN.md — Wave 1: GS-05 GOLDSTANDARD StepType + GS-06 validate_against_gold_standard() ✅
+- [x] 36-02-PLAN.md — Wave 2: GS-07 from-gold-standard endpoint + GS-08 Provenance hash computation ✅
 
 | Requirement | Description | Status |
 |-------------|-------------|--------|
-| GS-05 | GOLDSTANDARD Step Type in PipelineExecutor | Pending |
-| GS-06 | ComparisonService GoldStandard Validation | Pending |
-| GS-07 | ColdStartWhitelist → Pipeline Template Wiring | Pending |
-| GS-08 | Provenance Hash Computation | Pending |
+| GS-05 | GOLDSTANDARD Step Type in PipelineExecutor | ✅ Complete |
+| GS-06 | ComparisonService GoldStandard Validation | ✅ Complete |
+| GS-07 | ColdStartWhitelist → Pipeline Template Wiring | ✅ Complete |
+| GS-08 | Provenance Hash Computation | ✅ Complete |
 
 ### Phase 37: Bug Fixes
 | Requirement | Description | Status |
