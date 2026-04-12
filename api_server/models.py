@@ -277,9 +277,29 @@ class PipelineStatus(str, Enum):
     """Pipeline execution status"""
     PENDING = "pending"
     RUNNING = "running"
+    MONITORING = "monitoring"
+    VISUALIZING = "visualizing"
+    REPORTING = "reporting"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class StepStatus(str, Enum):
+    """Individual step execution status within a pipeline."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class StepResultStatus(str, Enum):
+    """Result status of a completed step."""
+    SUCCESS = "success"
+    DIVERGED = "diverged"
+    VALIDATION_FAILED = "validation_failed"
+    ERROR = "error"
 
 
 class StepType(str, Enum):
@@ -291,6 +311,22 @@ class StepType(str, Enum):
     REPORT = "report"
 
 
+class StepResult(BaseModel):
+    """Structured result object returned by each pipeline step.
+
+    The `status` field (StepResultStatus enum) is the primary signal for pipeline
+    continuation — NOT exit_code. This allows monitor steps to report `DIVERGED`
+    without halting the pipeline.
+    """
+    status: StepResultStatus
+    exit_code: int = 0
+    validation_checks: Dict[str, bool] = Field(default_factory=dict)
+    diagnostics: Dict[str, Any] = Field(default_factory=dict)
+
+    class Config:
+        use_enum_values = True
+
+
 class PipelineStep(BaseModel):
     """A single step within a pipeline DAG."""
     step_id: str = Field(..., description="Unique step identifier within the pipeline")
@@ -298,10 +334,7 @@ class PipelineStep(BaseModel):
     step_order: int = Field(..., description="Execution order (0-indexed)")
     depends_on: List[str] = Field(default_factory=list, description="List of step_ids this step depends on")
     params: Dict[str, Any] = Field(default_factory=dict, description="Step-specific parameters")
-    status: PipelineStatus = Field(default=PipelineStatus.PENDING, description="Step execution status")
-
-    class Config:
-        use_enum_values = True
+    status: StepStatus = Field(default=StepStatus.PENDING, description="Step execution status")
 
 
 class Pipeline(BaseModel):

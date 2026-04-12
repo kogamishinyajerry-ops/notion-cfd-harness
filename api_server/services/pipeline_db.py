@@ -20,6 +20,9 @@ from api_server.models import (
     PipelineStatus,
     PipelineStep,
     PipelineUpdate,
+    StepResult,
+    StepResultStatus,
+    StepStatus,
     StepType,
 )
 
@@ -109,6 +112,19 @@ def init_pipeline_db() -> None:
     if cursor.fetchone()["cnt"] == 0:
         cursor.execute("INSERT INTO schema_version (version) VALUES (1)")
 
+    # Schema v2: add result_json and updated_at columns to pipeline_steps
+    cursor.execute("SELECT COUNT(*) as cnt FROM schema_version WHERE version >= 2")
+    if cursor.fetchone()["cnt"] == 0:
+        try:
+            cursor.execute("ALTER TABLE pipeline_steps ADD COLUMN result_json TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        try:
+            cursor.execute("ALTER TABLE pipeline_steps ADD COLUMN updated_at TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        cursor.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (2)")
+
     conn.commit()
     conn.close()
 
@@ -192,7 +208,7 @@ class PipelineDBService:
                 step_order=sr["step_order"],
                 depends_on=depends_on,
                 params=params,
-                status=PipelineStatus(sr["status"]),
+                status=StepStatus(sr["status"]),
             ))
 
         config = json.loads(row["config"])
@@ -265,6 +281,44 @@ class PipelineDBService:
 
         logger.info(f"Updated pipeline: {pipeline_id}")
         return self.get_pipeline(pipeline_id)
+
+    def update_step_status(
+        self,
+        pipeline_id: str,
+        step_id: str,
+        status: StepStatus,
+        result_json: Optional[str] = None,
+    ) -> None:
+        """Update a step's execution status and optional result JSON."""
+        now = datetime.now(timezone.utc).isoformat()
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+        if result_json is not None:
+            cursor.execute(
+                "UPDATE pipeline_steps SET status=?, result_json=?, updated_at=? "
+                "WHERE pipeline_id=? AND step_id=?",
+                (status.value, result_json, now, pipeline_id, step_id),
+            )
+        else:
+            cursor.execute(
+                "UPDATE pipeline_steps SET status=?, updated_at=? "
+                "WHERE pipeline_id=? AND step_id=?",
+                (status.value, now, pipeline_id, step_id),
+            )
+        conn.commit()
+        conn.close()
+
+    def update_pipeline_status(self, pipeline_id: str, status: PipelineStatus) -> None:
+        """Update a pipeline's overall status."""
+        now = datetime.now(timezone.utc).isoformat()
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE pipelines SET status=?, updated_at=? WHERE id=?",
+            (status.value, now, pipeline_id),
+        )
+        conn.commit()
+        conn.close()
 
     def delete_pipeline(self, pipeline_id: str) -> bool:
         """Delete a pipeline and all its steps (ON DELETE CASCADE)."""
