@@ -94,6 +94,11 @@ class GoldStandardRegistry:
         """Create ReportSpec for case_id. Raises KeyError if not registered."""
         factory = self._spec_factories.get(case_id)
         if not factory:
+            # Try whitelist ID lookup
+            module_id = self._whitelist_id_map.get(case_id)
+            if module_id:
+                factory = self._spec_factories.get(module_id)
+        if not factory:
             raise KeyError(
                 f"No GoldStandard spec factory for {case_id}. "
                 f"Available: {list(self._spec_factories.keys())}"
@@ -104,12 +109,22 @@ class GoldStandardRegistry:
         """Instantiate and return validator for case_id. Returns None if not registered."""
         cls = self._validator_classes.get(case_id)
         if not cls:
+            # Try whitelist ID lookup
+            module_id = self._whitelist_id_map.get(case_id)
+            if module_id:
+                cls = self._validator_classes.get(module_id)
+        if not cls:
             return None
         return cls()
 
     def get_reference_data(self, case_id: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get literature reference data. Returns None if not registered."""
         fn = self._reference_fns.get(case_id)
+        if not fn:
+            # Try whitelist ID lookup
+            module_id = self._whitelist_id_map.get(case_id)
+            if module_id:
+                fn = self._reference_fns.get(module_id)
         if not fn:
             return None
         return fn(**kwargs)
@@ -118,12 +133,22 @@ class GoldStandardRegistry:
         """Get mesh metadata (strategy, file path, hash). Returns None if not registered."""
         fn = self._mesh_info_fns.get(case_id)
         if not fn:
+            # Try whitelist ID lookup
+            module_id = self._whitelist_id_map.get(case_id)
+            if module_id:
+                fn = self._mesh_info_fns.get(module_id)
+        if not fn:
             return None
         return fn()
 
     def get_solver_config(self, case_id: str) -> Optional[Dict[str, Any]]:
         """Get solver config (solver name, turbulence model, discretization). Returns None if not registered."""
         fn = self._solver_config_fns.get(case_id)
+        if not fn:
+            # Try whitelist ID lookup
+            module_id = self._whitelist_id_map.get(case_id)
+            if module_id:
+                fn = self._solver_config_fns.get(module_id)
         if not fn:
             return None
         return fn()
@@ -162,6 +187,12 @@ def _register_all_cases(registry: GoldStandardRegistry):
         inviscid_bump,
         inviscid_wedge,
         laminar_flat_plate,
+        supersonic_wedge,
+        cylinder_compressible,
+        turbulent_flat_plate,
+        von_karman_vortex,
+        onera_m6,
+        dam_break_vof,
     )
     # Each module exposes a register(registry) function
     if hasattr(lid_driven_cavity, "register"):
@@ -174,3 +205,15 @@ def _register_all_cases(registry: GoldStandardRegistry):
         inviscid_wedge.register(registry)
     if hasattr(laminar_flat_plate, "register"):
         laminar_flat_plate.register(registry)
+    if hasattr(supersonic_wedge, "register"):
+        supersonic_wedge.register(registry)
+    if hasattr(cylinder_compressible, "register"):
+        cylinder_compressible.register(registry)
+    if hasattr(turbulent_flat_plate, "register"):
+        turbulent_flat_plate.register(registry)
+    if hasattr(von_karman_vortex, "register"):
+        von_karman_vortex.register(registry)
+    if hasattr(onera_m6, "register"):
+        onera_m6.register(registry)
+    if hasattr(dam_break_vof, "register"):
+        dam_break_vof.register(registry)

@@ -234,8 +234,7 @@ def get_expected_pressure_distribution() -> Dict[str, Any]:
         "spanwise_stations": OneraM6Constants.SECTION_ETA,
         "literature_source": "Schmitt & Charpin (1994) AGARD-AR-138",
         "secondary_source": "Spalart-Allmaras (1992) for turbulence closure",
-        "notes": "Upper surface shows lambda shock at inboard stations, regular shock near tip",
-        " Cp data available at eta = 0.15, 0.30, 0.44, 0.65, 0.80, 0.90, 0.95",
+        "notes": "Upper surface shows lambda shock at inboard stations, regular shock near tip. Cp data available at eta = 0.15, 0.30, 0.44, 0.65, 0.80, 0.90, 0.95",
     }
 
 

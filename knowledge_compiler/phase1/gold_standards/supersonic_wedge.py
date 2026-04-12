@@ -72,9 +72,10 @@ def compute_shock_angle_theta_beta_M(
     Compute shock angle beta from theta-beta-M relation.
 
     The theta-beta-M relation for oblique shocks:
-        tan(theta) = 2 * cot(beta) * (M^2 * sin^2(beta) - 1) / (M^2 * (gamma + cos(2*beta)) + 2)
+        tan(theta) = 2 * cot(beta) * (M^2 * sin^2(beta) - 1)
+                     / (M^2 * (gamma + cos(2*beta)) + 2)
 
-    This is solved numerically using Newton's method.
+    Solved using bisection method (more robust than Newton).
 
     Args:
         mach: Upstream Mach number
@@ -85,42 +86,37 @@ def compute_shock_angle_theta_beta_M(
         Shock angle beta in degrees
     """
     theta = math.radians(wedge_angle_deg)
+    mu = math.asin(1.0 / mach)  # Mach wave angle (lower bound for beta)
 
-    # Initial guess using small-disturbance theory
-    beta_init = math.asin(1.0 / mach) + theta
-    beta = beta_init
+    # beta must be > mu (Mach wave angle) and < 90 degrees
+    beta_lo = mu + 1e-6
+    beta_hi = math.pi / 2 - 1e-6
 
-    for _ in range(100):
-        sin_beta = math.sin(beta)
-        cos_beta = math.cos(beta)
-        cos_2beta = math.cos(2 * beta)
-
-        # theta-beta-M relation
+    def theta_beta_M(beta: float) -> float:
+        """Compute tan(theta) - f(beta) where f(beta) is the RHS of theta-beta-M."""
+        sin_b = math.sin(beta)
+        cos_b = math.cos(beta)
+        cos_2b = math.cos(2 * beta)
         M2 = mach * mach
-        numerator = 2 * (M2 * sin_beta * sin_beta - 1)
-        denominator = M2 * (gamma + cos_2beta) + 2
-        f = math.tan(theta) - numerator / (denominator / cos_beta)
+        # f(beta) = 2 * cot(beta) * (M^2 * sin^2(beta) - 1) / (M^2 * (gamma + cos(2beta)) + 2)
+        # cot(beta) = cos(beta) / sin(beta)
+        f_beta = 2 * (cos_b / sin_b) * (M2 * sin_b * sin_b - 1) / (M2 * (gamma + cos_2b) + 2)
+        return math.tan(theta) - f_beta
 
-        # Derivative df/dbeta
-        dnumerator = 2 * M2 * 2 * sin_beta * cos_beta
-        ddenominator = -M2 * 2 * math.sin(2 * beta)
-        df_dbeta_num = dnumerator * (denominator / cos_beta) - numerator * (
-            ddenominator * (denominator / cos_beta) / (2 * cos_beta)
-            + denominator * math.sin(beta) / (cos_beta * cos_beta)
-        )
-        df_dbeta_denom = (denominator / cos_beta) * (denominator / cos_beta)
-        df_dbeta = df_dbeta_num / df_dbeta_denom - numerator / (denominator / cos_beta) * (
-            -math.sin(beta) / (cos_beta * cos_beta)
-        )
-
-        # Newton update
-        delta = f / (df_dbeta + 1e-12)
-        beta = beta - delta
-
-        if abs(delta) < 1e-10:
+    # Bisection
+    for _ in range(200):
+        beta_mid = (beta_lo + beta_hi) / 2
+        f_mid = theta_beta_M(beta_mid)
+        if abs(f_mid) < 1e-12:
             break
+        f_lo = theta_beta_M(beta_lo)
+        # Root is between beta_lo and beta_mid if f_lo and f_mid have opposite signs
+        if f_lo * f_mid < 0:
+            beta_hi = beta_mid
+        else:
+            beta_lo = beta_mid
 
-    return math.degrees(beta)
+    return math.degrees(beta_mid)
 
 
 # ============================================================================
