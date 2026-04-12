@@ -214,8 +214,8 @@ async def run_wrapper(step, cancel_event: threading.Event) -> StepResult:
         job_service = JobService()
 
         params = step.params.copy()
-        case_id = params.pop("case_id", step.step_id)
-        pipeline_id = params.pop("pipeline_id", None)
+        case_id = params.get("case_id", step.step_id)
+        pipeline_id = params.get("pipeline_id", None)
 
         submission = JobSubmission(
             case_id=case_id,
