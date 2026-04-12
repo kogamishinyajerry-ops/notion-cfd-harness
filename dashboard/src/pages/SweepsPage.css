@@ -1,0 +1,150 @@
+/* SweepsPage — mirrors PipelinesPage.css structure */
+
+.sweeps-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg, 24px);
+}
+
+.sweeps-header h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.sweeps-filter-bar {
+  display: flex;
+  gap: var(--spacing-sm, 8px);
+  margin-bottom: var(--spacing-lg, 24px);
+}
+
+.filter-btn {
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color, #e5e5e5);
+  background: var(--bg-secondary, #f5f5f7);
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: background 0.15s;
+}
+
+.filter-btn:hover {
+  background: var(--bg-tertiary, #eeeeee);
+}
+
+.filter-btn.active {
+  background: var(--accent-color, #e94560);
+  color: white;
+  border-color: var(--accent-color, #e94560);
+}
+
+.sweep-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md, 16px);
+}
+
+.sweep-card {
+  background: var(--bg-secondary, #f5f5f7);
+  border-radius: 8px;
+  padding: var(--spacing-md, 16px);
+  border-left: 4px solid #9ca3af;
+}
+
+.sweep-card.border-left-pending { border-left-color: #9ca3af; }
+.sweep-card.border-left-running { border-left-color: #f59e0b; }
+.sweep-card.border-left-completed { border-left-color: #10b981; }
+.sweep-card.border-left-failed { border-left-color: #ef4444; }
+.sweep-card.border-left-cancelled { border-left-color: #6b7280; }
+
+.sweep-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm, 8px);
+}
+
+.sweep-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.sweep-card-meta {
+  display: flex;
+  gap: var(--spacing-md, 16px);
+  font-size: 0.875rem;
+  color: var(--text-secondary, #666);
+  margin-bottom: var(--spacing-sm, 8px);
+}
+
+.sweep-card-footer {
+  display: flex;
+  gap: var(--spacing-md, 16px);
+  font-size: 0.875rem;
+  color: var(--text-secondary, #666);
+  margin-bottom: var(--spacing-sm, 8px);
+}
+
+.sweep-progress-inline {
+  color: var(--color-running, #f59e0b);
+  font-weight: 600;
+}
+
+.sweep-card-actions {
+  display: flex;
+  gap: var(--spacing-md, 16px);
+  align-items: center;
+}
+
+.btn-link {
+  color: var(--accent-color, #e94560);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.btn-link:hover {
+  text-decoration: underline;
+}
+
+.btn-danger {
+  color: var(--color-failed, #ef4444);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 64px 24px;
+}
+
+.empty-state h2 {
+  font-size: 1.5rem;
+  margin-bottom: var(--spacing-sm, 8px);
+}
+
+.empty-state p {
+  color: var(--text-secondary, #666);
+  margin-bottom: var(--spacing-lg, 24px);
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px;
+  gap: var(--spacing-md, 16px);
+  color: var(--text-secondary, #666);
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color, #e5e5e5);
+  border-top-color: var(--accent-color, #e94560);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
