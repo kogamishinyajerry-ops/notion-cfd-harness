@@ -88,6 +88,90 @@ class CaseListResponse(BaseModel):
 
 
 # =============================================================================
+# GoldStandard Models (GS-02)
+# =============================================================================
+
+
+class GoldStandardMeshInfo(BaseModel):
+    """Mesh metadata for a GoldStandard case."""
+    mesh_strategy: str = Field(..., description='"A" for ready mesh, "B" for script-built')
+    mesh_file_path: Optional[str] = Field(None, description="Path to mesh file if strategy A")
+    mesh_hash: Optional[str] = Field(None, description="SHA256 of mesh file for provenance")
+    mesh_details: Optional[str] = Field(None, description="Description of mesh setup")
+
+
+class GoldStandardSolverConfig(BaseModel):
+    """Solver configuration for a GoldStandard case."""
+    solver_name: str = Field(..., description="Solver executable name (e.g., icoFoam, simpleFoam)")
+    turbulence_model: Optional[str] = Field(None, description="Turbulence model if applicable")
+    discretization_schemes: Dict[str, str] = Field(default_factory=dict, description="Scheme selections")
+    convergence_criteria: Dict[str, float] = Field(default_factory=dict, description="Convergence tolerances")
+
+
+class GoldStandardCaseSummary(BaseModel):
+    """Summary of a GoldStandard case for list endpoint."""
+    id: str = Field(..., description="Case ID (e.g., 'OF-01', 'SU2-02')")
+    case_name: str = Field(..., description="Human-readable case name")
+    platform: str = Field(..., description="Platform: OpenFOAM or SU2")
+    tier: str = Field(..., description="Tier: core_seed, bridge, breadth")
+    dimension: str = Field(..., description="Dimension: 2D, 3D, 2D_or_quasi_2D")
+    difficulty: str = Field(..., description="Difficulty: basic, intermediate, advanced")
+    mesh_strategy: str = Field(..., description="Mesh strategy: A or B")
+    solver_command: str = Field(..., description="Solver execution command")
+    has_gold_standard: bool = Field(..., description="True if GoldStandard module is registered")
+    has_reference_data: bool = Field(..., description="True if reference data is available")
+    has_mesh_info: bool = Field(..., description="True if mesh info function is registered")
+    has_solver_config: bool = Field(..., description="True if solver config function is registered")
+
+
+class GoldStandardListResponse(BaseModel):
+    """Response for listing GoldStandard cases."""
+    cases: List[GoldStandardCaseSummary] = Field(..., description="List of GoldStandard case summaries")
+    total: int = Field(..., description="Total number of cases")
+    platform_filter: Optional[str] = Field(None, description="Applied platform filter")
+
+
+class GoldStandardCaseDetail(BaseModel):
+    """Detailed GoldStandard case including ReportSpec and metadata."""
+    id: str = Field(..., description="Case ID")
+    case_name: str = Field(..., description="Human-readable case name")
+    platform: str = Field(..., description="Platform")
+    tier: str = Field(..., description="Tier")
+    dimension: str = Field(..., description="Dimension")
+    difficulty: str = Field(..., description="Difficulty")
+    mesh_strategy: str = Field(..., description="Mesh strategy")
+    has_ready_mesh: bool = Field(..., description="True if mesh is pre-provided")
+    solver_command: str = Field(..., description="Solver command")
+    success_criteria: str = Field(..., description="Success criteria")
+    source_provenance: str = Field(..., description="Source provenance string")
+    mesh_info: Optional[GoldStandardMeshInfo] = Field(None, description="Mesh metadata")
+    solver_config: Optional[GoldStandardSolverConfig] = Field(None, description="Solver configuration")
+    report_spec: Optional[Dict[str, Any]] = Field(None, description="ReportSpec as dict if registered")
+    problem_type: Optional[str] = Field(None, description="ReportSpec problem type")
+
+
+class ValidationResultDetail(BaseModel):
+    """Detailed result of a single validation check."""
+    metric: str = Field(..., description="Metric or plot name")
+    status: str = Field(..., description="PASS, FAIL, WARN, or SKIPPED")
+    message: Optional[str] = Field(None, description="Detail message")
+    value: Optional[float] = Field(None, description="Simulated value")
+    reference_value: Optional[float] = Field(None, description="Reference value")
+    error_pct: Optional[float] = Field(None, description="Error percentage")
+
+
+class ValidationResultResponse(BaseModel):
+    """Response for gold standard validation endpoint."""
+    case_id: str = Field(..., description="Case ID that was validated")
+    passed: bool = Field(..., description="Overall pass/fail")
+    errors: List[str] = Field(default_factory=list, description="Error messages")
+    warnings: List[str] = Field(default_factory=list, description="Warning messages")
+    details: List[ValidationResultDetail] = Field(default_factory=list, description="Per-metric results")
+    plot_coverage: Optional[float] = Field(None, description="Fraction of required plots present")
+    metric_coverage: Optional[float] = Field(None, description="Fraction of required metrics present")
+
+
+# =============================================================================
 # Job Models
 # =============================================================================
 
