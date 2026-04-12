@@ -15,10 +15,11 @@ function parseParamGrid(rows: ParamRow[]): Record<string, (string | number)[]> {
     if (!row.key.trim()) continue;
     const vals = row.values.split(',').map((v) => {
       const trimmed = v.trim();
-      // Try parse as number, fall back to string
+      // Empty string → skip entirely (Number('') = 0 would inject spurious zero)
+      if (trimmed === '') return null;
       const num = Number(trimmed);
       return isNaN(num) ? trimmed : num;
-    }).filter((v) => v !== '');
+    }).filter((v) => v !== null) as (string | number)[];
     if (vals.length > 0) {
       grid[row.key.trim()] = vals;
     }

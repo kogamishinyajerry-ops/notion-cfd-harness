@@ -41,12 +41,8 @@ async def lifespan(app: FastAPI):
     trame_manager = get_trame_session_manager()
     trame_manager.start_idle_monitor()
 
-    # Initialize pipeline database
+    # Initialize pipeline database (schema v3 — pipelines + steps + sweeps + sweep_cases tables)
     from api_server.services.pipeline_db import init_pipeline_db
-    init_pipeline_db()
-    logger.info("Pipeline database initialized: data/pipelines.db")
-
-    # Initialize sweep database (schema v3 — sweeps + sweep_cases tables)
     init_pipeline_db()  # idempotent; schema v3 applied automatically
     logger.info("Sweep database initialized (shared with pipelines.db)")
 

@@ -217,7 +217,7 @@ class PipelineDBService:
                 step.step_order,
                 json.dumps(step.depends_on),
                 json.dumps(step.params),
-                PipelineStatus.PENDING.value,
+                StepStatus.PENDING.value,
             ))
 
         conn.commit()

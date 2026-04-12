@@ -47,7 +47,8 @@ function downloadCSV(cases: SweepCase[], sweepName: string) {
   a.href = url;
   a.download = `${sweepName.replace(/\s+/g, '_')}_summary.csv`;
   a.click();
-  URL.revokeObjectURL(url);
+  // Defer revocation so browser finishes reading the blob before URL is invalidated
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export default function SweepDetailPage() {

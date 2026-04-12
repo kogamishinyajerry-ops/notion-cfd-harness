@@ -151,7 +151,7 @@ class SweepRunner:
 
             # Start the pipeline
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 start_pipeline_executor(new_pipeline.id, loop)
             except Exception as e:
                 logger.error(f"Failed to start pipeline {new_pipeline.id} for case {case.id}: {e}")
@@ -198,6 +198,9 @@ class SweepRunner:
             if self.is_cancelled() and new_pipeline:
                 # Cancel the child pipeline
                 cancel_pipeline_executor(new_pipeline.id)
+                # Mark this case as cancelled so it counts toward completed
+                self._db.update_case_result(case.id, SweepCaseStatus.CANCELLED, {"cancelled": True})
+                self._db.increment_completed(self.sweep_id)
 
         except Exception as e:
             logger.exception(f"Error running case {case.id}")

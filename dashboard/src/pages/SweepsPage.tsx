@@ -10,6 +10,7 @@ const STATUS_FILTERS: Array<{ label: string; value: SweepStatus | 'ALL' }> = [
   { label: 'RUNNING', value: 'RUNNING' },
   { label: 'COMPLETED', value: 'COMPLETED' },
   { label: 'FAILED', value: 'FAILED' },
+  { label: 'CANCELLED', value: 'CANCELLED' },
 ];
 
 function formatDateTime(isoString?: string): string {
