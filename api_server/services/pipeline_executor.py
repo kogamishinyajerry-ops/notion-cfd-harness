@@ -148,6 +148,8 @@ class PipelineExecutor:
         self.pipeline_id = pipeline_id
         self._loop = loop        # main event loop for scheduling coroutines
         self._cancel_event = threading.Event()
+        self.pause_event = threading.Event()  # set() = paused, clear() = running
+        self._paused = False
         self._thread: Optional[threading.Thread] = None
         self._db = get_pipeline_db_service()
 
@@ -169,6 +171,22 @@ class PipelineExecutor:
 
     def is_cancelled(self) -> bool:
         return self._cancel_event.is_set()
+
+    def pause(self) -> None:
+        """Signal the executor to pause after the current step completes."""
+        logger.info(f"PipelineExecutor {self.pipeline_id}: pause requested")
+        self._paused = True
+        self.pause_event.set()
+
+    def resume(self) -> None:
+        """Resume a paused executor."""
+        logger.info(f"PipelineExecutor {self.pipeline_id}: resume requested")
+        self._paused = False
+        self.pause_event.clear()
+
+    @property
+    def is_paused(self) -> bool:
+        return self._paused
 
     # -- Execution logic --
 
@@ -216,6 +234,12 @@ class PipelineExecutor:
                     db.update_step_status(self.pipeline_id, step.step_id, StepStatus.SKIPPED)
                     skipped.add(step.step_id)
                 continue
+
+            # Wait if paused
+            if self.pause_event.is_set():
+                logger.info(f"PipelineExecutor {self.pipeline_id}: paused, waiting to resume...")
+                self.pause_event.wait()
+                logger.info(f"PipelineExecutor {self.pipeline_id}: resumed")
 
             # Check if all dependencies are completed
             deps_ok = all(dep in completed for dep in step.depends_on)
@@ -350,3 +374,8 @@ def cancel_pipeline_executor(pipeline_id: str) -> bool:
 def get_active_executor(pipeline_id: str) -> Optional[PipelineExecutor]:
     with _ACTIVE_EXECUTORS_LOCK:
         return _ACTIVE_EXECUTORS.get(pipeline_id)
+
+
+def get_pipeline_executor(pipeline_id: str) -> Optional["PipelineExecutor"]:
+    """Get the active PipelineExecutor for a pipeline, or None."""
+    return _ACTIVE_EXECUTORS.get(pipeline_id)
