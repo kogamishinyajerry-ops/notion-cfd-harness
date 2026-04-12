@@ -29,6 +29,13 @@ from api_server.models import (
     SweepCreate,
     SweepResponse,
     SweepCaseResponse,
+    # Comparison models (PIPE-11)
+    ComparisonResponse,
+    ComparisonListResponse,
+    ConvergenceDataPoint,
+    MetricsRow,
+    ProvenanceMismatchItem,
+    ProvenanceMetadata,
 )
 
 _DB_PATH: Optional[Path] = None
@@ -651,6 +658,120 @@ class SweepDBService:
         )
         conn.commit()
         conn.close()
+
+    # -------------------------------------------------------------------------
+    # Comparison support (PIPE-11)
+    # -------------------------------------------------------------------------
+
+    def get_all_completed_cases(self) -> List[SweepCaseResponse]:
+        """Get all completed cases across all sweeps (for case selector)."""
+        conn = get_pipeline_db_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM sweep_cases
+            WHERE status = 'COMPLETED'
+            ORDER BY sweep_id, combination_hash
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+        cases = []
+        for row in rows:
+            result_summary = json.loads(row["result_summary"]) if row["result_summary"] else None
+            provenance = ProvenanceMetadata(
+                openfoam_version=row["openfoam_version"],
+                compiler_version=row["compiler_version"],
+                mesh_seed_hash=row["mesh_seed_hash"],
+                solver_config_hash=row["solver_config_hash"],
+            )
+            cases.append(SweepCaseResponse(
+                id=row["id"],
+                sweep_id=row["sweep_id"],
+                param_combination=json.loads(row["param_combination"]),
+                combination_hash=row["combination_hash"],
+                pipeline_id=row["pipeline_id"],
+                status=SweepCaseStatus(row["status"]),
+                result_summary=result_summary,
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+                provenance=provenance,
+            ))
+        return cases
+
+    def add_comparison(self, comparison: ComparisonResponse) -> ComparisonResponse:
+        """Persist a ComparisonResult to the comparisons table."""
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Serialize convergence_data: {case_id: [datapoints]} -> stored as JSON
+        conv_data_json = json.dumps({
+            k: [pt.model_dump() for pt in v] for k, v in comparison.convergence_data.items()
+        })
+
+        cursor.execute("""
+            INSERT INTO comparisons
+            (id, name, reference_case_id, case_ids, provenance_mismatch,
+             convergence_data, metrics_table, delta_case_a_id, delta_case_b_id,
+             delta_field_name, delta_vtu_path, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            comparison.id,
+            comparison.name,
+            comparison.reference_case_id,
+            json.dumps(comparison.case_ids),
+            json.dumps([m.model_dump() for m in comparison.provenance_mismatch]),
+            conv_data_json,
+            json.dumps([r.model_dump() for r in comparison.metrics_table]),
+            comparison.delta_case_a_id,
+            comparison.delta_case_b_id,
+            comparison.delta_field_name,
+            comparison.delta_vtu_url,  # stored as path
+            now, now,
+        ))
+        conn.commit()
+        conn.close()
+        return comparison
+
+    def get_comparison(self, comparison_id: str) -> Optional[ComparisonResponse]:
+        """Get a comparison by ID."""
+        conn = get_pipeline_db_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM comparisons WHERE id = ?", (comparison_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if not row:
+            return None
+        return self._row_to_comparison(row)
+
+    def list_comparisons(self) -> List[ComparisonResponse]:
+        """List all comparisons."""
+        conn = get_pipeline_db_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM comparisons ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+        conn.close()
+        return [self._row_to_comparison(r) for r in rows]
+
+    def _row_to_comparison(self, row: sqlite3.Row) -> ComparisonResponse:
+        """Convert a comparisons DB row to ComparisonResponse."""
+        return ComparisonResponse(
+            id=row["id"],
+            name=row["name"],
+            reference_case_id=row["reference_case_id"],
+            case_ids=json.loads(row["case_ids"]),
+            provenance_mismatch=[ProvenanceMismatchItem(**m) for m in json.loads(row["provenance_mismatch"] or "[]")],
+            convergence_data=json.loads(row["convergence_data"] or "{}"),
+            metrics_table=[MetricsRow(**r) for r in json.loads(row["metrics_table"] or "[]")],
+            delta_case_a_id=row["delta_case_a_id"],
+            delta_case_b_id=row["delta_case_b_id"],
+            delta_field_name=row["delta_field_name"],
+            delta_vtu_url=row["delta_vtu_path"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
 
 
 # --- Module-level singleton getter ---

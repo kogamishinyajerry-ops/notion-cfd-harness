@@ -7,12 +7,12 @@ client = TestClient(app)
 
 
 def test_get_cases_empty():
-    r = client.get("/api/cases")
+    r = client.get("/api/v1/sweep-cases")
     assert r.status_code == 200
     assert isinstance(r.json(), list)
 
 
 def test_list_comparisons_empty():
-    r = client.get("/api/comparisons")
+    r = client.get("/api/v1/comparisons")
     assert r.status_code == 200
     assert r.json() == {"comparisons": []}

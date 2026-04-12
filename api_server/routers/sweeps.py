@@ -177,3 +177,14 @@ async def cancel_sweep(sweep_id: str):
             service.update_sweep_status(sweep_id, SweepStatus.CANCELLED)
 
     return {"status": "cancelling", "sweep_id": sweep_id}
+
+
+@router.get("/sweep-cases", response_model=List[SweepCaseResponse], tags=["sweeps"])
+async def list_all_cases():
+    """
+    List all completed cases across all sweeps.
+    Used by comparison UI for case selection (PIPE-12).
+    """
+    service = get_sweep_service()
+    return service.get_all_completed_cases()
+

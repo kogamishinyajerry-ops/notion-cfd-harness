@@ -21,7 +21,7 @@ from api_server.config import (
     PORT,
     REDOC_URL,
 )
-from api_server.routers import cases, jobs, knowledge, status, auth, websocket, visualization, pipelines, sweeps
+from api_server.routers import cases, jobs, knowledge, status, auth, websocket, visualization, pipelines, sweeps, comparisons
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +41,9 @@ async def lifespan(app: FastAPI):
     trame_manager = get_trame_session_manager()
     trame_manager.start_idle_monitor()
 
-    # Initialize pipeline database (schema v3 — pipelines + steps + sweeps + sweep_cases tables)
+    # Initialize pipeline database (schema v4 — provenance + comparisons tables)
     from api_server.services.pipeline_db import init_pipeline_db
-    init_pipeline_db()  # idempotent; schema v3 applied automatically
+    init_pipeline_db()  # idempotent; schema v4 applied automatically
     logger.info("Sweep database initialized (shared with pipelines.db)")
 
     yield
@@ -101,6 +101,7 @@ def create_app() -> FastAPI:
     app.include_router(visualization.router, prefix=API_PREFIX, tags=["visualization"])
     app.include_router(pipelines.router, prefix=API_PREFIX, tags=["pipelines"])
     app.include_router(sweeps.router, prefix=API_PREFIX, tags=["sweeps"])
+    app.include_router(comparisons.router, prefix=API_PREFIX, tags=["comparisons"])
 
     @app.get("/", tags=["root"])
     async def root():
