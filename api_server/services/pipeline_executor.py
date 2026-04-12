@@ -280,6 +280,23 @@ class PipelineExecutor:
                     pipeline_id=self.pipeline_id,
                     payload={"step_id": step.step_id, "status": result.status if result else "unknown"},
                 ))
+                # GS-08: Persist provenance hashes to sweep_cases if available
+                if result and result.diagnostics.get("provenance"):
+                    provenance = result.diagnostics["provenance"]
+                    case_id_from_params = step.params.get("case_id")
+                    if case_id_from_params:
+                        try:
+                            from api_server.services.pipeline_db import get_sweep_db_service
+                            sweep_svc = get_sweep_db_service()
+                            sweep_svc.update_case_provenance(
+                                case_id=case_id_from_params,
+                                openfoam_version=provenance.get("openfoam_version_hash"),
+                                compiler_version=provenance.get("compiler_version_hash"),
+                                mesh_seed_hash=provenance.get("mesh_seed_hash"),
+                                solver_config_hash=provenance.get("solver_config_hash"),
+                            )
+                        except Exception as prov_e:
+                            logger.warning(f"Failed to persist provenance for case {case_id_from_params}: {prov_e}")
             else:
                 db.update_step_status(self.pipeline_id, step.step_id, StepStatus.FAILED, result_json)
                 failed.add(step.step_id)

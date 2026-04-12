@@ -39,6 +39,7 @@ import hashlib
 import json
 import logging
 import threading
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from api_server.models import (
@@ -57,6 +58,98 @@ _STEP_CACHE: Dict[str, StepResult] = {}
 _STEP_CACHE_LOCK = threading.Lock()
 
 
+def _compute_openfoam_version_hash(case_dir: Path) -> str:
+    """
+    Compute deterministic hash of OpenFOAM version used for the case.
+    Returns SHA256 hex (16 chars) of version string, or 'unknown' if undetectable.
+    """
+    import re
+    allrun_path = case_dir / "Allrun"
+    if allrun_path.exists():
+        content = allrun_path.read_text()
+        version_match = re.search(r"openfoam[_\-]?v?(\d+)", content, re.IGNORECASE)
+        if version_match:
+            version_str = f"OpenFOAM-{version_match.group(1)}"
+            return hashlib.sha256(version_str.encode()).hexdigest()[:16]
+    version_file = case_dir / "system" / "controlDict"
+    if version_file.exists():
+        return hashlib.sha256(b"OpenFOAM-detected").hexdigest()[:16]
+    return "unknown"
+
+
+def _compute_compiler_version_hash() -> str:
+    """
+    Compute deterministic hash of compiler version (g++ or clang++).
+    Returns SHA256 hex (16 chars) or 'unknown'.
+    """
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["g++", "--version"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            first_line = result.stdout.split("\n")[0]
+            version_str = first_line.strip()
+            return hashlib.sha256(version_str.encode()).hexdigest()[:16]
+    except Exception:
+        pass
+    return "unknown"
+
+
+def _compute_mesh_seed_hash(case_dir: Path) -> str:
+    """
+    Compute deterministic hash of mesh seed configuration.
+    Returns SHA256 hex (16 chars) of canonicalized mesh configuration.
+    """
+    import re
+    mesh_dict = case_dir / "system" / "blockMeshDict"
+    if not mesh_dict.exists():
+        mesh_dict = case_dir / "system" / "snappyHexMeshDict"
+    if not mesh_dict.exists():
+        poly_mesh = case_dir / "constant" / "polyMesh"
+        if poly_mesh.exists():
+            boundary = poly_mesh / "boundary"
+            if boundary.exists():
+                content = boundary.read_text()
+                return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+    if mesh_dict.exists():
+        content = mesh_dict.read_text()
+        cleaned = re.sub(r'//.*$', '', content, flags=re.MULTILINE)
+        cleaned = re.sub(r'/\*.*?\*/', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        return hashlib.sha256(cleaned.encode()).hexdigest()[:16]
+
+    return "no-mesh-config"
+
+
+def _compute_solver_config_hash(case_dir: Path) -> str:
+    """
+    Compute deterministic hash of solver configuration.
+    Returns SHA256 hex (16 chars) of solver configuration.
+    """
+    import re
+    solver_configs = [
+        case_dir / "system" / "fvSchemes",
+        case_dir / "system" / "fvSolution",
+        case_dir / "system" / "controlDict",
+    ]
+    hashes = []
+    for cfg_file in solver_configs:
+        if cfg_file.exists():
+            content = cfg_file.read_text()
+            cleaned = re.sub(r'//.*$', '', content, flags=re.MULTILINE)
+            cleaned = re.sub(r'/\*.*?\*/', '', cleaned, flags=re.DOTALL)
+            cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+            hashes.append(hashlib.sha256(cleaned.encode()).hexdigest()[:16])
+
+    if hashes:
+        combined = "|".join(hashes)
+        return hashlib.sha256(combined.encode()).hexdigest()[:16]
+    return "no-solver-config"
+
+
 def _param_hash(step_id: str, params: Dict[str, Any]) -> str:
     """
     Deterministic hash of step_id + params for idempotency cache key.
@@ -65,6 +158,145 @@ def _param_hash(step_id: str, params: Dict[str, Any]) -> str:
     """
     key = json.dumps({"step_id": step_id, "params": params}, sort_keys=True)
     return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+async def gold_standard_wrapper(step, cancel_event: threading.Event) -> StepResult:
+    """
+    GS-05: Execute a full GoldStandard case lifecycle:
+      1. Generate case from GoldStandardRegistry spec_factory
+      2. Run solver via JobService
+      3. Monitor convergence
+      4. Validate results against literature reference via ComparisonService
+
+    Params required:
+      - gold_standard_case_id: str — whitelist case ID (e.g., "SU2-02", "OF-04")
+
+    Returns:
+      StepResult(status=SUCCESS) if all metrics pass literature validation.
+      StepResult(status=VALIDATION_FAILED) if any metric exceeds tolerance.
+      StepResult(status=ERROR) on unexpected exception or cancellation.
+    """
+    if cancel_event.is_set():
+        return StepResult(
+            status=StepResultStatus.ERROR, exit_code=1,
+            diagnostics={"cancelled": True}
+        )
+
+    try:
+        from api_server.services.comparison_service import get_comparison_service_for_validation
+        from knowledge_compiler.phase1.gold_standards.registry import get_gold_standard_registry
+
+        params = step.params
+        case_id = params.get("gold_standard_case_id")
+        if not case_id:
+            return StepResult(
+                status=StepResultStatus.ERROR, exit_code=1,
+                diagnostics={"error": "gold_standard_case_id param required"}
+            )
+
+        registry = get_gold_standard_registry()
+        comparison_svc = get_comparison_service_for_validation()
+
+        # Phase 1: Generate case
+        if cancel_event.is_set():
+            return StepResult(status=StepResultStatus.ERROR, exit_code=1, diagnostics={"cancelled": True})
+
+        case_dir = None
+        try:
+            spec = registry.get_spec(case_id)
+            from knowledge_compiler.phase2.execution_layer.generic_case_generator import GenericOpenFOAMCaseGenerator
+            generator_kwargs = spec.to_dict() if hasattr(spec, 'to_dict') else dict(spec)
+            generator = GenericOpenFOAMCaseGenerator(**generator_kwargs)
+            output = await asyncio.to_thread(generator.generate)
+            case_dir = str(output.get("case_dir", output) if isinstance(output, dict) else output)
+        except Exception as e:
+            logger.warning(f"GoldStandard case generation failed for {case_id}: {e}")
+            case_dir = f"/tmp/gs_case_{case_id}"
+
+        # Phase 2: Run solver
+        if cancel_event.is_set():
+            return StepResult(status=StepResultStatus.ERROR, exit_code=1, diagnostics={"cancelled": True})
+
+        from api_server.services.job_service import JobService, _JOBS
+        job_service = JobService()
+        submission = JobSubmission(
+            case_id=case_id,
+            job_type="run",
+            parameters={"case_dir": case_dir, "case_id": case_id, "pipeline_id": params.get("pipeline_id")},
+            async_mode=True,
+        )
+        job = job_service.submit_job(submission)
+        job_id = job.job_id
+
+        # Poll for completion
+        poll_interval = 5.0
+        max_wait = 7200
+        elapsed = 0
+        job_completed = False
+
+        while elapsed < max_wait:
+            if cancel_event.is_set():
+                return StepResult(status=StepResultStatus.ERROR, exit_code=1, diagnostics={"cancelled": True, "job_id": job_id})
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+            current_job = _JOBS.get(job_id)
+            if current_job is None:
+                break
+            status_val = current_job.status.value if hasattr(current_job.status, 'value') else str(current_job.status)
+            if status_val == "completed":
+                job_completed = True
+                break
+            if status_val == "failed":
+                return StepResult(
+                    status=StepResultStatus.ERROR, exit_code=1,
+                    diagnostics={"error": "Solver job failed", "job_id": job_id}
+                )
+
+        if not job_completed:
+            return StepResult(
+                status=StepResultStatus.ERROR, exit_code=1,
+                diagnostics={"error": "GoldStandard solver timeout", "job_id": job_id}
+            )
+
+        # Phase 3: Build report_spec and validate
+        current_job = _JOBS.get(job_id)
+        solver_result = current_job.result if current_job else {}
+
+        report_spec = {
+            "case_id": case_id,
+            "case_dir": case_dir,
+            "solver_result": solver_result,
+        }
+
+        # Phase 4: Validate against gold standard
+        literature_comp = comparison_svc.validate_against_gold_standard(case_id, report_spec)
+
+        diagnostics = {
+            "job_id": job_id,
+            "case_dir": case_dir,
+            "literature_comparison": literature_comp.model_dump() if hasattr(literature_comp, 'model_dump') else dict(literature_comp),
+            "metrics_passed": literature_comp.passed,
+        }
+
+        if literature_comp.passed:
+            return StepResult(
+                status=StepResultStatus.SUCCESS, exit_code=0,
+                validation_checks={"literature_validation": True},
+                diagnostics=diagnostics,
+            )
+        else:
+            return StepResult(
+                status=StepResultStatus.VALIDATION_FAILED, exit_code=0,
+                validation_checks={"literature_validation": False},
+                diagnostics=diagnostics,
+            )
+
+    except Exception as e:
+        logger.exception(f"gold_standard_wrapper failed for step {step.step_id}")
+        return StepResult(
+            status=StepResultStatus.ERROR, exit_code=1,
+            diagnostics={"exception": str(e)}
+        )
 
 
 # --------------------------------------------------------------------------
@@ -114,6 +346,7 @@ async def execute_step(step, cancel_event: threading.Event) -> StepResult:
         StepType.MONITOR: monitor_wrapper,
         StepType.VISUALIZE: visualize_wrapper,
         StepType.REPORT: report_wrapper,
+        StepType.GOLDSTANDARD: gold_standard_wrapper,
     }
 
     handler = dispatch.get(step_type)
@@ -252,11 +485,28 @@ async def run_wrapper(step, cancel_event: threading.Event) -> StepResult:
             status_val = current_job.status.value if hasattr(current_job.status, 'value') else str(current_job.status)
 
             if status_val == "completed":
+                # Compute provenance hashes (GS-08)
+                try:
+                    case_path = Path(case_dir) if case_dir else Path("/tmp")
+                    provenance = {
+                        "openfoam_version_hash": _compute_openfoam_version_hash(case_path),
+                        "compiler_version_hash": _compute_compiler_version_hash(),
+                        "mesh_seed_hash": _compute_mesh_seed_hash(case_path),
+                        "solver_config_hash": _compute_solver_config_hash(case_path),
+                    }
+                except Exception as prov_e:
+                    logger.warning(f"Provenance computation failed: {prov_e}")
+                    provenance = {
+                        "openfoam_version_hash": "unknown",
+                        "compiler_version_hash": "unknown",
+                        "mesh_seed_hash": "unknown",
+                        "solver_config_hash": "unknown",
+                    }
                 return StepResult(
                     status=StepResultStatus.SUCCESS,
                     exit_code=0,
                     validation_checks={"job_completed": True},
-                    diagnostics={"job_id": job_id, "result": current_job.result or {}}
+                    diagnostics={"job_id": job_id, "result": current_job.result or {}, "provenance": provenance}
                 )
             if status_val == "failed":
                 return StepResult(

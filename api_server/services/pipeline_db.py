@@ -659,6 +659,54 @@ class SweepDBService:
         conn.commit()
         conn.close()
 
+    def update_case_provenance(
+        self,
+        case_id: str,
+        openfoam_version: Optional[str] = None,
+        compiler_version: Optional[str] = None,
+        mesh_seed_hash: Optional[str] = None,
+        solver_config_hash: Optional[str] = None,
+    ) -> None:
+        """
+        GS-08: Update provenance hash columns on a sweep_cases row.
+
+        Called by PipelineExecutor after a successful run step to record
+        the computational provenance (OpenFOAM version, compiler version,
+        mesh seed hash, solver config hash) for reproducibility tracking.
+
+        Only updates non-None values, preserving existing data.
+        """
+        if all(v is None for v in [openfoam_version, compiler_version, mesh_seed_hash, solver_config_hash]):
+            return  # Nothing to update
+
+        conn = get_pipeline_db_connection()
+        cursor = conn.cursor()
+        now = datetime.now(timezone.utc).isoformat()
+
+        set_clauses = ["updated_at = ?"]
+        values = [now]
+
+        if openfoam_version is not None:
+            set_clauses.append("openfoam_version = ?")
+            values.append(openfoam_version)
+        if compiler_version is not None:
+            set_clauses.append("compiler_version = ?")
+            values.append(compiler_version)
+        if mesh_seed_hash is not None:
+            set_clauses.append("mesh_seed_hash = ?")
+            values.append(mesh_seed_hash)
+        if solver_config_hash is not None:
+            set_clauses.append("solver_config_hash = ?")
+            values.append(solver_config_hash)
+
+        values.append(case_id)
+        cursor.execute(
+            f"UPDATE sweep_cases SET {', '.join(set_clauses)} WHERE id = ?",
+            values,
+        )
+        conn.commit()
+        conn.close()
+
     # -------------------------------------------------------------------------
     # Comparison support (PIPE-11)
     # -------------------------------------------------------------------------

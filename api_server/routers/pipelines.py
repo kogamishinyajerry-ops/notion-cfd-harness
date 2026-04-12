@@ -15,7 +15,9 @@ from api_server.models import (
     PipelineListResponse,
     PipelineResponse,
     PipelineStatus,
+    PipelineStep,
     PipelineUpdate,
+    StepType,
 )
 from api_server.services import get_pipeline_db_service
 
@@ -306,4 +308,79 @@ async def resume_pipeline(pipeline_id: str):
     service.update_pipeline_status(pipeline_id, PipelineStatus.RUNNING)
 
     return {"status": "resumed", "pipeline_id": pipeline_id}
+
+
+@router.post("/pipelines/from-gold-standard/{case_id}", response_model=PipelineResponse, status_code=201, tags=["pipelines"])
+async def create_pipeline_from_gold_standard(case_id: str):
+    """
+    GS-07: Create a pipeline from a GoldStandard ColdStartCase.
+
+    Loads ColdStartCase from data/cold_start_whitelist.yaml via GoldStandardRegistry,
+    then expands into a PipelineCreate spec with a single GOLDSTANDARD step.
+
+    Returns 404 if case_id is not in the whitelist.
+    """
+    from api_server.models import PipelineCreate
+    from knowledge_compiler.phase1.gold_standards.registry import get_gold_standard_registry
+
+    registry = get_gold_standard_registry()
+
+    # Get ColdStartCase from whitelist
+    cold_start_case = registry.get_whitelist_case(case_id)
+    if not cold_start_case:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Case '{case_id}' not found in ColdStartWhitelist"
+        )
+
+    # Get GoldStandardRegistry metadata
+    module_case_id = registry.get_module_case_id(case_id) or case_id
+    mesh_info = registry.get_mesh_info(module_case_id) or {}
+    solver_config = registry.get_solver_config(module_case_id) or {}
+
+    # Build params for GOLDSTANDARD step
+    step_params = {
+        "gold_standard_case_id": case_id,
+        "case_name": cold_start_case.case_name,
+        "platform": cold_start_case.platform,
+        "mesh_strategy": cold_start_case.mesh_strategy,
+        "solver_command": cold_start_case.solver_command,
+        "mesh_info": mesh_info,
+        "solver_config": solver_config,
+    }
+
+    # Single GOLDSTANDARD step
+    pipeline_name = f"GoldStandard-{case_id}-{cold_start_case.case_name}"
+    pipeline_description = (
+        f"GoldStandard pipeline for {case_id} ({cold_start_case.case_name}) — "
+        f"{cold_start_case.platform} {cold_start_case.difficulty} difficulty, "
+        f"mesh strategy {cold_start_case.mesh_strategy}"
+    )
+
+    steps = [
+        PipelineStep(
+            step_id=f"gs-{case_id}",
+            step_type=StepType.GOLDSTANDARD,
+            step_order=0,
+            depends_on=[],
+            params=step_params,
+        )
+    ]
+
+    spec = PipelineCreate(
+        name=pipeline_name,
+        description=pipeline_description,
+        steps=steps,
+        config={
+            "gold_standard_case_id": case_id,
+            "platform": cold_start_case.platform,
+            "tier": cold_start_case.tier,
+            "difficulty": cold_start_case.difficulty,
+            "source_provenance": cold_start_case.source_provenance,
+        },
+    )
+
+    service = get_pipeline_service()
+    pipeline = service.create_pipeline(spec)
+    return pipeline
 
