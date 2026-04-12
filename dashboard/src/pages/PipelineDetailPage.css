@@ -294,3 +294,256 @@
   font-size: 14px;
   padding: var(--sp-4);
 }
+
+/* DAG tab */
+.dag-canvas-wrapper {
+  height: 500px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.dag-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  gap: var(--sp-4);
+  color: var(--text-secondary);
+}
+
+.dag-empty-heading {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dag-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+}
+
+/* Node detail drawer */
+.node-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.node-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-color);
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.node-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-4);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.node-drawer-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.node-drawer-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: var(--sp-1);
+}
+
+.node-drawer-close:hover {
+  color: var(--text-primary);
+}
+
+.node-drawer-body {
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.node-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.node-detail-section-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.node-detail-section-value {
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.node-detail-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.node-detail-params {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: var(--sp-3);
+  font-family: monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.node-detail-diagnostics {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: var(--sp-3);
+  font-size: 12px;
+  overflow-x: auto;
+}
+
+/* PipelineStepNode custom styles (used via ReactFlow node className) */
+.pipeline-step-node {
+  width: 200px;
+  min-height: 80px;
+  border-radius: 6px;
+  border: 2px solid var(--border-color);
+  background: var(--bg-primary);
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  position: relative;
+}
+
+.pipeline-step-node.selected {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.2);
+}
+
+.pipeline-step-node .node-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pipeline-step-node .node-step-id {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pipeline-step-node .node-step-type-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  color: var(--text-secondary);
+  text-transform: lowercase;
+  width: fit-content;
+}
+
+.pipeline-step-node .node-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+}
+
+.pipeline-step-node .node-status-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pipeline-step-node .node-duration {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Node status background colors */
+.pipeline-step-node.status-pending { background: var(--color-pending); }
+.pipeline-step-node.status-running { background: var(--color-running); }
+.pipeline-step-node.status-completed { background: var(--color-completed); }
+.pipeline-step-node.status-failed { background: var(--color-failed); }
+.pipeline-step-node.status-skipped { background: var(--color-skipped); }
+
+/* Override background for dark-on-light text readability */
+.pipeline-step-node.status-pending { background: var(--color-pending); color: #fff; }
+.pipeline-step-node.status-running { background: var(--color-running); color: #fff; }
+.pipeline-step-node.status-completed { background: var(--color-completed); color: #fff; }
+.pipeline-step-node.status-failed { background: var(--color-failed); color: #fff; }
+.pipeline-step-node.status-skipped { background: var(--color-skipped); color: #1d1d1f; }
+
+.pipeline-step-node.status-pending .node-step-id,
+.pipeline-step-node.status-pending .node-step-type-badge,
+.pipeline-step-node.status-running .node-step-id,
+.pipeline-step-node.status-running .node-step-type-badge,
+.pipeline-step-node.status-completed .node-step-id,
+.pipeline-step-node.status-completed .node-step-type-badge,
+.pipeline-step-node.status-failed .node-step-id,
+.pipeline-step-node.status-failed .node-step-type-badge,
+.pipeline-step-node.status-skipped .node-step-type-badge { color: inherit; opacity: 0.9; }
+
+.pipeline-step-node.status-pending .node-status-text,
+.pipeline-step-node.status-pending .node-duration,
+.pipeline-step-node.status-running .node-status-text,
+.pipeline-step-node.status-running .node-duration,
+.pipeline-step-node.status-completed .node-status-text,
+.pipeline-step-node.status-completed .node-duration,
+.pipeline-step-node.status-failed .node-status-text,
+.pipeline-step-node.status-failed .node-duration,
+.pipeline-step-node.status-skipped .node-status-text,
+.pipeline-step-node.status-skipped .node-duration { color: inherit; opacity: 0.8; }
+
+/* Warning badge */
+.node-warning-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  background: var(--color-running);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--bg-primary);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ReactFlow overrides */
+.react-flow__node.pipeline-step-node { border-radius: 6px; }
+.react-flow__minimap { background: var(--bg-secondary) !important; }
+.react-flow__controls { border-radius: 4px; }
