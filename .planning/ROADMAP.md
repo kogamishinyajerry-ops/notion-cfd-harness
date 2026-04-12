@@ -18,8 +18,8 @@
 - [x] **Phase 29: Foundation — Data Models + SQLite Persistence** — Pipeline and PipelineStep models with SQLite persistence (completed 2026-04-12)
 - [x] **Phase 30: PO-01 Orchestration Engine** — State machine, DAG traversal, component wrapping, WebSocket events, cleanup handler, async separation (completed 2026-04-12)
 - [x] **Phase 31: Pipeline REST API + React Dashboard** — Full CRUD and control endpoints, PipelinesPage and PipelineDetailPage (completed 2026-04-12)
-- [ ] **Phase 32: PO-02 Parametric Sweep** — SweepRunner, concurrency control, aggregate progress, output organization
-- [ ] **Phase 33: PO-05 DAG Visualization** — @xyflow/react DAG viewer with live status updates
+- [x] **Phase 32: PO-02 Parametric Sweep** — SweepRunner, concurrency control, aggregate progress, output organization (completed 2026-04-12)
+- [x] **Phase 33: PO-05 DAG Visualization** — @xyflow/react DAG viewer with live status updates (completed 2026-04-12)
 - [ ] **Phase 34: PO-03 Cross-Case Comparison** — Comparison engine and dashboard UI
 
 ---
@@ -114,11 +114,11 @@ Plans:
 4. Each combination's outputs are stored under `sweep_{id}/{combination_hash}/` with deterministic naming
 5. After sweep completes, user sees a summary table: case_id, params, final_residual, status for all combinations
 
-**Plans:** 2/2 plans created
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 32-01-PLAN.md — Backend: Sweep Pydantic models, SQLite schema, SweepDBService, SweepRunner
-- [ ] 32-02-PLAN.md — Backend REST API + Frontend: SweepsPage, SweepCreatePage, SweepDetailPage, routes, nav
+- [x] 32-01-PLAN.md — Backend: Sweep Pydantic models, SQLite schema, SweepDBService, SweepRunner
+- [x] 32-02-PLAN.md — Backend REST API + Frontend: SweepsPage, SweepCreatePage, SweepDetailPage, routes, nav
 
 **UI hint:** yes
 
@@ -139,10 +139,10 @@ Plans:
 4. DAG supports zoom, pan, and minimap navigation
 5. If a RUNNING step exceeds its expected duration, a warning icon appears on the node
 
-**Plans:** 2/2 plans created
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 32-01-PLAN.md — Backend: Sweep Pydantic models, SQLite schema, SweepDBService, SweepRunner
+- [x] 32-01-PLAN.md — Backend: Sweep Pydantic models, SQLite schema, SweepDBService, SweepRunner
 - [ ] 32-02-PLAN.md — Backend REST API + Frontend: SweepsPage, SweepCreatePage, SweepDetailPage, routes, nav
 
 **UI hint:** yes
@@ -182,8 +182,8 @@ Plans:
 | 29. Foundation — Data Models + SQLite | 2/2 | Complete    | 2026-04-12 |
 | 30. PO-01 Orchestration Engine | 4/4 | Complete    | 2026-04-12 |
 | 31. Pipeline REST API + React Dashboard | 4/4 | Complete    | 2026-04-12 |
-| 32. PO-02 Parametric Sweep | 0/2 | Planning | — |
-| 33. PO-05 DAG Visualization | 0/TBD | Not started | — |
+| 32. PO-02 Parametric Sweep | 2/2 | Complete   | 2026-04-12 |
+| 33. PO-05 DAG Visualization | 1/1 | Complete    | 2026-04-12 |
 | 34. PO-03 Cross-Case Comparison | 0/TBD | Not started | — |
 
 ---
