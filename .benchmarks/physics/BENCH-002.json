@@ -32,7 +32,7 @@
   ],
   "difficulty": "medium",
   "category": "physics",
-  "created_at": 1775990506.583935,
+  "created_at": 1776006358.115626,
   "tolerance": {
     "relative_error": 0.05,
     "absolute_error": 1e-06
