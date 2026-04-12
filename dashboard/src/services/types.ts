@@ -251,3 +251,36 @@ export interface SweepListResponse {
   sweeps: Sweep[];
   total: number;
 }
+
+// Comparison types (PO-03)
+export interface ConvergencePoint {
+  iteration: number;
+  Ux?: number;
+  Uy?: number;
+  Uz?: number;
+  p?: number;
+  [key: string]: number | undefined;
+}
+
+export interface MetricsRow {
+  case_id: string;
+  params: Record<string, unknown>;
+  final_residual?: number;
+  execution_time?: number;
+  openfoam_version?: string;
+  diff_percent?: number;
+}
+
+export interface ComparisonResponse {
+  id: string;
+  name: string;
+  reference_case_id: string;
+  case_ids: string[];
+  convergence_data: Record<string, ConvergencePoint[]>;
+  metrics_table: MetricsRow[];
+  delta_case_a_id?: string;
+  delta_case_b_id?: string;
+  delta_field_name?: string;
+  delta_vtu_path?: string;
+  created_at: string;
+}

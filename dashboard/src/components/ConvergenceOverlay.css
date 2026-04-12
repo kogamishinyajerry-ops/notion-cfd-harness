@@ -1,0 +1,80 @@
+/* ConvergenceOverlay styles */
+
+.convergence-overlay {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4, 16px);
+}
+
+.convergence-controls {
+  display: flex;
+  gap: var(--sp-4, 16px);
+  align-items: center;
+}
+
+.convergence-controls .field-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2, 8px);
+}
+
+.convergence-controls .field-selector label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.convergence-controls .field-selector select {
+  padding: var(--sp-2, 8px) var(--sp-3, 12px);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.convergence-chart {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: var(--sp-4, 16px);
+}
+
+.convergence-legend-custom {
+  display: flex;
+  justify-content: center;
+}
+
+.legend-hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.convergence-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px;
+  color: var(--text-secondary);
+}
+
+/* Custom tooltip */
+.convergence-tooltip {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: var(--sp-2, 8px);
+  box-shadow: var(--card-shadow);
+}
+
+.convergence-tooltip .tooltip-header {
+  font-weight: 600;
+  margin-bottom: 4px;
+  font-size: 0.875rem;
+}
+
+.convergence-tooltip p {
+  margin: 2px 0;
+  font-size: 0.8rem;
+  font-family: monospace;
+}

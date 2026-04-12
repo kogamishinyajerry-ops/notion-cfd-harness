@@ -11,3 +11,4 @@ export { default as PipelineCreatePage } from './PipelineCreatePage';
 export { default as SweepsPage } from './SweepsPage';
 export { default as SweepCreatePage } from './SweepCreatePage';
 export { default as SweepDetailPage } from './SweepDetailPage';
+export { default as ComparisonPage } from './ComparisonPage';

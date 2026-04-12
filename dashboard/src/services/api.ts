@@ -19,6 +19,7 @@ import type {
   Sweep,
   SweepCase,
   SweepListResponse,
+  ComparisonResponse,
 } from './types';
 
 class ApiClient {
@@ -275,6 +276,44 @@ class ApiClient {
 
   async getSweepCases(sweepId: string): Promise<SweepCase[]> {
     return this.request<SweepCase[]>(`/sweeps/${sweepId}/cases`);
+  }
+
+  // Comparisons (PO-03)
+  async getComparisons(): Promise<ComparisonResponse[]> {
+    const response = await this.request<{ comparisons: ComparisonResponse[] }>('/comparisons');
+    return response.comparisons;
+  }
+
+  async getComparison(id: string): Promise<ComparisonResponse> {
+    return this.request<ComparisonResponse>(`/comparisons/${id}`);
+  }
+
+  async createComparison(data: {
+    name: string;
+    reference_case_id: string;
+    case_ids: string[];
+  }): Promise<ComparisonResponse> {
+    return this.request<ComparisonResponse>('/comparisons', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getComparisonCases(sweepId?: string): Promise<SweepCase[]> {
+    if (sweepId) {
+      return this.request<SweepCase[]>(`/cases?sweep_id=${sweepId}`);
+    }
+    return this.request<SweepCase[]>('/cases');
+  }
+
+  async createDeltaSession(
+    comparisonId: string,
+    fieldName: string
+  ): Promise<{ trame_url: string; session_id: string }> {
+    return this.request<{ trame_url: string; session_id: string }>(
+      `/comparisons/${comparisonId}/delta-session?field_name=${fieldName}`,
+      { method: 'POST' }
+    );
   }
 }
 

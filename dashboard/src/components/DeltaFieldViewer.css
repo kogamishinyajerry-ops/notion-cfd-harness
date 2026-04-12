@@ -1,0 +1,105 @@
+/* DeltaFieldViewer styles */
+
+.delta-field-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 500px;
+}
+
+.delta-controls {
+  display: flex;
+  gap: var(--sp-4, 16px);
+  margin-bottom: var(--sp-4, 16px);
+}
+
+.delta-controls .field-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2, 8px);
+}
+
+.delta-controls .field-selector label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.delta-controls .field-selector select {
+  padding: var(--sp-2, 8px) var(--sp-3, 12px);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.delta-viewport {
+  flex: 1;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  min-height: 400px;
+}
+
+.delta-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  min-height: 400px;
+}
+
+/* States */
+.delta-placeholder,
+.delta-loading,
+.delta-waiting,
+.delta-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 400px;
+  gap: var(--sp-4, 16px);
+  color: var(--text-secondary);
+}
+
+.delta-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--accent-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.delta-error {
+  color: var(--color-failed);
+}
+
+.delta-error .error-message {
+  background: rgba(239, 68, 68, 0.1);
+  padding: var(--sp-2, 8px) var(--sp-3, 12px);
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.btn-retry {
+  padding: var(--sp-2, 8px) var(--sp-4, 16px);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-retry:hover {
+  background: var(--bg-secondary);
+}

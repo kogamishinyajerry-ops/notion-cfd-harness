@@ -1,0 +1,218 @@
+/* ComparisonPage - Two-panel cross-case comparison layout */
+
+.comparison-page {
+  display: flex;
+  gap: var(--sp-4, 16px);
+  height: calc(100vh - 120px);
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: var(--sp-4, 16px);
+}
+
+/* Case Selector Panel */
+.case-selector {
+  width: 320px;
+  min-width: 320px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.case-selector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--sp-4, 16px);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.case-selector-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.case-count {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.case-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-2, 8px);
+}
+
+.case-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2, 8px);
+  padding: var(--sp-2, 8px);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.case-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.case-item input[type="checkbox"] {
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.case-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.case-id {
+  font-family: monospace;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.case-params {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.case-selector-footer {
+  padding: var(--sp-4, 16px);
+  border-top: 1px solid var(--border-color);
+}
+
+.case-selector-footer .btn-primary {
+  width: 100%;
+}
+
+/* Comparison Viewer */
+.comparison-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.viewer-header {
+  padding: var(--sp-4, 16px);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.viewer-header h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Tab Bar */
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.tab-btn {
+  padding: var(--sp-3, 12px) var(--sp-4, 16px);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.tab-btn.active {
+  color: var(--accent-color);
+  border-bottom-color: var(--accent-color);
+  background: var(--bg-primary);
+}
+
+/* Tab Content */
+.tab-content {
+  flex: 1;
+  overflow: auto;
+  padding: var(--sp-4, 16px);
+}
+
+/* States */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px;
+  gap: var(--sp-4, 16px);
+  color: var(--text-secondary);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  text-align: center;
+}
+
+.empty-state h3 {
+  font-size: 1.25rem;
+  margin-bottom: var(--sp-2, 8px);
+}
+
+.empty-state p {
+  color: var(--text-secondary);
+}
+
+.error-message {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-failed);
+  padding: var(--sp-2, 8px) var(--sp-3, 12px);
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+/* Buttons */
+.btn-primary {
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  padding: var(--sp-2, 8px) var(--sp-4, 16px);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

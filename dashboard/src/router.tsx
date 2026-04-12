@@ -14,6 +14,7 @@ import {
   SweepsPage,
   SweepCreatePage,
   SweepDetailPage,
+  ComparisonPage,
 } from './pages';
 
 export const router = createBrowserRouter([
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
       { path: 'sweeps', element: <SweepsPage /> },
       { path: 'sweeps/new', element: <SweepCreatePage /> },
       { path: 'sweeps/:sweepId', element: <SweepDetailPage /> },
+      { path: 'comparisons', element: <ComparisonPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },
