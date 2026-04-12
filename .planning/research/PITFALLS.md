@@ -1,331 +1,461 @@
-# Pitfalls Research: ParaView Web to trame Migration
+# Domain Pitfalls: Adding Pipeline Orchestration to AI-CFD Harness
 
-**Domain:** CFD Web Visualization — ParaView Web (wslink) to trame Framework Migration
-**Researched:** 2026-04-11
-**Confidence:** MEDIUM
+**Project:** AI-CFD Knowledge Harness v1.7.0
+**Researched:** 2026-04-12
+**Domain:** Pipeline Orchestration for Scientific Computing (CFD/Simulation)
+**Confidence:** MEDIUM-HIGH
 
-> No official ParaView Web-to-trame migration guide exists. ParaViewWeb is officially in maintenance mode (no new features). Kitware directs users to trame. All findings below are synthesized from trame source code, official documentation (trame.readthedocs.io, kitware.github.io/trame), wslink protocol docs, and the ParaViewWeb GitHub README. Confidence is MEDIUM because official migration documentation does not exist and the team has no prior trame experience.
+> This document covers pitfalls specific to **adding** pipeline orchestration to an existing CFD/scientific visualization system. It assumes FastAPI + WebSocket server, React dashboard, trame VTK viewer in Docker, Python knowledge_compiler, and OpenFOAM Docker solver are already operational.
 
 ---
 
-## Critical Pitfalls
+## 1. Introduction
 
-### Pitfall 1: `@exportRpc` Protocol Classes Have No Direct trame Equivalent
+Adding pipeline orchestration to an existing system carries distinct risks from building one from scratch. The existing components have established behaviors, communication patterns, and failure modes. Disrupting these while adding orchestration introduces specific integration pitfalls that are not obvious from workflow engine documentation alone.
 
-**What goes wrong:**
-`ParaViewWebVolumeRendering` and `ParaViewWebAdvancedFilters` (in `paraview_adv_protocols.py`) inherit from `ParaViewWebProtocol` and register RPCs via the `@exportRpc` decorator. In trame, there are no protocol classes and no `@exportRpc`. Every RPC method must be rewritten as either a state-changing method or a server-side callback triggered by client events.
+This document assumes **existing components are working** and focuses on pitfalls that arise when wrapping them in an orchestration layer.
+
+---
+
+## 2. Critical Pitfalls
+
+Mistakes that cause pipeline failures, data loss, or integration breakage.
+
+### 2.1: Pipeline State Hides Individual Component Failures
+
+**What goes wrong:** When orchestration wraps existing components, failures in underlying components get absorbed by the pipeline's retry/continuation logic, making the actual failure hard to diagnose.
+
+**Why it happens:** Existing components (knowledge_compiler, OpenFOAM solver, trame viewer) have their own error handling. When wrapped in pipeline tasks, exceptions may be caught at multiple layers, creating ambiguous stack traces. The orchestrator retries or marks a step "completed" based on exit codes, but the component's internal state (diverged mesh, corrupted output) is not visible.
+
+**Consequences:**
+- Pipeline reports "success" but downstream steps fail with cryptic errors
+- OpenFOAM divergence is detected but the pipeline continues because the Docker container exited cleanly
+- Residual data is partial but treated as valid by the comparison engine
+
+**Prevention:**
+- Instrument each wrapped component with structured result objects that include: exit code, validation checks passed/failed, and a machine-readable status enum
+- Never rely solely on process exit codes to determine component success
+- Propagate component-level diagnostic data (residual history, mesh quality metrics) through the pipeline state
+
+**Detection:**
+- Pipeline execution logs show "completed" but downstream WebSocket messages contain stale data
+- Dashboard DAG shows all nodes green but case comparison yields NaN values
+
+---
+
+### 2.2: Docker Container Lifecycle Ownership Conflicts
+
+**What goes wrong:** The existing system launches Docker containers (OpenFOAM solver, trame viewer) independently. Adding an orchestrator that also manages containers creates lifecycle conflicts -- two processes trying to start/stop the same container.
 
 **Why it happens:**
-The mental model is inverted. ParaView Web is RPC-centric: the client explicitly calls a named method on a protocol instance. trame is state-centric: the client mutates shared state; the server reacts to state changes via `@state.change` decorators or `ctrl.on_*` lifecycle callbacks. There is no class-level filter registry in trame's equivalent pattern.
+- Trame viewer has its own Docker lifecycle manager (`TrameSessionManager`) with idle timeout and auto-launch
+- Pipeline orchestrator may independently launch Docker containers for the same purpose
+- `docker kill` from pipeline abort overwrites graceful shutdown in `TrameSessionManager`
 
-**How to avoid:**
-- Map every `@exportRpc` method to one of:
-  - A `ctrl.on_*` lifecycle callback (for server-initiated logic)
-  - A method decorated with `@state.change("varName")` (for reactive state mutations)
-  - A plain Python method called from a Vue component's `@click` handler via `server.controller`
-- Replace class-level filter registry (`ParaViewWebAdvancedFilters._filters = {}`) with trame `state.filters = {}` — a shared dict that automatically syncs to the client
-- Remove all `self._app.SMApplication.InvokeEvent("UpdateEvent", ())` calls (lines 207, 244, 285, 312 in `paraview_adv_protocols.py`) — trame's reactivity handles viewport updates automatically when state mutates
-- The `simple.Render()` calls should be retained for some operations but `InvokeEvent` must be removed
+**Consequences:**
+- Orphaned containers accumulate (memory leak of Docker processes)
+- Race condition: pipeline thinks container is ready but `TrameSessionManager` has not yet started it
+- Double-termination of containers causes port conflicts on restart
 
-**Warning signs:**
-- Code search finds `@exportRpc` or `from wslink.decorators import exportRpc` in migrated files
-- Filter IDs returned from RPCs do not persist in `state` but in a Python class dict
-- `self._app.SMApplication.InvokeEvent` still present after migration
+**Prevention:**
+- Designate exactly **one** component as the Docker lifecycle owner. Options:
+  - **Option A:** Pipeline orchestrator owns all container lifecycle; disable `TrameSessionManager`'s auto-launch
+  - **Option B:** `TrameSessionManager` continues owning viewer containers; pipeline only manages solver containers
+- Use container labels to identify ownership: `pipeline.owned=true` vs `trame.managed=true`
+- Never issue `docker kill` directly; always go through the owning component's shutdown method
 
-**Phase to address:** Migration phase (Phase 20/22 equivalents)
+**Detection:**
+- `docker ps` shows multiple orphaned containers after pipeline runs
+- `TrameViewer.tsx` logs show "session already exists" errors during pipeline execution
+- Port 8080 (trame) conflicts after pipeline restarts a crashed job
 
 ---
 
-### Pitfall 2: `simple.Render()` + `InvokeEvent` Pattern Breaks
+### 2.3: WebSocket Connection Loss During Long-Running Simulation
 
-**What goes wrong:**
-Both protocol classes call `simple.Render()` followed by `self._app.SMApplication.InvokeEvent("UpdateEvent", ())` to push viewport updates to the client (e.g., lines 206-207 in `paraview_adv_protocols.py`). In trame, there is no `InvokeEvent`. The render/update cycle is managed differently depending on the view type.
+**What goes wrong:** CFD simulations can run for hours. WebSocket connections to the dashboard drop due to timeouts, network interruptions, or browser tab suspension. The pipeline continues running but the client has no visibility.
 
 **Why it happens:**
-ParaViewWeb pushes viewport updates by explicitly invoking the UpdateEvent on the server's application object. trame's `VtkLocalView` widget auto-manages render windows — scene mutations via `simple.*` proxies automatically reflect in the client's rendered view once the render window is configured. There is no equivalent to `InvokeEvent`.
+- FastAPI/WebSocket default timeout behavior may close idle connections
+- Browser tabs suspend WebSocket connections after inactivity (especially mobile)
+- Dashboard `ConnectionManager` (in-memory) loses track of reconnecting clients
+- Pipeline progress events queue but have nowhere to send when no client is connected
 
-**How to avoid:**
-- For `VtkLocalView`: scene mutations via `simple.*` proxies automatically propagate to the client. Explicit `simple.Render()` is still needed for some operations but `InvokeEvent` is replaced by relying on auto-state-push when `state` dict is mutated inside a server method, or calling `server.update()` explicitly
-- For `VtkRemoteView`: render is triggered automatically on state change
-- Remove all `self._app.SMApplication.InvokeEvent` calls — they raise `AttributeError` in trame context
-- Test viewport updates after every filter operation to confirm the scene refreshes
+**Consequences:**
+- User loses real-time convergence monitoring during a critical divergence event
+- DivergenceDetector sends `divergence_alert` WebSocket message but no client receives it
+- User cannot abort a diverging job because the abort button is disconnected
 
-**Warning signs:**
-- After filter create/delete, the viewport freezes or shows stale geometry
-- `AttributeError: '_Protocol' object has no attribute '_app'` in logs
-- `AttributeError: 'NoneType' object has no attribute 'InvokeEvent'`
-- `self._app` used anywhere in trame-native code
+**Prevention:**
+- Implement **connection resilience** in `ConnectionManager`:
+  - Server-side message buffering with `missed_message` query on reconnect
+  - Client sends last-received sequence number on reconnect
+  - Server replays buffered messages above sequence number
+- Add a **persistence layer** for critical pipeline events:
+  - Write `divergence_alert`, `job_complete`, `job_failed` to a Redis/persistent queue
+  - Dashboard polls or receives these on reconnect
+- Use `WebSocket.ping()` heartbeats at 30-second intervals to keep connection alive
+- Never assume a connected client will stay connected for the duration of a pipeline run
 
-**Phase to address:** Migration phase (Phase 20/22 equivalents)
+**Detection:**
+- Dashboard shows frozen residual chart mid-simulation with no error message
+- `divergence_alert` is logged server-side but user never sees it
+- User reports "pipeline was running but dashboard showed nothing"
 
 ---
 
-### Pitfall 3: `ParaviewWebManager` Session/Container Architecture Is Replaced Entirely
+### 2.4: Stale Cache Returning Invalid Results After Solver Divergence
 
-**What goes wrong:**
-`ParaviewWebManager.launch_session()` in `paraview_web_launcher.py` uses the `vtk.web.launcher` multi-session launcher with a JSON config, Docker sidecar containers per session, port allocation, idle timeout monitoring, and a custom `entrypoint_wrapper.sh` that imports `adv_protocols.py` before launching. trame does not use the ParaView Web launcher at all. The container architecture, port allocation, entrypoint approach, and idle monitoring all need redesign.
+**What goes wrong:** Pipeline or component-level caching returns a previous successful result when the current run diverged but cache has not been invalidated.
 
 **Why it happens:**
-trame applications are self-hosted Python apps. There is no `vtk.web.launcher` multi-session manager. Each trame app runs as a single process (or can be scaled via gunicorn/uvicorn). The concept of "named Docker containers per session" does not map to trame's architecture.
+- Prefect documentation explicitly warns: "Cached states never expire unless `cache_expiration` is explicitly provided"
+- If a pipeline step uses a cached solver result but the case parameters changed slightly, the cached (potentially diverged) result is returned without re-running
+- Cross-case comparison uses cached mesh/field data that may be from a failed run
 
-**How to avoid:**
-- Replace `ParaviewWebManager` with a trame-native session management approach:
-  - Option A: Single trame server with `server.start()` using its built-in WebSocket handling (simpler, scales to hundreds of concurrent users via asyncio)
-  - Option B: Multiple gunicorn workers with sticky sessions if isolation is required
-- Drop the `entrypoint_wrapper.sh` pattern entirely — adv_protocols.py RPCs are replaced by `server.controller` methods
-- Remove the Docker image requirement for `vtk.web.launcher` module verification (line 75 in `paraview_web_launcher.py`)
-- The `--platform linux/amd64` constraint remains relevant for Apple Silicon (Mesa software rendering), but the Docker container no longer needs to run the ParaView Web launcher
-- The `_verify_image()` method and its `pvpython -c "import vtk.web.launcher"` check become unnecessary
-- The idle monitor task (`_idle_monitor`, `_shutdown_idle_sessions`) must be replaced with trame's `ctrl.on_server_bind` or a separate async background task
+**Consequences:**
+- Pipeline reports "completed" using stale data from a previous successful run
+- Cross-case comparison produces misleading results because some cases are from cache, others fresh
+- User exports results thinking they correspond to current parameters when they do not
 
-**Warning signs:**
-- `Dockerfile` still installs or references `vtk.web.launcher`
-- `launch_session()` still tries to run `pvpython ... launcher.py`
-- Session containers named `pvweb-{session_id}` still appear in `docker ps` after migration
-- `PARAVIEW_WEB_PORT_RANGE_START/END` configuration still used
+**Prevention:**
+- Always invalidate cache when: case parameters change, mesh topology changes, solver settings change
+- Use content-addressable caching: hash case parameters + solver config + mesh seed -> cache key
+- Distinguish between "result not yet computed" and "result computed with different parameters"
+- For cross-case comparison, explicitly validate that all compared cases used the same solver version and settings
 
-**Phase to address:** Infrastructure/migration phase (Phase 20)
+**Detection:**
+- Pipeline completes instantly (no actual computation) for a case that should have run
+- Cross-case comparison shows suspiciously identical results for different parameter sets
+- Export shows results that do not match the case parameters selected
 
 ---
 
-### Pitfall 4: Filter ID (`id(clip)`) Is Not Stable Across Server Restarts
+### 2.5: Pipeline State Persistence Gap Between Steps
 
-**What goes wrong:**
-`paraview_adv_protocols.py` uses `filter_id = id(clip)` (lines 202, 239, 280) as the filter registry key. `id()` returns the Python object's memory address, which is not reproducible across server restarts. If a client caches a filter ID from a previous session and the server restarts, the IDs will mismatch.
+**What goes wrong:** Pipeline state is not persisted at the right granularity. If the pipeline crashes or is manually stopped between steps, all state from completed steps is lost and must be recomputed.
 
 **Why it happens:**
-In ParaView Web, filter IDs are Python `id()` values returned to the client and stored there. On server restart, new filters get new addresses. The client still holds old IDs from the previous session.
+- Pipeline orchestration typically serializes state at the **run level** but not at the **step level**
+- OpenFOAM solver produces intermediate results at each iteration, but pipeline only saves final state
+- If pipeline stops after `generate` but before `run`, the generated case must be recreated
+- If pipeline stops after `run` but before `visualize`, the solver output is available but not linked to the pipeline context
 
-**How to avoid:**
-- Generate stable filter IDs using a UUID or incremental integer counter stored in `state`:
-  ```python
-  from trame.app import get_server
-  server = get_server()
-  state = server.state
-  state._filter_id_counter = 0
-  state.filters = {}
+**Consequences:**
+- Long-running parametric sweeps must restart from scratch after interruption
+- Intermediate data (checkpoint files, residuals at each iteration) is lost
+- Pipeline resume produces a **new** case ID rather than continuing the original run, breaking traceability
 
-  def _next_filter_id():
-      state._filter_id_counter += 1
-      return f"filter_{state._filter_id_counter}"
-  ```
-- Client should use the string ID returned by the server, not the `id()` of the Python object
-- Add server-side validation: reject filter IDs that are not in `state.filters`
+**Prevention:**
+- Implement **step-level checkpointing**: after each pipeline step completes, write a checkpoint that includes:
+  - Step completed, outputs produced, input hashes consumed
+  - Docker container state (paused, not terminated)
+  - Intermediate data paths (not just final results)
+- Designate a **pipeline state directory** per run: `pipelines/{pipeline_id}/{step_id}/`
+- On resume: detect existing checkpoint, validate outputs exist, skip to first incomplete step
+- Use **deterministic case IDs**: `pipeline_id + step_index + parameter_hash` not random UUID
 
-**Warning signs:**
-- After server restart, deleting or operating on a filter returns "Filter not found" even though it exists
-- Filter list RPC returns IDs that the client cannot match to its internal state
-
-**Phase to address:** Migration phase (Phase 22 equivalent)
+**Detection:**
+- After pipeline restart, case list shows duplicate entries for the same parameters
+- Parametric sweep resume recalculates all previously completed cases
+- Pipeline logs show different case IDs for what user believes is one continuous run
 
 ---
 
-### Pitfall 5: GPU Vendor Detection (`_detect_gpu`) Has No trame Equivalent
+## 3. Moderate Pitfalls
 
-**What goes wrong:**
-`ParaViewWebVolumeRendering._detect_gpu()` (lines 46-74 in `paraview_adv_protocols.py`) runs `eglinfo` as a subprocess to detect NVIDIA vs Mesa. In trame, GPU detection is handled differently — `VtkLocalView` renders client-side (no GPU needed on server), while `VtkRemoteView` renders server-side with whatever GPU is available.
+Issues that cause incorrect behavior or degraded UX, but do not cause complete pipeline failure.
+
+### 3.1: Blocking Sync Operations in Async Pipeline Callbacks
+
+**What goes wrong:** Using `def` (sync) route handlers that call blocking OpenFOAM I/O operations inside async pipeline callbacks, freezing the event loop.
 
 **Why it happens:**
-In the current architecture, the ParaView Web session container must detect its own GPU to choose between GPU ray cast and software ray cast. trame decouples rendering from the server for `VtkLocalView`, making server-side GPU detection unnecessary for that path.
+- FastAPI runs sync route handlers in a threadpool but pipeline orchestrator callbacks may be async contexts
+- OpenFOAM I/O operations (reading log files, writing mesh files) are blocking and can take seconds
+- If orchestrator callback uses `async def` but calls blocking I/O without `await`, the event loop stalls
 
-**How to avoid:**
-- For `VtkLocalView`: GPU detection is irrelevant — geometry is serialized and rendered in the browser via WebGL. No `eglinfo` call needed.
-- For `VtkRemoteView`: If server-side rendering is needed, implement GPU detection via `vtkGraphicsFactory.GetBackEnd()` or similar VTK API instead of shelling out to `eglinfo`
-- Move `volumeRenderingStatus` response data to `state.gpu_vendor`, `state.gpu_available` — trame's state sync replaces the RPC call
-- The `smartVolumeMapper` logic (`simple._create_vtkSmartVolumeMapper()`) is ParaView-specific and may need review for trame compatibility
-
-**Warning signs:**
-- `subprocess.run(["eglinfo"]...)` still present in migrated code
-- `VtkRemoteView` configured without GPU fallback for Apple Silicon
-- Volume rendering toggle fails silently on Apple Silicon because the renderer is not configured for Mesa
-
-**Phase to address:** Migration phase (Phase 20 equivalent)
+**Prevention:**
+- When calling blocking I/O from async contexts, use `asyncio.to_thread()` or offload to a worker process
+- Explicitly separate: async coordination (WebSocket, scheduling) vs blocking computation (solver I/O, mesh generation)
+- Do not wrap blocking operations in `await` unless they are truly async-compatible
 
 ---
 
-### Pitfall 6: OpenFOAM Case Directory Mounting Changes
+### 3.2: Parametric Sweep Resource Contention
 
-**What goes wrong:**
-`ParaviewWebManager._start_container()` mounts the case directory at `/data` inside the container (line 344 in `paraview_web_launcher.py`). In trame, the case directory must be accessible to the trame server process. The mounting path and mechanism differ.
+**What goes wrong:** Batch scheduling launches multiple OpenFOAM containers simultaneously, causing resource contention that degrades all simulations or causes OOM kills.
 
 **Why it happens:**
-Each ParaView Web session had its own container with the case mounted. trame runs as a long-running server process, not a per-session container. File paths and mounts are managed differently.
+- Each OpenFOAM Docker container consumes significant memory (2-8 GB depending on mesh size)
+- Default Docker resource limits may not be set; containers compete for host resources
+- Trame viewer containers also consume GPU/memory when active
+- No **resource pool manager** coordinates concurrent simulation capacity
 
-**How to avoid:**
-- Mount the case directory at the trame server host level, not per-session
-- Pass the case directory path via `state.case_dir` and initialize OpenFOAM reader in a `ctrl.on_server_start` callback
-- If per-session isolation is still required (multi-tenant security), use the trame app's multi-session capabilities or separate processes behind a reverse proxy
-- Verify the OpenFOAM reader can access the mounted path from the trame server's context
-
-**Warning signs:**
-- OpenFOAM reader cannot find boundary file `/data/constant/polyMesh/boundary`
-- Case directory not visible to trame server process
-- Multiple users see each other's case data (isolation breach)
-
-**Phase to address:** Migration phase (Phase 20 equivalent)
+**Prevention:**
+- Implement a **resource pool** that tracks available host memory/GPU and limits concurrent solver runs
+- Set explicit Docker resource limits per container: `--memory`, `--cpus`, `--gpus`
+- For parametric sweeps, use a **staggered launch** pattern: start next case when previous reaches `runStartTime` rather than waiting for full completion
+- Monitor host resource usage and scale down concurrency when memory pressure is detected
 
 ---
 
-### Pitfall 7: Multi-Client Session Isolation Requires Redesign
+### 3.3: Cross-Case Comparison Version Mismatch
 
-**What goes wrong:**
-`ParaViewWebManager` spawns a named Docker container (`pvweb-{session_id}`) per session, achieving hard isolation. trame's default mode shares the same server process (and thus `simple` state) across all connected clients. Without explicit isolation, one user's filter operations could affect another user's viewport.
+**What goes wrong:** Comparing cases that used different OpenFOAM versions, solver settings, or mesh generation configs produces misleading comparative results.
 
 **Why it happens:**
-ParaView Web's launcher spawns a separate ParaView server process per session. trame's `VtkLocalView` is designed for multi-user but requires explicit configuration to prevent state leakage between clients.
+- Cases created at different times may have been generated with different `knowledge_compiler` versions
+- OpenFOAM Docker image may have been updated between case runs
+- Mesh refinement levels or boundary condition defaults may have changed
+- Comparison engine does not automatically detect or flag these differences
 
-**How to avoid:**
-- Use trame's `server.enableSession()` or per-client state isolation patterns
-- Register client-specific state using `ctrl.on_client_connected()` to initialize per-client `state` entries
-- For `VtkLocalView`, each client gets its own scene object but the server's `simple` state is global — add client ID prefixes to filter keys in `state.filters`
-- For `VtkRemoteLocalView`, ensure render window configuration is per-client
-- Test with two browser tabs connected to the same session: operations in tab A must not change tab B's viewport
-
-**Warning signs:**
-- Opening a clip filter in one browser tab creates it in another tab's view
-- Filter list RPC returns filters from other users' sessions
-- Camera reset in one tab resets it for all tabs
-
-**Phase to address:** Migration phase (Phase 20/22 equivalent) — must be verified before multi-user testing
+**Prevention:**
+- Store **provenance metadata** with every case: `openfoam_version`, `compiler_version`, `mesh_seed_hash`, `solver_config_hash`
+- Before comparison, run a **compatibility check**: compare provenance metadata of all selected cases
+- Flag mismatches explicitly in UI rather than silently proceeding
+- Store comparison results with the provenance of the cases compared
 
 ---
 
-## Technical Debt Patterns
+### 3.4: Pipeline DAG Visualization Stale State
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Keep `@exportRpc` classes and wrap them in trame | Avoid rewriting RPC methods | The entire trame state model is bypassed; creates a hybrid architecture that is harder to debug and maintain | Never — this defeats the migration purpose |
-| Keep global Python dict for filter registry without client ID prefix | Simpler code | Cross-client state leakage in multi-user scenarios | Only in single-user MVP |
-| Keep Docker container per session instead of trame server | Preserves existing infra | Loses trame's async benefits; adds container overhead; complicates deployment | Only if strict process isolation is a hard requirement |
-| Skip stable filter ID generation | Avoid extra state management | Filter operations fail silently after server restart | Only in MVP with short-lived sessions |
-| Implement volume rendering as server-side only (`VtkRemoteView`) | Simpler initial implementation | On Apple Silicon without GPU, server-side rendering is CPU-only and slow | Only for NVIDIA GPU deployments |
-| Keep `simple.Render()` + `InvokeEvent` pattern (undetected) | Works in ParaViewWeb | `InvokeEvent` raises `AttributeError` in trame; silent failures | Never — must be replaced |
+**What goes wrong:** Dashboard DAG visualization shows pipeline as "running" when individual steps have actually completed or failed, because DAG updates are driven by WebSocket push without polling fallback.
 
----
+**Why it happens:**
+- DAG state is driven by WebSocket messages from orchestrator to dashboard
+- If WebSocket disconnects (see 2.3), DAG stops updating
+- Client-side DAG may show a step as "running" because it received `step_started` but no `step_completed`
+- No polling fallback to sync actual pipeline state
 
-## Integration Gotchas
-
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|-----------------|
-| OpenFOAM reader | Assuming ParaView reader path `/data` works the same in trame | Verify reader path resolves from trame server context; use absolute paths |
-| WebSocket port | Reusing ParaView Web port range (8081-8090) for trame | trame defaults to port 8080; configure explicitly; ensure no port conflicts |
-| React frontend | Keeping the existing WebSocket RPC router (`message.id` routing) | Replace with trame's `server.controller` — the frontend RPC pattern changes fundamentally |
-| Docker daemon | Building image with `vtk.web.launcher` dependency | Remove launcher dependency from Dockerfile; use `pip install trame trame-vtk` |
-| Apple Silicon | Expecting GPU ray cast to work with `VtkRemoteView` | Use `VtkLocalView` (client-side WebGL rendering) so server GPU is irrelevant; or use `VtkRemoteView` with Mesa fallback |
-| Container startup | Assuming entrypoint_wrapper.sh import pattern still applies | trame initializes server in Python directly; no launcher entrypoint needed |
-| Image verification | `verify_paraview_web_image()` checking `vtk.web.launcher` | Remove this check; verify `trame` package is installed instead |
-| Idle monitoring | `_idle_monitor` task using `docker kill` | trame has no per-session containers; implement idle timeout as a state TTL or asyncio task |
+**Prevention:**
+- Implement **optimistic UI with reconciliation**: dashboard shows expected state based on last event, but periodically polls `/api/pipelines/{id}/status` to reconcile
+- DAG nodes should have explicit **staleness indicators**: if node has been "running" for > expected_duration, show warning
+- Store pipeline state in a persistent backend (not just in-memory) so any dashboard instance can retrieve current state
 
 ---
 
-## Performance Traps
+### 3.5: DAG Cycle Detection False Positives
 
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Large mesh sent to `VtkLocalView` without LOD | Browser tab freezes during geometry transfer | Use `VtkLocalView` with appropriate geometry decimation; limit mesh complexity before transfer | Meshes with >5M cells |
-| `VtkRemoteView` image quality too high | 100+ ms latency on camera orbit | Set appropriate `quality` and `ratio` parameters on `VtkRemoteView` | >3 concurrent users or slow client devices |
-| `simple.Render()` called on every filter parameter change | Server CPU spikes | Debounce state changes; batch updates; only render on explicit commit | Interactive slider manipulation |
-| Filter registry iteration over `state.filters` on every RPC | Slow RPC responses as filter count grows | Use `state.filters` as a dict with O(1) lookups; do not iterate for filter operations | >100 filters in session |
-| Serializing full mesh on every state change | Network saturation, UI lag | `VtkLocalView` only sends geometry delta; configure appropriately |
+**What goes wrong:** Complex parametric sweep pipelines with dynamic branching create apparent cycles that trigger DAG validation errors, even when the graph is actually a DAG.
 
----
+**Why it happens:**
+- Cross-case comparison may create a virtual edge between cases that is not a real dependency but a logical relationship
+- Parametric sweep with conditional branching (`if mesh_quality < threshold, refine_mesh`) creates dynamic edges
+- DAG validation libraries may flag these as cycles
 
-## Security Mistakes
-
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| No authentication on trame WebSocket endpoint | Any user can execute server-side filter operations | Use trame's built-in authentication or add a reverse proxy auth layer |
-| OpenFOAM case files accessible via predictable paths | Data leakage between users | Validate case path ownership before mounting; use user-specific subdirectories |
-| `subprocess.run` with unsanitized inputs (future extensions) | Command injection | Never pass user input directly to subprocess; use VTK API instead of shell commands |
-| No rate limiting on filter RPCs | DoS from rapid filter creation | Add throttling in `ctrl.on_*` callbacks using `asyncio.sleep` or a token bucket |
-| No session isolation between multi-users | Users can affect each other's visualization state | Use client-ID-scoped state with `ctrl.on_client_connected()` |
+**Prevention:**
+- Clearly separate **data dependency edges** (real execution order) from **metadata edges** (comparison relationships)
+- Store comparison relationships in a separate graph structure, not in the pipeline DAG
+- For conditional branching, use explicit `Condition` nodes with deterministic predicate evaluation, not implicit control flow
 
 ---
 
-## UX Pitfalls
+## 4. Minor Pitfalls
 
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| Viewport does not update after filter apply | User creates filter but sees no change — assumes it failed | Always return confirmation with visual feedback; verify viewport updates in test |
-| Volume rendering toggle shows no feedback on Apple Silicon | User clicks Enable Volume but nothing happens | Check GPU availability and show informative message if GPU unavailable |
-| Filter list does not update after delete | User deletes filter but it still appears in the list | Trigger UI refresh via `state.filters` mutation after every delete |
-| Session timeout is invisible | User's session dies silently during long analysis | Show connection status indicator; implement client-side reconnect logic |
-| Filter operations block WebSocket | User's camera freezes while clip is being created | Move filter creation to async handler; show progress in UI |
+Cosmetic or UX issues that are annoying but do not cause incorrect results.
 
----
+### 4.1: Pipeline Abort Does Not Clean Up Child Processes
 
-## "Looks Done But Isn't" Checklist
+**What goes wrong:** Clicking "abort" on a running pipeline kills the orchestrator's view of the pipeline but orphaned Docker containers and background processes continue running.
 
-Verify these during implementation, not just during demo:
+**Prevention:** Implement a **cleanup handler** that on pipeline abort: stops all Docker containers started by that pipeline, kills background Python processes spawned by that pipeline, removes temporary case directories not yet persisted.
 
-- [ ] **RPC methods:** `@exportRpc` decorator fully replaced — verify no `from wslink.decorators import exportRpc` in migrated files
-- [ ] **`InvokeEvent` removed:** Verify no `self._app.SMApplication` or `InvokeEvent` references in trame codebase
-- [ ] **Filter IDs stable:** Server restart does not break existing client-side filter references
-- [ ] **Multi-client isolation:** Two simultaneous users do not see each other's filters or camera changes
-- [ ] **Viewport updates:** Clip/contour/stream tracer operations visibly update the 3D view
-- [ ] **Docker cleanup:** Old `pvweb-{session_id}` containers are not created; old launcher image verification removed
-- [ ] **Apple Silicon rendering:** Volume rendering toggle produces visible output via `VtkLocalView` (WebGL) or graceful fallback
-- [ ] **OpenFOAM reader:** Case directory resolves correctly; boundary file found at expected path
-- [ ] **Frontend RPC router:** React components use trame state/callback pattern, not wslink `message.id` routing
-- [ ] **Idle monitoring:** Replaced `_idle_monitor` with trame-compatible timeout mechanism
-- [ ] **Image verification:** `verify_paraview_web_image()` replaced with `pip show trame` equivalent
-- [ ] **Filter registry:** `ParaViewWebAdvancedFilters._filters` class dict replaced with `state.filters`
+### 4.2: Scheduler DST and Timezone Mismatch
+
+**What goes wrong:** Batch jobs scheduled with cron-like expressions fire at wrong times due to DST transitions, or scheduled times appear incorrect because server uses UTC but dashboard shows local time.
+
+**Prevention:** Always store and transmit pipeline scheduled times in UTC. Display in user's local timezone only at UI layer. Never use interval schedules < 24 hours for time-sensitive triggers (see Prefect scheduling docs).
+
+### 4.3: WebSocket Message Ordering Not Guaranteed
+
+**What goes wrong:** Pipeline events arrive at dashboard in non-chronological order (e.g., `step_complete` arrives before `step_started`), causing DAG to show incorrect state transitions.
+
+**Prevention:** Attach monotonic sequence numbers to all pipeline events. On client, maintain a **sequence log** and apply events in order. Discard late-arriving events with lower sequence numbers than already processed.
 
 ---
 
-## Recovery Strategies
+## 5. Integration Pitfalls
 
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| `@exportRpc` classes not migrated | HIGH | Roll back frontend to ParaView Web temporarily; re-plan migration as a full rewrite |
-| Filter state leakage between clients | HIGH | Immediately enable client ID prefixes on filter keys; deploy hotfix; audit all state mutations |
-| `InvokeEvent` causing `AttributeError` | MEDIUM | Wrap in try/except during migration; systematically replace with state mutation |
-| Docker container leaks (old containers not cleaned) | LOW | Run `docker rm $(docker ps -aq -f name=pvweb)` to clean up; update cleanup code |
-| Apple Silicon volume rendering silent failure | MEDIUM | Switch to `VtkLocalView`; remove server-side GPU detection; verify WebGL support in client |
-| `vtk.web.launcher` dependency still in Dockerfile | MEDIUM | Remove launcher from Dockerfile; rebuild image; remove verification code |
+Pitfalls at the boundary between existing components and the new orchestration layer.
 
----
+### 5.1: FastAPI Background Tasks vs. Dedicated Orchestrator
 
-## Pitfall-to-Phase Mapping
+**What goes wrong:** Adding pipeline orchestration inside the existing FastAPI server using `BackgroundTasks` creates coupling between HTTP request lifecycle and pipeline lifecycle.
 
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| `@exportRpc` protocol rewrite | Phase 20 (ParaView Web protocol migration) | No `exportRpc` imports; all RPCs mapped to `ctrl.on_*` or `@state.change` |
-| `InvokeEvent` removal | Phase 20 | No `_app.SMApplication` references; viewport updates verified in test |
-| Container architecture replacement | Phase 20 (infrastructure) | Docker containers named `pvweb-*` are not created; trame server process handles sessions |
-| Stable filter IDs | Phase 22 (advanced filters) | Server restart does not break filter operations in existing session |
-| GPU detection refactor | Phase 20 | `VtkLocalView` renders correctly on Apple Silicon; no `eglinfo` subprocess calls |
-| OpenFOAM path mounting | Phase 20 | Reader initializes without path errors; case geometry loads in view |
-| Multi-client isolation | Phase 20/22 (before multi-user testing) | Two-tab test passes; no cross-client state leakage |
-| Frontend RPC router rewrite | Phase 20 | React components use trame state/callback pattern, not wslink `message.id` routing |
-| Idle monitoring replacement | Phase 20 | Sessions time out correctly via trame-compatible mechanism |
+**Why it happens:**
+- FastAPI `BackgroundTasks` are tied to the request lifecycle; if the server restarts, background tasks are lost
+- Long-running pipelines outlive HTTP requests; `BackgroundTasks` are not designed for multi-hour runs
+- The existing FastAPI server was designed for request-response, not pipeline orchestration
+
+**Prevention:**
+- Use a **dedicated orchestrator process** (separate from FastAPI) that communicates via:
+  - Redis queue or PostgreSQL for job dispatch
+  - FastAPI for status polling and WebSocket subscription
+  - File system or object storage for large result payloads
+- FastAPI acts as the **API facade** and WebSocket hub; the actual pipeline execution runs in an independent process or worker pool
 
 ---
 
-## Sources
+### 5.2: knowledge_compiler Integration Without Idempotency
 
-| Source | URL | Confidence | Verifies |
-|--------|-----|------------|---------|
-| ParaViewWeb GitHub README | https://github.com/Kitware/paraviewweb | HIGH | ParaViewWeb maintenance mode status; trame recommendation |
-| trame documentation (trame.readthedocs.io) | https://trame.readthedocs.io/en/latest/index.html | HIGH | State management, VTK widgets, server callbacks, life cycle callbacks |
-| trame.widgets.paraview | https://trame.readthedocs.io/en/latest/trame.widgets.paraview.html | HIGH | `VtkLocalView`, `VtkRemoteView`, `VtkRemoteLocalView` API |
-| trame main module | https://trame.readthedocs.io/en/latest/trame.html | HIGH | `get_server()`, `state`, `ctrl`, server initialization |
-| trame.widgets.client | https://trame.readthedocs.io/en/latest/trame.widgets.client.html | HIGH | `ClientStateChange`, `ClientTriggers`, `JSEval` widgets |
-| wslink GitHub README | https://github.com/Kitware/wslink | HIGH | wslink is actively maintained as trame's underlying protocol |
-| trame PyPI page | https://pypi.org/project/trame/ | HIGH | v3.12.0, Python >= 3.9 requirement |
-| Kitware/trame GitHub discussions | https://github.com/Kitware/trame/discussions/840 | MEDIUM | ParaView 6.1+ bundle planned for trame/vtk-local |
-| `paraview_adv_protocols.py` | `api_server/services/paraview_adv_protocols.py` | HIGH | Existing `@exportRpc` implementations (Phase 20/22 work products) |
-| `paraview_web_launcher.py` | `api_server/services/paraview_web_launcher.py` | HIGH | Existing Docker sidecar launcher (Phase 20 work product) |
-| `Dockerfile` | `Dockerfile` | HIGH | Existing `openfoam/openfoam10-paraview510` image dependency |
+**What goes wrong:** Pipeline triggers `knowledge_compiler` multiple times with same parameters, producing duplicate or conflicting case definitions.
 
-**Confidence notes:**
-- No official migration guide from Kitware exists (MEDIUM confidence on all recommendations)
-- Team has no prior trame experience — requires validation during migration
-- Some trame APIs (e.g., `VtkLocalView` geometry export) not fully documented — may require source code review during migration
-- ParaView support for trame is still evolving (Discussion #840 notes ParaView 6.1 bundle is "hoped for")
+**Why it happens:**
+- `knowledge_compiler` was designed for one-off case generation, not pipeline reuse
+- If pipeline retries a `generate` step, it creates a new case with different ID but same parameters
+- Downstream `run` step may pick up the wrong case file if multiple versions exist
+
+**Prevention:**
+- Implement **idempotent generation**: if a case with matching parameters already exists, return its ID instead of creating new
+- Add a **generation lock**: prevent concurrent generation of the same parameter set
+- Store `knowledge_compiler` outputs in a versioned case directory: `cases/{param_hash}/{version}/`
 
 ---
 
-*Pitfalls research for: ParaView Web to trame migration*
-*Researched: 2026-04-11*
-*Confidence: MEDIUM — no official migration guide exists; findings synthesized from trame docs, wslink protocol docs, and codebase analysis*
+### 5.3: Trame Viewer Session Pool Collision
+
+**What goes wrong:** Pipeline visualization steps compete with interactive dashboard users for the trame session pool.
+
+**Why it happens:**
+- `TrameSessionManager` has an idle timeout (30 min) and max session limit
+- Pipeline automated visualization requests consume a session slot
+- When a user later tries to open an interactive viewer, all sessions are occupied by pipeline runs
+- Or vice versa: user holds sessions open, pipeline cannot get a slot for automated screenshots
+
+**Prevention:**
+- Separate **interactive** and **pipeline** trame session pools with different priority queues
+- Pipeline visualization sessions should be **ephemeral**: acquire session, render, release, without waiting for user interaction
+- Set shorter idle timeout (e.g., 5 min) for pipeline sessions vs. 30 min for interactive
+- Use a **session lease** system: pipeline holds lease for the minimum time needed
+
+---
+
+## 6. Phase-Specific Warnings
+
+Which phase should address each pitfall.
+
+| Pitfall | Severity | Phase Recommendation | Notes |
+|---------|----------|----------------------|-------|
+| 2.1 State hides failures | Critical | PO-01 (Orchestration Engine) | Must be addressed in engine design, not deferred |
+| 2.2 Docker lifecycle conflicts | Critical | PO-01 (Orchestration Engine) | Requires deciding ownership model early |
+| 2.3 WebSocket disconnection | Critical | PO-01 (Orchestration Engine) | Connection resilience is foundational |
+| 2.4 Stale cache invalidation | High | PO-02 (Batch Scheduling) | Caching strategy must be designed with batch in mind |
+| 2.5 Step-level persistence gap | High | PO-04 (Pipeline Persistence) | Explicit phase for state persistence |
+| 3.1 Blocking async | Medium | PO-01 (Orchestration Engine) | FastAPI integration pattern |
+| 3.2 Resource contention | Medium | PO-02 (Batch Scheduling) | Resource pool design |
+| 3.3 Version mismatch | Medium | PO-03 (Cross-Case Comparison) | Provenance tracking |
+| 3.4 DAG stale state | Medium | PO-05 (DAG Visualization) | Polling fallback |
+| 3.5 DAG cycle false positive | Low | PO-05 (DAG Visualization) | Graph structure design |
+| 4.1 Abort cleanup | Low | PO-01 (Orchestration Engine) | Cleanup handler |
+| 4.2 DST/timezone | Low | Any scheduling phase | Simple if caught early |
+| 4.3 Message ordering | Low | PO-01 (Orchestration Engine) | Sequence numbering |
+| 5.1 FastAPI vs orchestrator | Critical | PO-01 (Orchestration Engine) | Architectural decision |
+| 5.2 Compiler idempotency | High | PO-01 (Orchestration Engine) | Generation locking |
+| 5.3 Session pool collision | Medium | PO-01 (Orchestration Engine) | Pool separation |
+
+---
+
+## 7. Prevention Summary
+
+### Critical Path Checklist for PO-01 (Orchestration Engine)
+
+Before PO-01 is complete, these must be resolved:
+
+- [ ] **Docker ownership model** decided: orchestrator owns all containers OR TrameSessionManager continues owning viewer containers exclusively
+- [ ] **Structured result objects** defined for each wrapped component (not just exit codes)
+- [ ] **Connection resilience** designed: message buffering + sequence numbering + polling fallback
+- [ ] **Orchestrator process** is separate from FastAPI HTTP lifecycle
+- [ ] **Cleanup handler** registered for abort signal
+- [ ] **Resource pool** designed (even if not implemented yet) to prevent unbounded concurrent runs
+
+### Later Phase Items
+
+- PO-02: Add cache invalidation strategy + resource pool implementation
+- PO-03: Provenance metadata schema for cross-case comparison
+- PO-04: Step-level checkpointing + deterministic case ID scheme
+- PO-05: DAG staleness indicators + polling fallback
+
+---
+
+## 8. Confidence Assessment
+
+| Area | Confidence | Notes |
+|------|------------|-------|
+| Docker lifecycle pitfalls | HIGH | Well-documented, multiple sources agree |
+| WebSocket disconnection | HIGH | Standard real-time systems issue, documented in FastAPI docs |
+| State persistence | MEDIUM | General workflow engine patterns verified; CFD-specific checkpoint granularity needs validation |
+| Cross-case comparison | MEDIUM | Version mismatch is a known scientific workflow issue; specific OpenFOAM provenance schema not confirmed |
+| Resource contention | HIGH | Noisy neighbor problem documented across all workflow engines |
+| Integration anti-patterns | MEDIUM | FastAPI BackgroundTasks vs dedicated orchestrator is an architectural pattern, not CFD-specific |
+
+---
+
+## 9. Sources
+
+| Source | URL | Confidence | What it verifies |
+|--------|-----|------------|------------------|
+| Prefect Documentation: Task timeouts | https://docs.prefect.io/latest/concepts/tasks/ | HIGH | ThreadPoolTaskRunner timeout limitations with blocking operations |
+| Prefect Documentation: Caching | https://docs.prefect.io/latest/concepts/tasks/ | HIGH | Cache expiration never expires by default |
+| Prefect Documentation: State management | https://docs.prefect.io/latest/concepts/states/ | HIGH | State manipulation can hide failures; `AwaitingRetry` behavior |
+| Prefect Documentation: Schedules | https://docs.prefect.io/latest/concepts/schedules/ | HIGH | Cron limitations, DST handling, scheduler constraints |
+| Apache Airflow Documentation: Executor pitfalls | https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/executor/index.html | HIGH | Noisy neighbor, container startup latency, hybrid executor issues |
+| Apache Airflow Documentation: DAGs | https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html | HIGH | Trigger rule cascade, DAG state management, `depends_on_past` behavior |
+| Apache Airflow Documentation: Tasks | https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/tasks.html | HIGH | Task dependencies, XCom fundamentals, zombie task detection |
+| Apache Airflow Documentation: Sensors | https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/sensors.html | MEDIUM | Poke vs reschedule mode, soft_fail, timeout configuration |
+| Snakemake Documentation | https://snakemake.readthedocs.io/en/stable/snakefiles/deployment.html | MEDIUM | Deployment reproducibility, conda environment issues |
+| FastAPI Documentation: WebSocket | https://fastapi.tiangolo.com/advanced/websockets/ | HIGH | WebSocket connection lifecycle, disconnect handling, ConnectionManager pattern |
+| FastAPI Documentation: Async | https://fastapi.tiangolo.com/async/ | HIGH | async/await patterns, blocking event loop, background tasks |
+| Docker Documentation: Dockerfile best practices | https://docs.docker.com/develop/develop-images/dockerfile_best-practices/ | HIGH | Ephemeral containers, graceful shutdown with exec, volume mounting |
+| pytest Documentation: Flaky tests | https://docs.pytest.org/en/latest/explanation/flaky.html | MEDIUM | Flaky test root causes, timing issues, test isolation |
+
+---
+
+## RESEARCH COMPLETE
+
+**Project:** AI-CFD Knowledge Harness v1.7.0
+**Mode:** Ecosystem (Pitfalls Research)
+**Confidence:** MEDIUM-HIGH
+
+### Key Findings
+
+- **Critical integration risk (2.2):** Docker lifecycle ownership conflict between `TrameSessionManager` and new pipeline orchestrator must be resolved before PO-01 begins
+- **WebSocket resilience (2.3):** Long-running CFD simulations require connection resilience with message buffering and polling fallback -- the existing in-memory `ConnectionManager` will lose events on disconnect
+- **State visibility (2.1):** Pipeline abstraction must instrument components with structured result objects, not just rely on exit codes, to prevent silent failures propagating through the pipeline
+- **Architectural decision (5.1):** FastAPI `BackgroundTasks` must NOT be used for pipeline orchestration -- requires dedicated independent process
+- **Provenance tracking (3.3):** Cross-case comparison needs explicit version metadata to prevent comparing results from different OpenFOAM/compiler versions
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `/Users/Zhuanz/Desktop/notion-cfd-harness/.planning/research/PITFALLS.md` | Domain pitfalls for pipeline orchestration v1.7.0 |
+
+### Confidence Assessment
+
+| Area | Level | Reason |
+|------|-------|--------|
+| Docker lifecycle | HIGH | Well-documented across workflow engines; applies to existing TrameSessionManager |
+| WebSocket disconnection | HIGH | FastAPI docs confirm; standard real-time systems problem |
+| State persistence | MEDIUM | General patterns verified; CFD-specific checkpoint granularity needs PO-04 validation |
+| Cross-case comparison | MEDIUM | Provenance mismatch is known in scientific workflows; specific schema needs design |
+| Integration anti-patterns | MEDIUM | FastAPI BackgroundTasks vs dedicated orchestrator is architectural, not CFD-specific |
+
+### Roadmap Implications
+
+- **PO-01 must resolve:** Docker ownership model, orchestrator/FastAPI separation, connection resilience, cleanup handler, structured result objects
+- **PO-02 must implement:** Resource pool + cache invalidation (deferring these to batch phase risks resource exhaustion)
+- **PO-03 must track:** Provenance metadata schema design
+- **PO-04 must implement:** Step-level checkpointing with deterministic case IDs
+
+### Open Questions
+
+- Does `TrameSessionManager` currently support labeling containers for ownership tracking?
+- Is there an existing Redis or PostgreSQL queue available for job dispatch, or will one need to be introduced?
+- What is the expected maximum parametric sweep size? (Affects resource pool sizing)
+- Should pipeline abort attempt to pause Docker containers for later resume, or terminate completely?
+
+---
+
+*Research conducted: 2026-04-12*
+*Next step: Review with architecture team before PO-01 phase begins*
