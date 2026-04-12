@@ -35,4 +35,18 @@ export const API_ENDPOINTS = {
 
   // WebSocket
   websocket: '/ws',
+
+  // Pipelines
+  pipelines: '/pipelines',
+  pipelineById: (id: string) => `/pipelines/${id}`,
+  pipelineSteps: (id: string) => `/pipelines/${id}/steps`,
+  pipelineEvents: (id: string) => `/pipelines/${id}/events`,
+  pipelineStart: (id: string) => `/pipelines/${id}/start`,
+  pipelinePause: (id: string) => `/pipelines/${id}/pause`,
+  pipelineResume: (id: string) => `/pipelines/${id}/resume`,
+  pipelineCancel: (id: string) => `/pipelines/${id}/cancel`,
+  pipelineWs: (id: string) => `/ws/pipelines/${id}`,
 } as const;
+
+export const WS_PIPELINE_URL = (id: string) =>
+  `${API_BASE_URL.replace('http', 'ws')}${API_PREFIX}/ws/pipelines/${id}`;
