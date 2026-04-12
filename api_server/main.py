@@ -21,7 +21,7 @@ from api_server.config import (
     PORT,
     REDOC_URL,
 )
-from api_server.routers import cases, jobs, knowledge, status, auth, websocket, visualization, pipelines, sweeps, comparisons
+from api_server.routers import cases, jobs, knowledge, status, auth, websocket, visualization, pipelines, sweeps, comparisons, gold_standards
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +102,7 @@ def create_app() -> FastAPI:
     app.include_router(pipelines.router, prefix=API_PREFIX, tags=["pipelines"])
     app.include_router(sweeps.router, prefix=API_PREFIX, tags=["sweeps"])
     app.include_router(comparisons.router, prefix=API_PREFIX, tags=["comparisons"])
+    app.include_router(gold_standards.router, prefix=API_PREFIX, tags=["gold-standard-cases"])
 
     @app.get("/", tags=["root"])
     async def root():
