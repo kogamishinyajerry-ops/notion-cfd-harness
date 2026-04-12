@@ -138,6 +138,7 @@ async def pipeline_websocket(
     websocket: WebSocket,
     pipeline_id: str,
     last_seq: int = Query(default=0, description="Last received sequence number for replay"),
+    current_user: UserInfo = Depends(get_current_user),
 ):
     """
     Real-time pipeline event stream with connection resilience.
