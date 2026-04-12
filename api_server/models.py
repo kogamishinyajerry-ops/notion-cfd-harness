@@ -283,6 +283,7 @@ class PipelineStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    PAUSED = "paused"
 
 
 class StepStatus(str, Enum):
