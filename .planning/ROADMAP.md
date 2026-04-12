@@ -114,7 +114,11 @@ Plans:
 4. Each combination's outputs are stored under `sweep_{id}/{combination_hash}/` with deterministic naming
 5. After sweep completes, user sees a summary table: case_id, params, final_residual, status for all combinations
 
-**Plans:** TBD
+**Plans:** 2/2 plans created
+
+Plans:
+- [ ] 32-01-PLAN.md — Backend: Sweep Pydantic models, SQLite schema, SweepDBService, SweepRunner
+- [ ] 32-02-PLAN.md — Backend REST API + Frontend: SweepsPage, SweepCreatePage, SweepDetailPage, routes, nav
 
 **UI hint:** yes
 
@@ -135,7 +139,11 @@ Plans:
 4. DAG supports zoom, pan, and minimap navigation
 5. If a RUNNING step exceeds its expected duration, a warning icon appears on the node
 
-**Plans:** TBD
+**Plans:** 2/2 plans created
+
+Plans:
+- [ ] 32-01-PLAN.md — Backend: Sweep Pydantic models, SQLite schema, SweepDBService, SweepRunner
+- [ ] 32-02-PLAN.md — Backend REST API + Frontend: SweepsPage, SweepCreatePage, SweepDetailPage, routes, nav
 
 **UI hint:** yes
 
@@ -157,7 +165,11 @@ Plans:
 5. Metrics table tab shows per-case columns (case_id, params, final_residual, execution_time) with percentage difference vs reference case; sortable and exportable to CSV
 6. Comparison result is saved as `ComparisonResult` JSON and downloadable
 
-**Plans:** TBD
+**Plans:** 2/2 plans created
+
+Plans:
+- [ ] 32-01-PLAN.md — Backend: Sweep Pydantic models, SQLite schema, SweepDBService, SweepRunner
+- [ ] 32-02-PLAN.md — Backend REST API + Frontend: SweepsPage, SweepCreatePage, SweepDetailPage, routes, nav
 
 **UI hint:** yes
 
@@ -169,8 +181,8 @@ Plans:
 |-------|----------------|--------|-----------|
 | 29. Foundation — Data Models + SQLite | 2/2 | Complete    | 2026-04-12 |
 | 30. PO-01 Orchestration Engine | 4/4 | Complete    | 2026-04-12 |
-| 31. Pipeline REST API + React Dashboard | 4/4 | Complete   | 2026-04-12 |
-| 32. PO-02 Parametric Sweep | 0/TBD | Not started | — |
+| 31. Pipeline REST API + React Dashboard | 4/4 | Complete    | 2026-04-12 |
+| 32. PO-02 Parametric Sweep | 0/2 | Planning | — |
 | 33. PO-05 DAG Visualization | 0/TBD | Not started | — |
 | 34. PO-03 Cross-Case Comparison | 0/TBD | Not started | — |
 
