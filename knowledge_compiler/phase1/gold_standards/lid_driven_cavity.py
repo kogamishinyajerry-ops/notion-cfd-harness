@@ -417,6 +417,10 @@ class CavityGateValidator:
 # GoldStandard Auto-Registration
 # ============================================================================
 
+# Mapping: module case_id -> whitelist ID (from cold_start_whitelist.yaml)
+WHITELIST_ID = "OF-01"
+
+
 def register(registry: "GoldStandardRegistry") -> None:
     """Register this GoldStandard case with the global registry.
 
@@ -424,6 +428,7 @@ def register(registry: "GoldStandardRegistry") -> None:
     """
     registry.register(
         case_id="lid_driven_cavity",
+        whitelist_id=WHITELIST_ID,
         spec_factory=create_lid_driven_cavity_spec,
         validator_class=CavityGateValidator,
         reference_fn=None,  # reference data via get_expected_ghia_data() with Re argument

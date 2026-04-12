@@ -44,13 +44,16 @@ class GoldStandardRegistry:
         self._reference_fns: Dict[str, Optional[Callable]] = {}
         self._mesh_info_fns: Dict[str, Optional[Callable]] = {}
         self._solver_config_fns: Dict[str, Optional[Callable]] = {}
+        # Maps whitelist_id (e.g., "OF-01") -> module case_id (e.g., "lid_driven_cavity")
+        self._whitelist_id_map: Dict[str, str] = {}
         self._whitelist = None
         self._initialized = True
 
     def register(
         self,
         case_id: str,
-        spec_factory: Callable,
+        whitelist_id: Optional[str] = None,
+        spec_factory: Optional[Callable] = None,
         validator_class: Optional[type] = None,
         reference_fn: Optional[Callable] = None,
         mesh_info_fn: Optional[Callable] = None,
@@ -63,6 +66,19 @@ class GoldStandardRegistry:
             self._reference_fns[case_id] = reference_fn
             self._mesh_info_fns[case_id] = mesh_info_fn
             self._solver_config_fns[case_id] = solver_config_fn
+            if whitelist_id:
+                self._whitelist_id_map[whitelist_id] = case_id
+
+    def is_case_registered(self, whitelist_id: str) -> bool:
+        """Check if a whitelist case ID has a GoldStandard module registered."""
+        module_id = self._whitelist_id_map.get(whitelist_id)
+        if not module_id:
+            return False
+        return module_id in self._spec_factories
+
+    def get_module_case_id(self, whitelist_id: str) -> Optional[str]:
+        """Get the module-level case_id for a whitelist ID, or None."""
+        return self._whitelist_id_map.get(whitelist_id)
 
     def get_case_ids(self) -> List[str]:
         """Return all registered case IDs (from whitelist + local registry)."""

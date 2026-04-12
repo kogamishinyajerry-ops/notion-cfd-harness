@@ -296,6 +296,10 @@ class LaminarFlatPlateGateValidator:
 # GoldStandard Auto-Registration
 # ============================================================================
 
+# Mapping: module case_id -> whitelist ID (from cold_start_whitelist.yaml)
+WHITELIST_ID = "SU2-03"
+
+
 def register(registry: "GoldStandardRegistry") -> None:
     """Register this GoldStandard case with the global registry.
 
@@ -303,6 +307,7 @@ def register(registry: "GoldStandardRegistry") -> None:
     """
     registry.register(
         case_id="laminar_flat_plate",
+        whitelist_id=WHITELIST_ID,
         spec_factory=create_laminar_flat_plate_spec,
         validator_class=LaminarFlatPlateGateValidator,
         reference_fn=None,
