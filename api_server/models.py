@@ -266,3 +266,91 @@ class TrameSession(BaseModel):
 
     class Config:
         use_enum_values = True
+
+
+# =============================================================================
+# Pipeline Models
+# =============================================================================
+
+
+class PipelineStatus(str, Enum):
+    """Pipeline execution status"""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class StepType(str, Enum):
+    """Pipeline step types"""
+    GENERATE = "generate"
+    RUN = "run"
+    MONITOR = "monitor"
+    VISUALIZE = "visualize"
+    REPORT = "report"
+
+
+class PipelineStep(BaseModel):
+    """A single step within a pipeline DAG."""
+    step_id: str = Field(..., description="Unique step identifier within the pipeline")
+    step_type: StepType = Field(..., description="Type of step")
+    step_order: int = Field(..., description="Execution order (0-indexed)")
+    depends_on: List[str] = Field(default_factory=list, description="List of step_ids this step depends on")
+    params: Dict[str, Any] = Field(default_factory=dict, description="Step-specific parameters")
+    status: JobStatus = Field(default=JobStatus.PENDING, description="Step execution status")
+
+    class Config:
+        use_enum_values = True
+
+
+class Pipeline(BaseModel):
+    """Pipeline definition with DAG steps."""
+    id: str = Field(..., description="Unique pipeline identifier")
+    name: str = Field(..., description="Pipeline name", min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, description="Pipeline description")
+    status: PipelineStatus = Field(default=PipelineStatus.PENDING, description="Overall pipeline status")
+    steps: List[PipelineStep] = Field(default_factory=list, description="Ordered list of DAG steps")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Pipeline-level configuration")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+    class Config:
+        use_enum_values = True
+
+
+class PipelineCreate(BaseModel):
+    """Request model for creating a pipeline."""
+    name: str = Field(..., description="Pipeline name", min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, description="Pipeline description")
+    steps: List[PipelineStep] = Field(default_factory=list, description="DAG steps")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Pipeline-level configuration")
+
+
+class PipelineUpdate(BaseModel):
+    """Request model for updating a pipeline."""
+    name: Optional[str] = Field(default=None, description="Pipeline name", min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, description="Pipeline description")
+    config: Optional[Dict[str, Any]] = Field(default=None, description="Pipeline-level configuration")
+    status: Optional[PipelineStatus] = Field(default=None, description="Pipeline status (PENDING only)")
+
+
+class PipelineResponse(BaseModel):
+    """Response model for pipeline data."""
+    id: str
+    name: str
+    description: Optional[str]
+    status: PipelineStatus
+    steps: List[PipelineStep]
+    config: Dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        use_enum_values = True
+
+
+class PipelineListResponse(BaseModel):
+    """Response model for listing pipelines."""
+    pipelines: List[PipelineResponse]
+    total: int
