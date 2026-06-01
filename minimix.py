@@ -29,6 +29,19 @@ MINIMAX_BASE_URL = "https://api.minimaxi.com/v1"
 
 DEFAULT_MODEL = "MiniMax-M2.7"
 
+
+def strip_think(text: str) -> str:
+    """剥离推理模型(MiniMax-M2.7/M3 等)的 <think>...</think> 前缀。
+    取最后一个 </think> 之后的内容；残留的开标签(被截断的思考)也去掉。
+    M2.7/M3 默认会先吐 <think>，若不剥离会导致 json.loads / 直接落盘失败。"""
+    if not text:
+        return text or ""
+    t = text
+    if "</think>" in t:
+        t = t.rsplit("</think>", 1)[-1]
+    return t.replace("<think>", "").strip()
+
+
 # ============ MiniMax 客户端 ============
 
 class MiniMaxClient:
@@ -39,10 +52,16 @@ class MiniMaxClient:
         if not self.api_key:
             raise ValueError("API key 未设置，请设置 MINIMAX_API_KEY 环境变量，或写入 ~/.minimax_key 文件")
 
-    def chat(self, prompt: str, model: str = DEFAULT_MODEL, temperature: float = 0.7, max_tokens: int = 4096) -> str:
+    def chat(self, prompt: str, model: str = DEFAULT_MODEL, temperature: float = 0.7,
+             max_tokens: int = 4096, thinking: str = None, reasoning_split: bool = False) -> str:
         """
         调用 MiniMax chat completion (OpenAI兼容格式)
         返回纯文本内容
+
+        thinking: None=不发送该字段(沿用模型默认) / "disabled"=关推理(干净输出) /
+                  "adaptive"=模型自决。M3 文档支持；M2.x 也接受但曾有
+                  "disabled 被静默忽略"的已知 bug(oh-my-pi #626)，是否生效需实测。
+        reasoning_split: True 时让推理走 reasoning_details 字段而非混入 content。
         """
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -56,6 +75,10 @@ class MiniMaxClient:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        if thinking in ("disabled", "adaptive"):
+            payload["thinking"] = {"type": thinking}
+        if reasoning_split:
+            payload["reasoning_split"] = True
         resp = requests.post(f"{MINIMAX_BASE_URL}/chat/completions", headers=headers, json=payload, timeout=120)
         resp.raise_for_status()
         data = resp.json()
@@ -87,8 +110,8 @@ class MiniMaxClient:
 只输出 JSON，不要其他内容。"""
         result = self.chat(prompt, temperature=0.3, max_tokens=2048)
         try:
-            # 去掉可能的 ```json 包装
-            cleaned = result.strip()
+            # 先剥推理模型的 <think> 前缀，再去掉可能的 ```json 包装
+            cleaned = strip_think(result)
             if cleaned.startswith("```"):
                 cleaned = cleaned.split("```")[1]
                 if cleaned.startswith("json"):
@@ -122,7 +145,7 @@ Gate: {gate}
 只输出 JSON。"""
         result = self.chat(prompt, temperature=0.2, max_tokens=1024)
         try:
-            cleaned = result.strip()
+            cleaned = strip_think(result)
             if cleaned.startswith("```"):
                 cleaned = cleaned.split("```")[1]
                 if cleaned.startswith("json"):
@@ -145,6 +168,10 @@ def main():
     parser.add_argument("--context", type=json.loads, default={}, help="额外上下文 (JSON)")
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--max-tokens", type=int, default=4096)
+    parser.add_argument("--thinking", choices=["disabled", "adaptive"], default=None,
+                        help="推理开关: disabled=关(干净输出) / adaptive=模型自决; 不传则沿用模型默认")
+    parser.add_argument("--reasoning-split", action="store_true",
+                        help="让推理走 reasoning_details 字段而非混入 content")
 
     args = parser.parse_args()
 
@@ -167,7 +194,9 @@ def main():
         print(json.dumps(result, ensure_ascii=False, indent=2))
 
     else:
-        result = client.chat(args.prompt, model=args.model, temperature=args.temperature, max_tokens=args.max_tokens)
+        result = client.chat(args.prompt, model=args.model, temperature=args.temperature,
+                             max_tokens=args.max_tokens, thinking=args.thinking,
+                             reasoning_split=args.reasoning_split)
         print(result)
 
 
